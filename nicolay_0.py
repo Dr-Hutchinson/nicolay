@@ -77,7 +77,7 @@ def button_one():
 
 
     search_method = st.radio("Choose a method:", (semantic_search, ask_a_source))
-    model_choice = st.selectbox("Choose an AI model:", ('GPT-3.5', 'GPT-4'))
+    model_choice = st.selectbox("Choose an AI model:", ('GPT-3.5', 'GPT-4'), index=1)
     #section_number = st.number_input('Select a section number if you have selected Ask a Paragraph. You can find the section numbers to the bottom left, or through a semantic search.', step=1)
     submission_text = st.text_area("Enter your question below. ")
     submit_button_1 = st.button(label='Click here to submit your question.')
@@ -139,6 +139,7 @@ def button_one():
         st.subheader("The steps below illustrate Nicolay's reasoning on this question.")
         st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
         st.dataframe(results_df)
+        st.write("Next step: relevancy check")
 
         # relevance_check prompt with GPT-4
 
@@ -180,6 +181,7 @@ def button_one():
         combined_df['r_check'] = [r_check_1, r_check_2, r_check_3]
 
         st.dataframe(combined_df)
+        st.write("Next step: Answer to the user question with a supporting quotation.")
 
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive
         regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)

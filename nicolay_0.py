@@ -264,7 +264,7 @@ def button_one():
 
             # Save the dataframe to a CSV file
             final_analysis_df.to_csv('final_analysis.csv', index=False)
-            st.write(final_analysis)
+            st.dataframe(final_analysis_df)
 
             #for result in final_analysis_results:
               #print(result)

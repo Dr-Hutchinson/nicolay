@@ -149,7 +149,7 @@ def button_one():
             st.header("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed. Nicolay's progress will be documented below.")
 
             # Call the search_text() function and store the return value in a variable
-            results_df = embeddings_search(df, submission_text, n=3)
+            results_df = embeddings_search(df, submission_text)
 
                 # Reset the index and create a new column "index"
             results_df = results_df.reset_index()

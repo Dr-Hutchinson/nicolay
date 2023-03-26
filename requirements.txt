@@ -1,4 +1,4 @@
-langchain==0.0.52
+langchain==0.0.123
 numpy==1.20.3
 openai==0.27.0
 pandas==1.5.2

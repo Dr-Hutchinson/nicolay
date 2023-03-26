@@ -136,7 +136,7 @@ def button_one():
 
         # Write the DataFrame to a CSV file
         results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
-        st.header("The steps below illustrate Nicolay's reasoning on this question.")
+        st.subheader("The steps below illustrate Nicolay's reasoning on this question.")
         st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
         st.dataframe(results_df)
 
@@ -171,7 +171,7 @@ def button_one():
         r_check_3 = chain.run(question=str(submission_text + "\n2. Section:\n " + combined3))
         #print(r_check_3
 
-        st.write("Step 2 complete - Nicolay's relevancy check completed.")
+        st.write("Step 2 complete: Nicolay's has made relevancy checks on the text sections.")
 
         # combined function for combining sections + outputs, and then filtering via regex for relevant sections
 
@@ -269,12 +269,11 @@ def button_one():
             # Save the dataframe to a CSV file
             final_analysis_df.to_csv('final_analysis.csv', index=False)
 
-            st.header("Nicolay's Final Analysis:")
-            st.write("Here are Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.")
+            st.subheader("Nicolay's Final Analysis:")
+            st.write("Step 3 complete: Here are Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.")
             st.dataframe(final_analysis_df)
             st.write('\n\n')
-            st.write("Here is the reasoning process Nicolay used for this analysis.")
-            st.dataframe(relevant_df)
+
 
 
             #for result in final_analysis_results:

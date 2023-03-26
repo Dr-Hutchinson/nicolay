@@ -270,7 +270,7 @@ def button_one():
             st.write('\n\n')
             st.write("Here is the reasoning process Nicolay used for this analysis.")
             st.dataframe(relevant_df)
-            st.dataframe
+            
 
             #for result in final_analysis_results:
               #print(result)

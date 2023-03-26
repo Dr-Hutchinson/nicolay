@@ -4,7 +4,7 @@ openai==0.27.0
 pandas==1.5.2
 protobuf==3.20.3
 pygsheets==2.0.3.1
-streamlit==1.16.0
+streamlit==1.20.0
 matplotlib==3.6.1
 plotly==5.11.0
 scipy==1.9.3

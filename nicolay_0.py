@@ -56,7 +56,7 @@ def button_one():
     if submit_button_1:
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
-        if model' == 'GPT-3.5':
+        if model_choice == 'GPT-3.5':
             model_select = 'gpt-3.5-turbo'
         else:
             model_select = 'gpt-4'

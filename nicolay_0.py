@@ -49,7 +49,7 @@ def button_one():
 
 
     search_method = st.radio("Choose a method:", (semantic_search, ask_a_source))
-    model_choice = st.seletbox("Choose an AI model:", ('GPT-3.5', 'GPT-4'))
+    model_choice = st.selectbox("Choose an AI model:", ('GPT-3.5', 'GPT-4'))
     #section_number = st.number_input('Select a section number if you have selected Ask a Paragraph. You can find the section numbers to the bottom left, or through a semantic search.', step=1)
     submission_text = st.text_area("Enter your question below. ")
     submit_button_1 = st.button(label='Click here to submit your question.')

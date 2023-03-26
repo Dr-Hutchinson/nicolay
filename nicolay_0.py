@@ -381,7 +381,7 @@ pages = {
 if "current" not in st.session_state:
     st.session_state.current = None
 
-if st.button("Ask More"):
+if st.button("Ask Nicolay"):
         st.session_state.current = 0
 if st.button("Ignore This Button"):
     st.session_state.current = 1

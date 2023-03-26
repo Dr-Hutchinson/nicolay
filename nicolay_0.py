@@ -137,6 +137,7 @@ def button_one():
         # Write the DataFrame to a CSV file
         results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
         st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
+        st.dataframe(results)
 
         # relevance_check prompt with GPT-4
 
@@ -176,6 +177,8 @@ def button_one():
         combined_df = pd.DataFrame(columns=['output', 'r_check'])
         combined_df['output'] = [combined1, combined2, combined3]
         combined_df['r_check'] = [r_check_1, r_check_2, r_check_3]
+
+        st.dataframe(combined_df)
 
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive
         regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)

@@ -44,7 +44,7 @@ from langchain.schema import (
     SystemMessage
 )
 
-from IPython.display import HTML
+#from IPython.display import HTML
 
 
 scope = ['https://spreadsheets.google.com/feeds',
@@ -258,42 +258,42 @@ def button_one():
 
             # Save the dataframe to a CSV file
             final_analysis_df.to_csv('final_analysis.csv', index=False)
-
+            st.write(final_analysis)
 
             #for result in final_analysis_results:
               #print(result)
 
-            def rearrange_combined_output(combined_output):
-                lines = combined_output.strip().split("\n")
+            #def rearrange_combined_output(combined_output):
+                #lines = combined_output.strip().split("\n")
 
-                source_line = next(line for line in lines if "Source:" in line)
-                source_line_parts = source_line.split(":", 2)
-                source_line_formatted = f"{source_line_parts[0]}:{source_line_parts[1]}\n{source_line_parts[2].strip()}"
+                #source_line = next(line for line in lines if "Source:" in line)
+                #source_line_parts = source_line.split(":", 2)
+                #source_line_formatted = f"{source_line_parts[0]}:{source_line_parts[1]}\n{source_line_parts[2].strip()}"
 
-                summary_line_start = next(i for i, line in enumerate(lines) if "Summary:" in line)
-                keywords_line_start = next(i for i, line in enumerate(lines) if "Keywords:" in line)
-                summary_lines = lines[summary_line_start:keywords_line_start]
-                keywords_line = lines[keywords_line_start]
+                #summary_line_start = next(i for i, line in enumerate(lines) if "Summary:" in line)
+                #keywords_line_start = next(i for i, line in enumerate(lines) if "Keywords:" in line)
+                #summary_lines = lines[summary_line_start:keywords_line_start]
+                #keywords_line = lines[keywords_line_start]
 
-                full_text_start = next(i for i, line in enumerate(lines) if "Text" in line) + 1
-                full_text_end = summary_line_start - 1
-                full_text = "\n".join(lines[full_text_start:full_text_end])
+                #full_text_start = next(i for i, line in enumerate(lines) if "Text" in line) + 1
+                #full_text_end = summary_line_start - 1
+                #full_text = "\n".join(lines[full_text_start:full_text_end])
 
-                source_data = f"""Source Data:
+                #source_data = f"""Source Data:
 
-            {source_line_formatted}
+            #{source_line_formatted}
 
-            {' '.join(summary_lines)}
+            #{' '.join(summary_lines)}
 
-            {keywords_line}
+            #{keywords_line}
 
-            Full Text:
-            {full_text}
-            """
-                return source_data
+            #Full Text:
+            #{full_text}
+            #"""
+                #return source_data
 
-            source_data = rearrange_combined_output(combined1)
-            print(source_data)
+            #source_data = rearrange_combined_output(combined1)
+            #print(source_data)
 
 
                 #if search_method == semantic_search:

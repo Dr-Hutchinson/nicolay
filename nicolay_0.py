@@ -56,7 +56,7 @@ def button_one():
     if submit_button_1:
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
-        datafile_path = "./lincoln_index_embeddings.csv"
+        datafile_path = "lincoln_index_embedded.csv"
         df = pd.read_csv(datafile_path)
 
         # define model

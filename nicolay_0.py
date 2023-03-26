@@ -82,6 +82,9 @@ def button_one():
     submission_text = st.text_area("Enter your question below. ")
     submit_button_1 = st.button(label='Click here to submit your question.')
     if submit_button_1:
+
+        st.header("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed, so thank you for your patience. Nicolay's progress will be documented below.")
+
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
         if model_choice == 'GPT-3.5':
@@ -133,6 +136,7 @@ def button_one():
 
         # Write the DataFrame to a CSV file
         results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
+        st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
 
         # relevance_check prompt with GPT-4
 
@@ -165,6 +169,8 @@ def button_one():
         r_check_3 = chain.run(question=str(submission_text + "\n2. Section:\n " + combined3))
         #print(r_check_3
 
+        st.write("Step 2 complete - Nicolay's relevancy check completed.")
+
         # combined function for combining sections + outputs, and then filtering via regex for relevant sections
 
         combined_df = pd.DataFrame(columns=['output', 'r_check'])
@@ -189,7 +195,7 @@ def button_one():
         # Check if there are any rows in the relevant_df dataframe
         if relevant_df.empty:
             # If there are no rows, print the desired message
-            print("No relevant sections identified.")
+            st.write("No relevant sections identified.")
         else:
             # Otherwise, continue with the rest of the script
 

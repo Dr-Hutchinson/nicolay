@@ -56,7 +56,7 @@ def button_one():
     if submit_button_1:
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
-        datafile_path = "./lincoln_index_embedded.csv"
+        datafile_path = "./lincoln_index_embeddings.csv"
         df = pd.read_csv(datafile_path)
 
         # define model
@@ -149,7 +149,7 @@ def button_one():
             st.header("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed. Nicolay's progress will be documented below.")
 
             # Call the search_text() function and store the return value in a variable
-            results_df = search_text(df, submission_text, n=3)
+            results_df = embeddings_search(df, submission_text, n=3)
 
                 # Reset the index and create a new column "index"
             results_df = results_df.reset_index()

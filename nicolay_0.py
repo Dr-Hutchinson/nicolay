@@ -36,7 +36,7 @@ st.set_page_config(
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 openai.api_key = os.getenv("OPENAI_API_KEY")
-os.environ["SERPAPI_API_KEY"] = st.secrets["serpapi_api_key"]
+#os.environ["SERPAPI_API_KEY"] = st.secrets["serpapi_api_key"]
 
 st.title("Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln")
 

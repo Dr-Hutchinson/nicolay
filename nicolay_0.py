@@ -153,7 +153,7 @@ def button_one():
 
         chat_prompt = ChatPromptTemplate.from_messages([example_prompt, human_message_prompt])
 
-        chat = ChatOpenAI(temperature=0, model_name=model_choice)
+        chat = ChatOpenAI(temperature=0, model_name=model_select)
         chain = LLMChain(llm=chat, prompt=chat_prompt)
 
         r_check_1 = chain.run(question=str(submission_text + "\n2. Section:\n " + combined1))
@@ -240,7 +240,7 @@ def button_one():
 
             chat_prompt = ChatPromptTemplate.from_messages([example_prompt, human_message_prompt])
 
-            chat = ChatOpenAI(temperature=0, model_name=model_choice)
+            chat = ChatOpenAI(temperature=0, model_name=model_select)
             chain = LLMChain(llm=chat, prompt=chat_prompt)
 
             # Create an empty list to store the final_analysis results

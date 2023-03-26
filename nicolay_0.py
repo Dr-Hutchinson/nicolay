@@ -56,6 +56,9 @@ def button_one():
     if submit_button_1:
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
+        datafile_path = "./more_index_embeddings.csv"
+        df = pd.read_csv(datafile_path)
+
         # define model
 
         if model_choice == 'GPT-3.5':

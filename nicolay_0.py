@@ -83,7 +83,7 @@ def button_one():
     submit_button_1 = st.button(label='Click here to submit your question.')
     if submit_button_1:
 
-        st.header("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed, so thank you for your patience. Nicolay's progress will be documented below.")
+        st.subheader("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed, so thank you for your patience. Nicolay's progress will be documented below.")
 
         os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
@@ -136,6 +136,7 @@ def button_one():
 
         # Write the DataFrame to a CSV file
         results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
+        st.header("The steps below illustrate Nicolay's reasoning on this question.")
         st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
         st.dataframe(results_df)
 
@@ -268,7 +269,8 @@ def button_one():
             # Save the dataframe to a CSV file
             final_analysis_df.to_csv('final_analysis.csv', index=False)
 
-            st.write("Here is Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.")
+            st.header("Nicolay's Final Analysis:")
+            st.write("Here are Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.")
             st.dataframe(final_analysis_df)
             st.write('\n\n')
             st.write("Here is the reasoning process Nicolay used for this analysis.")

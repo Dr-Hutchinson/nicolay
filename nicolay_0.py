@@ -264,7 +264,13 @@ def button_one():
 
             # Save the dataframe to a CSV file
             final_analysis_df.to_csv('final_analysis.csv', index=False)
+
+            st.write("Here is Nicolay's analysis of Lincoln's speeches based on your question.")
             st.dataframe(final_analysis_df)
+            st.write('\n\n')
+            st.write("Here is the reasoning process Nicolay used for this analysis.")
+            st.dataframe(relevant_df)
+            st.dataframe
 
             #for result in final_analysis_results:
               #print(result)

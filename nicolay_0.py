@@ -95,10 +95,7 @@ def button_one():
         # semantic search via text embeddings with OpenAI Ada embedding model
 
         def embeddings_search():
-            datafile_path = "./more_index_embeddings.csv"
-            df = pd.read_csv(datafile_path)
-            df["babbage_search"] = df.babbage_search.apply(eval).apply(np.array)
-
+        
             datafile_path = "lincoln_index_embedded.csv"
 
             df = pd.read_csv(datafile_path)

@@ -148,12 +148,12 @@ def button_one():
             st.write(submission_text)
             st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
             st.write(row['similarities'])
-            
+
             combined_text = row['combined']
             text_lines = combined_text.split('\n')
 
             for line in text_lines:
-                st.write(line)
+                st.markdown(line)
 
 
 

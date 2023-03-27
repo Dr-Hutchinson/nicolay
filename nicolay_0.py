@@ -152,18 +152,18 @@ def button_one():
                 row = results_df.iloc[i]
 
             # Create an expander for the current row, with the label set to the row number
-            with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
-                    # Display each cell in the row as a separate block of text
-                st.markdown("**Question:**")
-                st.write(submission_text)
-                st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
-                st.write(row['similarities'])
+                with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
+                        # Display each cell in the row as a separate block of text
+                    st.markdown("**Question:**")
+                    st.write(submission_text)
+                    st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
+                    st.write(row['similarities'])
 
-                combined_text = row['combined']
-                text_lines = combined_text.split('\n')
+                    combined_text = row['combined']
+                    text_lines = combined_text.split('\n')
 
-                for line in text_lines:
-                    st.text(line)
+                    for line in text_lines:
+                        st.text(line)
 
 
 

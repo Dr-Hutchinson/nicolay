@@ -94,68 +94,73 @@ def button_one():
 
         # semantic search via text embeddings with OpenAI Ada embedding model
 
-        datafile_path = "lincoln_index_embedded.csv"
+        def embeddings_search():
+            datafile_path = "./more_index_embeddings.csv"
+            df = pd.read_csv(datafile_path)
+            df["babbage_search"] = df.babbage_search.apply(eval).apply(np.array)
 
-        df = pd.read_csv(datafile_path)
-        df["embedding"] = df.embedding.apply(eval).apply(np.array)
+            datafile_path = "lincoln_index_embedded.csv"
 
-        def search_text(df, product_description, n=3, pprint=True):
-        
-            product_embedding = get_embedding(
-                product_description,
-                engine="text-embedding-ada-002"
-            )
+            df = pd.read_csv(datafile_path)
+            df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
-            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
+            def search_text(df, product_description, n=3, pprint=True):
 
-            # Select the first three rows of the sorted DataFrame
-            top_three = df.sort_values("similarities", ascending=False).head(3)
+                product_embedding = get_embedding(
+                    product_description,
+                    engine="text-embedding-ada-002"
+                )
 
-            # If `pprint` is True, print the output
-            #if pprint:
-                #for _, row in top_three.iterrows():
-                    #print(row["combined"])
-                    #print()
+                df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
 
-            # Return the DataFrame with the added similarity values
-            return top_three
+                # Select the first three rows of the sorted DataFrame
+                top_three = df.sort_values("similarities", ascending=False).head(3)
 
-            # Call the search_text() function and store the return value in a variable
-            results_df = search_text(df, submission_text, n=3)
+                # If `pprint` is True, print the output
+                #if pprint:
+                    #for _, row in top_three.iterrows():
+                        #print(row["combined"])
+                        #print()
 
-                # Reset the index and create a new column "index"
-            results_df = results_df.reset_index()
+                # Return the DataFrame with the added similarity values
+                return top_three
 
-                # Access the values in the "similarities" and "combined" columns
-            similarity1 = results_df.iloc[0]["similarities"]
-            combined1 = str(results_df.iloc[0]["combined"])
+                # Call the search_text() function and store the return value in a variable
+                results_df = search_text(df, submission_text, n=3)
 
-            similarity2 = results_df.iloc[1]["similarities"]
-            combined2 = str(results_df.iloc[1]["combined"])
+                    # Reset the index and create a new column "index"
+                results_df = results_df.reset_index()
 
-            similarity3 = results_df.iloc[2]["similarities"]
-            combined3 = str(results_df.iloc[2]["combined"])
+                    # Access the values in the "similarities" and "combined" columns
+                similarity1 = results_df.iloc[0]["similarities"]
+                combined1 = str(results_df.iloc[0]["combined"])
 
-            num_rows = results_df.shape[0]
+                similarity2 = results_df.iloc[1]["similarities"]
+                combined2 = str(results_df.iloc[1]["combined"])
 
-                # Iterate through the rows of the dataframe
-            for i in range(num_rows):
-              # Get the current row
-              row = results_df.iloc[i]
+                similarity3 = results_df.iloc[2]["similarities"]
+                combined3 = str(results_df.iloc[2]["combined"])
 
-              # Create an expander for the current row, with the label set to the row number
-              with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
-                # Display each cell in the row as a separate block of text
-                st.markdown("**Question:**")
-                st.write(submission_text)
-                st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
-                st.write(row['similarities'])
+                num_rows = results_df.shape[0]
 
-                combined_text = row['combined']
-                text_lines = combined_text.split('\n')
+                    # Iterate through the rows of the dataframe
+                for i in range(num_rows):
+                  # Get the current row
+                  row = results_df.iloc[i]
 
-                for line in text_lines:
-                    st.text(line)
+                  # Create an expander for the current row, with the label set to the row number
+                  with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
+                    # Display each cell in the row as a separate block of text
+                    st.markdown("**Question:**")
+                    st.write(submission_text)
+                    st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
+                    st.write(row['similarities'])
+
+                    combined_text = row['combined']
+                    text_lines = combined_text.split('\n')
+
+                    for line in text_lines:
+                        st.text(line)
 
 
 
@@ -381,7 +386,7 @@ def button_one():
 
 
         if search_method == semantic_search:
-            search_text(df, submission_text, n=3, pprint=True)
+            embeddings_search()
         else:
             ask_nicolay()
 

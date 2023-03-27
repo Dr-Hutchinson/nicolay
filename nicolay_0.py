@@ -57,7 +57,7 @@ gc = pygsheets.authorize(custom_credentials=credentials)
 
 
 st.set_page_config(
-    page_title="Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln",
+    page_title="Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln (version 0.0)",
     layout='wide',
     page_icon='🔍'
 )

@@ -162,8 +162,11 @@ def button_one():
                     combined_text = row['combined']
                     text_lines = combined_text.split('\n')
 
+                    #for line in text_lines:
+                        #st.text(line)
+
                     for line in text_lines:
-                        st.text(line)
+                        st.markdown(line)
 
 
 

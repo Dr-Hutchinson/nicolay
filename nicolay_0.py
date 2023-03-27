@@ -149,7 +149,7 @@ def button_one():
             # Iterate through the rows of the dataframe
             for i in range(num_rows):
             # Get the current row
-            row = results_df.iloc[i]
+                row = results_df.iloc[i]
 
             # Create an expander for the current row, with the label set to the row number
             with st.expander(label="Text Section  " + str(i) + ":", expanded=True):

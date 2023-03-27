@@ -99,7 +99,7 @@ def button_one():
         df = pd.read_csv(datafile_path)
         df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
-        def search_text(df, product_description, n=3, pprint=True):
+        def search_text(df, submission_text, n=3, pprint=True):
 
             datafile_path = "lincoln_index_embedded.csv"
 
@@ -107,11 +107,11 @@ def button_one():
             df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
             product_embedding = get_embedding(
-                product_description,
+                submission_text,
                 engine="text-embedding-ada-002"
             )
 
-            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
+            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, submission_text))
 
             # Select the first three rows of the sorted DataFrame
             top_three = df.sort_values("similarities", ascending=False).head(3)
@@ -386,7 +386,7 @@ def button_one():
 
 
         if search_method == semantic_search:
-            search_text()
+            search_text(df, submission_text)
         else:
             ask_nicolay()
 

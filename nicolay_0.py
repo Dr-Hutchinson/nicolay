@@ -252,7 +252,7 @@ def button_one():
             combined_df['r_check'] = [r_check_1, r_check_2, r_check_3]
 
             st.dataframe(combined_df)
-            st.write("Next step: Answer to the user question with a supporting quotation.")
+            st.write("Next step: Answer the user question with supporting quotations from the relevant texts.")
 
             # Use the re.IGNORECASE flag to make the regular expression case-insensitive
             regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)

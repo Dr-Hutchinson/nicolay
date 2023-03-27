@@ -386,7 +386,7 @@ def button_one():
 
 
         if search_method == semantic_search:
-            search_text(df, submission_text, n=3, pprint=True)
+            search_text()
         else:
             ask_nicolay()
 

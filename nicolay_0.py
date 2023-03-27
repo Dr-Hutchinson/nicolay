@@ -165,11 +165,11 @@ def button_one():
 
 
         # Write the DataFrame to a CSV file
-        results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
-        st.subheader("The steps below illustrate Nicolay's reasoning on this question.")
-        st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
-        st.dataframe(results_df)
-        st.write("Next step: relevancy check")
+        #results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
+        #st.subheader("The steps below illustrate Nicolay's reasoning on this question.")
+        #st.write("Step 1 complete: Nicolay identified the most semantically similar text sections.")
+        #st.dataframe(results_df)
+        #st.write("Next step: relevancy check")
 
         def ask_nicolay():
 

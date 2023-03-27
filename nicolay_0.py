@@ -150,9 +150,10 @@ def button_one():
             st.write(row['similarities'])
 
             combined_text = row['combined']
-            formatted_text = combined_text.replace('\n', '  \n')
+            text_lines = combined_text.split('\n')
 
-            st.markdown(formatted_text)
+            for line in text_lines:
+                st.text(line)
 
 
 

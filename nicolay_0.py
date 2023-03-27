@@ -134,6 +134,24 @@ def button_one():
         similarity3 = results_df.iloc[2]["similarities"]
         combined3 = str(results_df.iloc[2]["combined"])
 
+        num_rows = results_df.shape[0]
+
+        # Iterate through the rows of the dataframe
+        for i in range(num_rows):
+          # Get the current row
+          row = results_df.iloc[i]
+
+          # Create an expander for the current row, with the label set to the row number
+          with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
+            # Display each cell in the row as a separate block of text
+            st.markdown("**Question:**")
+            st.write(submission_text)
+            st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text. Semantic similaritiy scores above .30 are generally relevant.**")
+            st.write(row['similarities'])
+            st.write(row['combined'])
+
+
+
         # Write the DataFrame to a CSV file
         results_df.to_csv('results_df.csv', index=False, columns=["similarities", "combined"])
         st.subheader("The steps below illustrate Nicolay's reasoning on this question.")
@@ -141,8 +159,47 @@ def button_one():
         st.dataframe(results_df)
         st.write("Next step: relevancy check")
 
-        # relevance_check prompt with GPT-4
+    def ask_nicolay():
 
+        def search_text_2(df, product_description, n=3, pprint=True):
+            product_embedding = get_embedding(
+                product_description,
+                engine="text-embedding-ada-002"
+            )
+            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
+
+            # Select the first three rows of the sorted DataFrame
+            top_three = df.sort_values("similarities", ascending=False).head(3)
+
+            # If `pprint` is True, print the output
+            #if pprint:
+                #for _, row in top_three.iterrows():
+                    #print(row["combined"])
+                    #print()
+
+            # Return the DataFrame with the added similarity values
+            return top_three
+
+        # Q&A doc prompt with langchain with prompts for determining relevance and extracting quotations.
+
+        results_df = search_text_2(df, submission_text, n=3)
+
+        # Reset the index and create a new column "index"
+        results_df = results_df.reset_index()
+
+        # Access the values in the "similarities" and "combined" columns
+        similarity1 = results_df.iloc[0]["similarities"]
+        combined1 = str(results_df.iloc[0]["combined"])
+
+        similarity2 = results_df.iloc[1]["similarities"]
+        combined2 = str(results_df.iloc[1]["combined"])
+
+        similarity3 = results_df.iloc[2]["similarities"]
+        combined3 = str(results_df.iloc[2]["combined"])
+
+        st.write("Step 1 complete - identified the most semantically similar text sections.")
+
+        ## k-shot prompts for relevance
         currency_question = """1. Question\n\n"What points does Lincoln make about currency reform?"\n\n2. Section:\n\nText #: 58: Source: Second Annual Message. December 1, 1862\n\n"The new commercial treaty between the United States and the Sultan of Turkey has been carried into execution.\n\nA commercial and consular treaty has been negotiated, subject to the Senate's consent, with Liberia; and a similar negotiation is now pending with the republic of Hayti. A considerable improvement of the national commerce is expected to result from these measures.\n\nOur relations with Great Britain, France, Spain, Portugal, Russia, Prussia, Denmark, Sweden, Austria, the Netherlands, Italy, Rome, and the other European states, remain undisturbed. Very favorable relations also continue to be maintained with Turkey, Morocco, China and Japan.\n\nDuring the last year there has not only been no change of our previous relations with the independent states of our own continent, but, more friendly sentiments than have heretofore existed, are believed to be entertained by these neighbors, whose safety and progress, are so intimately connected with our own. This statement especially applies to Mexico, Nicaragua, Costa Rica, Honduras, Peru, and Chile.\n\nThe commission under the convention with the republic of New Granada closed its session, without having audited and passed upon, all the claims which were submitted to it. A proposition is pending to revive the convention, that it may be able to do more complete justice. The joint commission between the United States and the republic of Costa Rica has completed its labors and submitted its report.\n\nI have favored the project for connecting the United States with Europe by an Atlantic telegraph, and a similar project to extend the telegraph from San Francisco, to connect by a Pacific telegraph with the line which is being extended across the Russian empire.\n\nThe Territories of the United States, with unimportant exceptions, have remained undisturbed by the civil war, and they are exhibiting such evidence of prosperity as justifies an expectation that some of them will soon be in a condition to be organized as States, and be constitutionally admitted into the federal Union.\n\nThe immense mineral resources of some of those Territories ought to be developed as rapidly as possible. Every step in that direction would have a tendency to improve the revenues of the government, and diminish the burdens of the people. It is worthy of your serious consideration whether some extraordinary measures to promote that end cannot be adopted. The means which suggests itself as most likely to be effective, is a scientific exploration of the mineral regions in those Territories, with a view to the publication of its results at home and in foreign countries---results which cannot fail to be auspicious.\n\nThe condition of the finances will claim your most diligent consideration. The vast expenditures incident to the military and naval operations required for the suppression of the rebellion, have hitherto been met with a promptitude, and certainty, unusual in similar circumstances, and the public credit has been fully maintained. The continuance of the war, however, and the increased disbursements made necessary by the augmented forces now in the field, demand your best reflections as to the best modes of providing the necessary revenue, without injury to business and with the least possible burdens upon labor.\nThe suspension of specie payments by the banks, soon after the commencement of your last session, made large issues of United States notes unavoidable. In no other way could the payment of the troops, and the satisfaction of other just demands, be so economically, or so well provided for. The judicious legislation of Congress, securing the receivability of these notes for loans and internal duties, and making them a legal tender for other debts , has made them an universal currency; and has satisfied, partially, at least, and for the time, the long felt want of an uniform circulating medium, saving thereby to the people, immense sums in discounts and exchanges.\n\nA return to specie payments, however, at the earliest period compatible with due regard to all interests concerned, should ever be kept in view. Fluctuations in the value of currency are always injurious, and to reduce these fluctuations to the lowest possible point will always be a leading purpose in wise legislation. Convertibility, prompt and certain convertibility into coin, is generally acknowledged to be the best and surest safeguard against them; and it is extremely doubtful whether a circulation of United States notes, payable in coin, and sufficiently large for the wants of the people, can be permanently, usefully and safely maintained.\n\nIs there, then, any other mode in which the necessary provision for the public wants can be made, and the great advantages of a safe and uniform currency secured?\n\nI know of none which promises so certain results, and is, at the same time, so unobjectionable, as the organization of banking associations, under a general act of Congress, well guarded in its provisions.\n\nTo such associations the government might furnish circulating notes, on the security of United States bonds deposited in the treasury. These notes, prepared under the supervision of proper officers, being uniform in appearance and security, and convertible always into coin, would at once protect labor against the evils of a vicious currency, and facilitate commerce by cheap and safe exchanges.\n\nA moderate reservation from the interest on the bonds would compensate the United States for the preparation and distribution of the notes and a general supervision of the system, and would lighten the burden of that part of the public debt employed as securities. The public credit, moreover, would be greatly improved, and the negotiation of new loans greatly facilitated by the steady market demand for government bonds which the adoption of the proposed system would create."\n\nSummary: In his Second Annual Message, Abraham Lincoln discusses the execution of the new commercial treaty between the United States and the Sultan of Turkey, as well as commercial and consular treaties with Liberia and Haiti. He describes the favorable relations maintained with European and other foreign states and the improved relations with neighboring countries in the Americas. Lincoln also addresses the financial situation, noting the suspension of specie payments and the introduction of United States notes as a temporary measure. He suggests the organization of banking associations under an act of Congress as a solution for providing public funds and a safe, uniform currency. Furthermore, he mentions the importance of developing the mineral resources in the Territories and the potential benefits of an Atlantic telegraph connecting the United States with Europe.\nKeywords: Abraham Lincoln, Second Annual Message, December 1 1862, commercial treaty, Sultan of Turkey, Liberia, Haiti, foreign relations, Americas, finances, suspension of specie payments, United States notes, banking associations, mineral resources, Territories, Atlantic telegraph.\n\n3. Key Words:”\n\ncurrency reform\n\n4. Relevance Determination: Section 58: Relevant\n\n5. Relevance Explanation: The section is directly and specifically relevant to the question because it contains key words such as "specie payments” and "banking associations" which are directly related to the question. Additionally, the background knowledge and context of the speech provide further evidence of the section's relevance to the question."""
         railroad_question = """2. Section: \n\nText #: 71: Source: Third Annual Message. December 8, 1863.\n\n"But why any proclamation now upon this subject? This question is beset with the conflicting views that the step might be delayed too long or be taken too soon. In some States the elements for resumption seem ready for action, but remain inactive, apparently for want of a rallying point---a plan of action. Why shall A adopt the plan of B, rather than B that of A? And if A and B should agree, how can they know but that the general government here will reject their plan? By the proclamation a plan is presented which may be accepted by them as a rallying point, and which they are assured in advance will not be rejected here. This may bring them to act sooner than they otherwise would.\n\nThe objections to a premature presentation of a plan by the national Executive consists in the danger of committals on points which could be more safely left to further developments. Care has been taken to so shape the document as to avoid embarrassments from this source. Saying that, on certain terms, certain classes will be pardoned, with rights restored, it is not said that other classes, or other terms, will never be included. Saying that reconstruction will be accepted if presented in a specified way, it is not said it will never be accepted in any other way.\n\nThe movements, by State action, for emancipation in several of the States, not included in the emancipation proclamation, are matters of profound gratulation. And while I do not repeat in detail what I have hertofore so earnestly urged upon this subject, my general views and feelings remain unchanged; and I trust that Congress will omit no fair opportunity of aiding these important steps to a great consummation.\n\nIn the midst of other cares, however important, we must not lose sight of the fact that the war power is still our main reliance. To that power alone can we look, yet for a time, to give confidence to the people in the contested regions, that the insurgent power will not again overrun them. Until that confidence shall be established, little can be done anywhere for what is called reconstruction. Hence our chiefest care must still be directed to the army and navy, who have thus far borne their harder part so nobly and well. And it may be esteemed fortunate that in giving the greatest efficiency to these indispensable arms, we do also honorably recognize the gallant men, from commander to sentinel, who compose them, and to whom, more than to others, the world must stand indebted for the home of freedom disenthralled, regenerated, enlarged, and perpetuated."\n\nSummary: In this portion of the Third Annual Message, President Lincoln addresses the importance of presenting a plan for the resumption of national authority within States where it has been suspended. He argues that by providing a rallying point, states can act sooner to initiate reconstruction. He also expresses his satisfaction with the movements towards emancipation in states not covered by the Emancipation Proclamation and urges Congress to support these efforts. Lincoln emphasizes that the war power, represented by the army and navy, is still the primary means to establish confidence in contested regions and prevent the insurgent power from overrunning them. He acknowledges the essential role of the military in securing freedom and promoting reconstruction.\n\nKeywords: Third Annual Message, December 8, 1863, Abraham Lincoln, national authority, reconstruction, rallying point, Emancipation Proclamation, war power, army, navy, contested regions, insurgent power, freedom.\n\n4. Relevance Determination: Section_71: Irrelevant\n\n5. Relevance Explanation: The Section is irrelevant because it does not address the user's question about points Lincoln makes on railroad construction. The content of the Section focuses on other topics such as national authority, reconstruction, emancipation, and the role of the military during the Civil War."""
 
@@ -315,9 +372,9 @@ def button_one():
 
 
             if search_method == semantic_search:
-                embeddings_search()
+                search_text()
             else:
-                ask_a_source()
+                ask_nicolay()
 
 def button_two():
     #Rank Bacon_bot Responses

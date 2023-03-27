@@ -110,6 +110,7 @@ def button_one():
                 product_description,
                 engine="text-embedding-ada-002"
             )
+
             df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
 
             # Select the first three rows of the sorted DataFrame
@@ -383,7 +384,7 @@ def button_one():
 
 
         if search_method == semantic_search:
-            search_text(df, product_description, n=3, pprint=True)
+            search_text(df, submission_text, n=3, pprint=True)
         else:
             ask_nicolay()
 

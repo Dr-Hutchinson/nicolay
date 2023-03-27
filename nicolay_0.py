@@ -94,6 +94,11 @@ def button_one():
 
         # semantic search via text embeddings with OpenAI Ada embedding model
 
+        datafile_path = "lincoln_index_embedded.csv"
+
+        df = pd.read_csv(datafile_path)
+        df["embedding"] = df.embedding.apply(eval).apply(np.array)
+
         def embeddings_search():
 
             # try this

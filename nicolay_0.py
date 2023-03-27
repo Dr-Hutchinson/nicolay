@@ -145,10 +145,10 @@ def button_one():
           with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
             # Display each cell in the row as a separate block of text
             st.markdown("**Question:**")
-            st.markdown(submission_text)
+            st.write(submission_text)
             st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
-            st.write(row['similarities'])
-            st.write(row['combined'])
+            st.markdown(row['similarities'])
+            st.markdown(row['combined'])
 
 
 

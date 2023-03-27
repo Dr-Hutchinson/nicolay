@@ -94,12 +94,12 @@ def button_one():
 
         # semantic search via text embeddings with OpenAI Ada embedding model
 
-        datafile_path = "lincoln_index_embedded.csv"
+        #datafile_path = "lincoln_index_embedded.csv"
 
-        df = pd.read_csv(datafile_path)
-        df["embedding"] = df.embedding.apply(eval).apply(np.array)
+        #df = pd.read_csv(datafile_path)
+        #df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
-        def search_text(df, submission_text, n=3, pprint=True):
+        def search_text(df, product_description, n=3, pprint=True):
 
             datafile_path = "lincoln_index_embedded.csv"
 
@@ -107,11 +107,11 @@ def button_one():
             df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
             product_embedding = get_embedding(
-                submission_text,
+                product_description,
                 engine="text-embedding-ada-002"
             )
 
-            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, submission_text))
+            df["similarities"] = df.embedding.apply(lambda x: cosine_similarity(x, product_embedding))
 
             # Select the first three rows of the sorted DataFrame
             top_three = df.sort_values("similarities", ascending=False).head(3)
@@ -386,7 +386,7 @@ def button_one():
 
 
         if search_method == semantic_search:
-            search_text(df, submission_text)
+            search_text(df, submission_text, n=3, pprint=True)
         else:
             ask_nicolay()
 

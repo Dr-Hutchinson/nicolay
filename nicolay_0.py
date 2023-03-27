@@ -314,10 +314,10 @@ def button_one():
             #print(source_data)
 
 
-                #if search_method == semantic_search:
-                    #embeddings_search()
-                #else:
-                    #ask_a_source()
+                if search_method == semantic_search:
+                    embeddings_search()
+                else:
+                    ask_a_source()
 
 def button_two():
     #Rank Bacon_bot Responses

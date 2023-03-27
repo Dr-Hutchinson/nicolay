@@ -100,6 +100,12 @@ def button_one():
         df["embedding"] = df.embedding.apply(eval).apply(np.array)
 
         def search_text(df, product_description, n=3, pprint=True):
+
+            datafile_path = "lincoln_index_embedded.csv"
+
+            df = pd.read_csv(datafile_path)
+            df["embedding"] = df.embedding.apply(eval).apply(np.array)
+
             product_embedding = get_embedding(
                 product_description,
                 engine="text-embedding-ada-002"

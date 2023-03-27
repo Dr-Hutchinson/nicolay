@@ -376,10 +376,10 @@ def button_one():
             #print(source_data)
 
 
-            if search_method == semantic_search:
-                search_text()
-            else:
-                ask_nicolay()
+        if search_method == semantic_search:
+            search_text()
+        else:
+            ask_nicolay()
 
 def button_two():
     #Rank Bacon_bot Responses

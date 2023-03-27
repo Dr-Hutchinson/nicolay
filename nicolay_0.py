@@ -125,42 +125,42 @@ def button_one():
             # Return the DataFrame with the added similarity values
             return top_three
 
-        # Call the search_text() function and store the return value in a variable
-        results_df = search_text(df, submission_text, n=3)
+            # Call the search_text() function and store the return value in a variable
+            results_df = search_text(df, submission_text, n=3)
 
-        # Reset the index and create a new column "index"
-        results_df = results_df.reset_index()
+            # Reset the index and create a new column "index"
+            results_df = results_df.reset_index()
 
-        # Access the values in the "similarities" and "combined" columns
-        similarity1 = results_df.iloc[0]["similarities"]
-        combined1 = str(results_df.iloc[0]["combined"])
+            # Access the values in the "similarities" and "combined" columns
+            similarity1 = results_df.iloc[0]["similarities"]
+            combined1 = str(results_df.iloc[0]["combined"])
 
-        similarity2 = results_df.iloc[1]["similarities"]
-        combined2 = str(results_df.iloc[1]["combined"])
+            similarity2 = results_df.iloc[1]["similarities"]
+            combined2 = str(results_df.iloc[1]["combined"])
 
-        similarity3 = results_df.iloc[2]["similarities"]
-        combined3 = str(results_df.iloc[2]["combined"])
+            similarity3 = results_df.iloc[2]["similarities"]
+            combined3 = str(results_df.iloc[2]["combined"])
 
-        num_rows = results_df.shape[0]
+            num_rows = results_df.shape[0]
 
-        # Iterate through the rows of the dataframe
-        for i in range(num_rows):
-          # Get the current row
-          row = results_df.iloc[i]
+            # Iterate through the rows of the dataframe
+            for i in range(num_rows):
+              # Get the current row
+              row = results_df.iloc[i]
 
-          # Create an expander for the current row, with the label set to the row number
-          with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
-            # Display each cell in the row as a separate block of text
-            st.markdown("**Question:**")
-            st.write(submission_text)
-            st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
-            st.write(row['similarities'])
+              # Create an expander for the current row, with the label set to the row number
+              with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
+                # Display each cell in the row as a separate block of text
+                st.markdown("**Question:**")
+                st.write(submission_text)
+                st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
+                st.write(row['similarities'])
 
-            combined_text = row['combined']
-            text_lines = combined_text.split('\n')
+                combined_text = row['combined']
+                text_lines = combined_text.split('\n')
 
-            for line in text_lines:
-                st.text(line)
+                for line in text_lines:
+                    st.text(line)
 
 
 

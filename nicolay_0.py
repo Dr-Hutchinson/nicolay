@@ -146,7 +146,7 @@ def button_one():
             # Display each cell in the row as a separate block of text
             st.markdown("**Question:**")
             st.write(submission_text)
-            st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text. Semantic similaritiy scores above .30 are generally relevant.**")
+            st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
             st.write(row['similarities'])
             st.write(row['combined'])
 

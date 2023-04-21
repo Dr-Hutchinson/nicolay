@@ -144,10 +144,8 @@ if submit_button_1:
                 text_lines = combined_text.split('\n\n')
 
                 for line in text_lines:
-                    # Replace '\n\n' with '\n' and display using st.write
-                    #st.text(line)
-                     line_with_breaks = line.replace('\n', '<br>')
-                     st.markdown(line_with_breaks, unsafe_allow_html=True)
+                    st.markdown(line.replace('\n', '<br>'))
+
 
     def ask_nicolay():
 

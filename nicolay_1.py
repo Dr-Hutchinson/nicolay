@@ -157,10 +157,10 @@ if submit_button_1:
                 source, summary, keywords, full_text = combined_text.split('\n\n', 3)
 
                 # Format each section with bold labels and line breaks as needed
-                formatted_source = f"**Source:** {source}"
-                formatted_summary = f"**Summary:** {summary}"
-                formatted_keywords = f"**Keywords:** {keywords}"
-                formatted_full_text = f"**Full Text:**<br>{full_text.replace('\n', '<br>')}"
+                formatted_source = "**Source:** {}".format(source)
+                formatted_summary = "**Summary:** {}".format(summary)
+                formatted_keywords = "**Keywords:** {}".format(keywords)
+                formatted_full_text = "**Full Text:**<br>{}".format(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
 
                 # Display the formatted sections
                 st.markdown(formatted_source)

@@ -133,6 +133,8 @@ if submit_button_1:
         # Get the current row
             row = results_df.iloc[i]
 
+            # working code - don't DELETE
+
             with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
                     # Display each cell in the row as a separate block of text
                 st.markdown("**Question:**")
@@ -140,13 +142,30 @@ if submit_button_1:
                 st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
                 st.write(row['similarities'])
 
+                #combined_text = row['combined']
+                #combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                #text_lines = combined_text.split('\n\n')
+
+                #for line in text_lines:
+                    #st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+
+            # end working code - don't DELETE
+
                 combined_text = row['combined']
                 combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
-                text_lines = combined_text.split('\n\n')
 
-                for line in text_lines:
-                    st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+                # Split the combined_text into summary, keywords, and full text sections
+                summary, keywords, full_text = combined_text.split('\n\n', 2)  # Limit the split to only 2 splits (creating 3 sections)
 
+                # Display the sections with corresponding labels in bold
+                st.markdown("**Summary:**")
+                st.markdown(summary)
+
+                st.markdown("**Keywords:**")
+                st.markdown(keywords)
+
+                st.markdown("**Full Text:**")
+                st.markdown(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
 
     def ask_nicolay():
 

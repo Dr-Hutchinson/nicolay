@@ -145,8 +145,7 @@ if submit_button_1:
 
                 for line in text_lines:
                     # Replace '\n\n' with '\n' and display using st.write
-                    line_with_breaks = line.replace('\n\n', '\n')
-                    st.write(line_with_breaks)
+                    st.text(line)
 
 
     def ask_nicolay():

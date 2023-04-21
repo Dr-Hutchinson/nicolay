@@ -158,11 +158,14 @@ if submit_button_1:
                 summary, keywords, full_text = combined_text.split('\n\n', 2)  # Limit the split to only 2 splits (creating 3 sections)
 
                 # Display the sections with corresponding labels in bold
+                keyword_values = keywords.replace("Keywords: ", "").split(", ")
+
+                # Display the sections with corresponding labels in bold
                 st.markdown("**Summary:**")
                 st.markdown(summary)
 
                 st.markdown("**Keywords:**")
-                st.markdown(keywords)
+                st.markdown(', '.join(keyword_values))
 
                 st.markdown("**Full Text:**")
                 st.markdown(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown

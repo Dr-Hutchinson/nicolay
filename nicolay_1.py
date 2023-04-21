@@ -142,7 +142,7 @@ if submit_button_1:
                 st.write(row['similarities'])
 
                 combined_text = row['combined']
-                text_lines = combined_text.split('\n')
+                text_lines = combined_text.split('\n\n')
 
                 #for line in text_lines:
                     #st.text(line)

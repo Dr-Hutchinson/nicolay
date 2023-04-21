@@ -145,8 +145,8 @@ if submit_button_1:
 
                 for line in text_lines:
                     # Replace '\n\n' with '\n' and display using st.write
-                    st.text(line)
-
+                    #st.text(line)
+                    st.markdown(f"<pre>{line}</pre>", unsafe_allow_html=True)
 
     def ask_nicolay():
 

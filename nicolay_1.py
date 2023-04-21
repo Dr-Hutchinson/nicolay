@@ -144,9 +144,9 @@ if submit_button_1:
                 combined_text = row['combined']
                 #text_lines = combined_text.split('\n\n')
 
-                # Replace '\n\n' with '<br/>' within combined_text and render as HTML using st.markdown()
-                combined_text_with_breaks = combined_text.replace('\n\n', '<br/>')
-                st.markdown(combined_text_with_breaks, unsafe_allow_html=True)
+
+                st.write('<pre>' + combined_text + '</pre>', unsafe_allow_html=True)
+
 
                 #for line in text_lines:
                     #st.text(line)

@@ -156,12 +156,19 @@ if submit_button_1:
                 # Split the combined_text into sections
                 text_num, source, summary, keywords, full_text = combined_text.split('\n\n', 4)
 
+                # Remove the repeated labels from the values
+                text_num = text_num.replace("Text #:", "").strip()
+                source = source.replace("Source:", "").strip()
+                summary = summary.replace("Summary:", "").strip()
+                keywords = keywords.replace("Keywords:", "").strip()
+                full_text = full_text.replace("Full Text:", "").strip()
+
                 # Format each section with bold labels and line breaks as needed
                 formatted_text_num = "**Text #:** {}".format(text_num)
                 formatted_source = "**Source:** {}".format(source)
                 formatted_summary = "**Summary:** {}".format(summary)
                 formatted_keywords = "**Keywords:** {}".format(keywords)
-                formatted_full_text = "**Full Text:**<br>{}".format(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+                formatted_full_text = "**Full Text:**<br/>{}".format(full_text.replace('\n', '<br/>'))  # Replace '\n' with '<br/>' for line breaks in markdown
 
                 # Display the formatted sections
                 st.markdown(formatted_text_num)

@@ -163,20 +163,23 @@ if submit_button_1:
                 keywords = keywords.replace("Keywords:", "").strip()
                 full_text = full_text.replace("Full Text:", "").strip()
 
-                # Format each section with bold labels and line breaks as needed
+                # Format each section with bold labels
                 formatted_text_num = "**Text #:** {}".format(text_num)
                 formatted_source = "**Source:** {}".format(source)
                 formatted_summary = "**Summary:** {}".format(summary)
                 formatted_keywords = "**Keywords:** {}".format(keywords)
-                formatted_full_text = "**Full Text:**<br>{}".format(full_text.replace('\n', '<br>')) 
 
                 # Display the formatted sections
                 st.markdown(formatted_text_num)
                 st.markdown(formatted_source)
                 st.markdown(formatted_summary)
                 st.markdown(formatted_keywords)
-                st.markdown(formatted_full_text)
 
+                # Display the 'Full_Text' section with proper line breaks
+                st.markdown("**Full Text:**")
+                text_lines = full_text.split('\n')
+                for line in text_lines:
+                    st.markdown(line.replace('\n', '<br>'))
 
 
     def ask_nicolay():

@@ -142,30 +142,33 @@ if submit_button_1:
                 st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
                 st.write(row['similarities'])
 
-                combined_text = row['combined']
-                combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
-                text_lines = combined_text.split('\n\n')
-
-                for line in text_lines:
-                    st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
-
-            # end working code - don't DELETE
-
                 #combined_text = row['combined']
                 #combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                #text_lines = combined_text.split('\n\n')
 
-                # Split the combined_text into summary, keywords, and full text sections
-                #summary, keywords, full_text = combined_text.split('\n\n', 2)  # Limit the split to only 2 splits (creating 3 sections)
+                #for line in text_lines:
+                    #st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
 
-                # Display the sections with corresponding labels in bold
-                #st.markdown("**Summary:**")
-                #st.write(summary)  # Use st.write instead of st.markdown to display the content
+            # end working code - don't DELETE
+                combined_text = row['combined']
+                combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-                #st.markdown("**Keywords:**")
-                #st.write(keywords)  # Use st.write instead of st.markdown to display the content
+                # Split the combined_text into sections
+                source, summary, keywords, full_text = combined_text.split('\n\n', 3)
 
-                #st.markdown("**Full Text:**")
-                #st.markdown(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+                # Format each section with bold labels and line breaks as needed
+                formatted_source = f"**Source:** {source}"
+                formatted_summary = f"**Summary:** {summary}"
+                formatted_keywords = f"**Keywords:** {keywords}"
+                formatted_full_text = f"**Full Text:**<br>{full_text.replace('\n', '<br>')}"  # Replace '\n' with '<br>' for line breaks in markdown
+
+                # Display the formatted sections
+                st.markdown(formatted_source)
+                st.markdown(formatted_summary)
+                st.markdown(formatted_keywords)
+                st.markdown(formatted_full_text)
+
+
 
     def ask_nicolay():
 

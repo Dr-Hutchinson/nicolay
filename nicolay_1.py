@@ -148,7 +148,7 @@ if submit_button_1:
                     #st.text(line)
 
                 for line in text_lines:
-                    st.markdown(line + "\n")
+                    st.markdown(f'<p>{line}</p>', unsafe_allow_html=True)
 
 
 

@@ -148,7 +148,9 @@ if submit_button_1:
                     #st.text(line)
 
                 for line in text_lines:
-                    st.markdown(f'<p>{line}</p>', unsafe_allow_html=True)
+                    line_with_breaks = line.replace('\n\n', '<br/>')
+                    st.markdown(line_with_breaks, unsafe_allow_html=True)
+                    #st.markdown(line)
 
 
 

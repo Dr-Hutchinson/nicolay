@@ -168,7 +168,7 @@ if submit_button_1:
                 formatted_source = "**Source:** {}".format(source)
                 formatted_summary = "**Summary:** {}".format(summary)
                 formatted_keywords = "**Keywords:** {}".format(keywords)
-                formatted_full_text = "**Full Text:**<br/>{}".format(full_text.replace('\n', '<br/>'))  # Replace '\n' with '<br/>' for line breaks in markdown
+                formatted_full_text = "**Full Text:**<br>{}</format(full_text.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
 
                 # Display the formatted sections
                 st.markdown(formatted_text_num)

@@ -133,7 +133,6 @@ if submit_button_1:
         # Get the current row
             row = results_df.iloc[i]
 
-        # Create an expander for the current row, with the label set to the row number
             with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
                     # Display each cell in the row as a separate block of text
                 st.markdown("**Question:**")
@@ -142,20 +141,13 @@ if submit_button_1:
                 st.write(row['similarities'])
 
                 combined_text = row['combined']
-                #text_lines = combined_text.split('\n\n')
-
-
-                st.write('<pre>' + combined_text + '</pre>', unsafe_allow_html=True)
-
+                text_lines = combined_text.split('\n')
 
                 #for line in text_lines:
                     #st.text(line)
 
-                #for line in text_lines:
-                    #line_with_breaks = line.replace('\n\n', '<br/>')
-                    #st.markdown(line_with_breaks, unsafe_allow_html=True)
-                    #st.markdown(line)
-
+                for line in text_lines:
+                    st.markdown(line)
 
 
     def ask_nicolay():

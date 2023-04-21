@@ -141,13 +141,15 @@ if submit_button_1:
                 st.write(row['similarities'])
 
                 combined_text = row['combined']
-                text_lines = combined_text.split('\n')
+                text_lines = combined_text.split('\n\n')
 
                 #for line in text_lines:
                     #st.text(line)
 
                 for line in text_lines:
-                    st.markdown(line)
+            # Replace '\n\n' with '<br>' and render as HTML
+                    line_with_breaks = line.replace('\n\n', '<br>')
+                    st.markdown(line_with_breaks, unsafe_allow_html=True)
 
 
     def ask_nicolay():

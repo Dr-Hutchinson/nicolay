@@ -320,7 +320,76 @@ if submit_button_1:
         combined_df['output'] = [combined1, combined2, combined3]
         combined_df['r_check'] = [r_check_1, r_check_2, r_check_3]
 
-        st.dataframe(combined_df)
+        for i in range(num_rows):
+        # Get the current row
+            row = combined_df.iloc[i]
+
+            # working code - don't DELETE
+
+            with st.expander(label="Relevance Check " + str(i) + ":", expanded=False):
+                    # Display each cell in the row as a separate block of text
+                st.markdown("**1. Question:**")
+                st.write(submission_text)
+                st.markdown("**3. SSN: ext.**")
+                st.write(row['similarities'])
+
+                #combined_text = row['combined']
+                #combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                #text_lines = combined_text.split('\n\n')
+
+                #for line in text_lines:
+                    #st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+
+            # end working code - don't DELETE
+                combined_text_0 = row['output']
+                combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+
+                # Split the combined_text into sections
+                text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
+
+                # Remove the repeated labels from the values
+                text_num = text_num.replace("Text #:", "").strip()
+                source = source.replace("Source:", "").strip()
+                summary = summary.replace("Summary:", "").strip()
+                keywords = keywords.replace("Keywords:", "").strip()
+                full_text = full_text.replace("Full Text:", "").strip()
+
+                # Format each section with bold labels
+                formatted_text_num = "**Text #:** {}".format(text_num)
+                formatted_source = "**Source:** {}".format(source)
+                formatted_summary = "**Summary:** {}".format(summary)
+                formatted_keywords = "**Keywords:** {}".format(keywords)
+
+                # Display the formatted sections
+                st.markdown(formatted_text_num)
+                st.markdown(formatted_source)
+                st.markdown(formatted_summary)
+                st.markdown(formatted_keywords)
+
+                # Display the 'Full_Text' section with proper line breaks
+                st.markdown("**Full Text:**")
+                text_lines = full_text.split('\n')
+                for line in text_lines:
+                    st.markdown(line.replace('\n', '<br>'))
+
+                combined_text_1 = row['r_check']
+                combined_text_1 = combined_text_1.replace('\\n\\n', '\n\n')
+
+                # Split the combined_text into sections
+                relevance_determination, relevance_explanation = combined_text_1.split('\n\n', 1)
+
+                # Remove the repeated labels from the values
+                relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
+                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
+
+                formatted_relevance_determination = "**Relevance Determination:** {}".format(relevance_determination)
+                formatted_relevance_explanation = "**Relevance Explanation:** {}".format(relevance_explanation)
+
+                st.markdown(formatted_relevance_determination)
+                st.markdown(formatted_relevance_explanation)
+
+
+        #st.dataframe(combined_df)
         st.write("Next step: Answer the user question with supporting quotations from the relevant texts.")
 
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive

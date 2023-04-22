@@ -220,8 +220,66 @@ if submit_button_1:
         similarity3 = results_df.iloc[2]["similarities"]
         combined3 = str(results_df.iloc[2]["combined"])
 
+        num_rows = results_df.shape[0]
+
         st.write("Step 1 complete - identified the most semantically similar text sections.")
-        st.dataframe(results_df)
+
+        # Iterate through the rows of the dataframe
+        for i in range(num_rows):
+        # Get the current row
+            row = results_df.iloc[i]
+
+            # working code - don't DELETE
+
+            with st.expander(label="Text Section  " + str(i) + ":", expanded=False):
+                    # Display each cell in the row as a separate block of text
+                st.markdown("**Question:**")
+                st.write(submission_text)
+                st.markdown("**Below is a section of the text along with its semantic similarity score. It is one of the three highest scoring sections in the text.**")
+                st.write(row['similarities'])
+
+                #combined_text = row['combined']
+                #combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                #text_lines = combined_text.split('\n\n')
+
+                #for line in text_lines:
+                    #st.markdown(line.replace('\n', '<br>'))  # Replace '\n' with '<br>' for line breaks in markdown
+
+            # end working code - don't DELETE
+                combined_text = row['combined']
+                combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+
+                # Split the combined_text into sections
+                text_num, source, summary, keywords, full_text = combined_text.split('\n\n', 4)
+
+                # Remove the repeated labels from the values
+                text_num = text_num.replace("Text #:", "").strip()
+                source = source.replace("Source:", "").strip()
+                summary = summary.replace("Summary:", "").strip()
+                keywords = keywords.replace("Keywords:", "").strip()
+                full_text = full_text.replace("Full Text:", "").strip()
+
+                # Format each section with bold labels
+                formatted_text_num = "**Text #:** {}".format(text_num)
+                formatted_source = "**Source:** {}".format(source)
+                formatted_summary = "**Summary:** {}".format(summary)
+                formatted_keywords = "**Keywords:** {}".format(keywords)
+
+                # Display the formatted sections
+                st.markdown(formatted_text_num)
+                st.markdown(formatted_source)
+                st.markdown(formatted_summary)
+                st.markdown(formatted_keywords)
+
+                # Display the 'Full_Text' section with proper line breaks
+                st.markdown("**Full Text:**")
+                text_lines = full_text.split('\n')
+                for line in text_lines:
+                    st.markdown(line.replace('\n', '<br>'))
+
+
+        #st.write("Step 1 complete - identified the most semantically similar text sections.")
+        #st.dataframe(results_df)
         st.write("Next step - relevancy check.")
 
         ## k-shot prompts for relevance

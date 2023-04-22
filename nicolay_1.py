@@ -330,8 +330,8 @@ if submit_button_1:
                     # Display each cell in the row as a separate block of text
                 st.markdown("**1. Question:**")
                 st.write(submission_text)
-                st.markdown("**3. SSN: ext.**")
-                st.write(row['similarities'])
+                st.markdown("**2. Text Information:**")
+                #st.write(row['similarities'])
 
                 #combined_text = row['combined']
                 #combined_text = combined_text.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
@@ -382,8 +382,8 @@ if submit_button_1:
                 relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
                 relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
 
-                formatted_relevance_determination = "**Relevance Determination:** {}".format(relevance_determination)
-                formatted_relevance_explanation = "**Relevance Explanation:** {}".format(relevance_explanation)
+                formatted_relevance_determination = "**3. Relevance Determination:** {}".format(relevance_determination)
+                formatted_relevance_explanation = "**4. Relevance Explanation:** {}".format(relevance_explanation)
 
                 st.markdown(formatted_relevance_determination)
                 st.markdown(formatted_relevance_explanation)

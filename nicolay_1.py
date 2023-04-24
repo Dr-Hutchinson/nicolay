@@ -559,14 +559,18 @@ if submit_button_1:
             #st.dataframe(final_analysis_df)
             #st.write('\n\n')
 
-            for i in range(len(final_analysis_df)):
+            #for i in range(len(final_analysis_df)):
             # Get the current row
+                #row = final_analysis_df.iloc[i]
+
+            for i in range(len(final_analysis_df)):
+                # Get the current row
                 row = final_analysis_df.iloc[i]
 
                 # working code - don't DELETE
 
-                with st.expander(label="Nicolay's Response: " + str(i) + ":", expanded=True):
-                        # Display each cell in the row as a separate block of text
+                with st.expander(label="Nicolay's Response: " + str(i) + ":", expanded=False):
+                    # Display each cell in the row as a separate block of text
                     st.markdown("**1. Question:**")
                     st.write(submission_text)
                     st.write("**2. Answer:**")
@@ -574,35 +578,52 @@ if submit_button_1:
                     combined_text_x = row['final_analysis']
                     combinex_text_x = combined_text_x.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-                    st.markdown(combined_text_x)
+                    # Find the index of "Combined Answer with Supporting Quote:" and display the text after it
+                    start_index = combined_text_x.find("Combined Answer with Supporting Quote:") + len("Combined Answer with Supporting Quote:")
+                    answer_text = combined_text_x[start_index:].strip()
+                    st.markdown(answer_text)
 
-                    st.markdown("**3. Text Information:**")
 
-                    combined_text_0 = row['output_values']
-                    combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                # working code - don't DELETE
 
-                    text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
+                #with st.expander(label="Nicolay's Response: " + str(i) + ":", expanded=False):
+                    # Display each cell in the row as a separate block of text
+                    #st.markdown("**1. Question:**")
+                    #st.write(submission_text)
+                    #st.write("**2. Answer:**")
 
-                    text_num = text_num.replace("Text #:", "").strip()
-                    source = source.replace("Source:", "").strip()
-                    summary = summary.replace("Summary:", "").strip()
-                    keywords = keywords.replace("Keywords:", "").strip()
-                    full_text = full_text.replace("Full Text:", "").strip()
+                    #combined_text_x = row['final_analysis']
+                    #combinex_text_x = combined_text_x.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-                    formatted_text_num = "**Text #:** {}".format(text_num)
-                    formatted_source = "**Source:** {}".format(source)
-                    formatted_summary = "**Summary:** {}".format(summary)
-                    formatted_keywords = "**Keywords:** {}".format(keywords)
+                    #st.markdown(combined_text_x)
 
-                    st.markdown(formatted_text_num)
-                    st.markdown(formatted_source)
-                    st.markdown(formatted_summary)
-                    st.markdown(formatted_keywords)
+                    #st.markdown("**3. Text Information:**")
 
-                    st.markdown("**Full Text:**")
-                    text_lines = full_text.split('\n')
-                    for line in text_lines:
-                        st.markdown(line.replace('\n', '<br>'))
+                    #combined_text_0 = row['output_values']
+                    #combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+
+                    #text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
+
+                    #text_num = text_num.replace("Text #:", "").strip()
+                    #source = source.replace("Source:", "").strip()
+                    #summary = summary.replace("Summary:", "").strip()
+                    #keywords = keywords.replace("Keywords:", "").strip()
+                    #full_text = full_text.replace("Full Text:", "").strip()
+
+                    #formatted_text_num = "**Text #:** {}".format(text_num)
+                    #formatted_source = "**Source:** {}".format(source)
+                    #formatted_summary = "**Summary:** {}".format(summary)
+                    #formatted_keywords = "**Keywords:** {}".format(keywords)
+
+                    #st.markdown(formatted_text_num)
+                    #st.markdown(formatted_source)
+                    #st.markdown(formatted_summary)
+                    #st.markdown(formatted_keywords)
+
+                    #st.markdown("**Full Text:**")
+                    #text_lines = full_text.split('\n')
+                    #for line in text_lines:
+                        #st.markdown(line.replace('\n', '<br>'))
 
 
 

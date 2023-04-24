@@ -447,9 +447,9 @@ if submit_button_1:
                 formatted_relevant_keywords = "**3. Key Words:** {}".format(relevant_keywords)
 
                 # Extract relevance determination from the beginning of the relevance explanation
-                relevance_determination = relevance_explanation.split('\n', 1)[0].strip().replace("4. Relevance Determination: ", "")
+                relevance_determination = relevance_determination.split('\n', 1)[0].strip().replace("4. Relevance Determination: ", "")
                 # Remove relevance determination from the relevance explanation
-                relevance_explanation = relevance_explanation[len(relevance_determination):].strip()
+                relevance_explanation = relevance_explanation[len(relevance_explanation):].strip()
 
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)

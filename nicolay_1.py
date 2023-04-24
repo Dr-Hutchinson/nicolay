@@ -441,16 +441,22 @@ if submit_button_1:
 
                 # begin snippet
                 relevant_keywords = relevant_keywords.replace("3. Key Words: ", "").strip()
-                relevance_determination = relevant_keywords.split(': ', 1)[-1].strip()
                 relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
 
                 formatted_relevant_keywords = "**3. Key Words:** {}".format(relevant_keywords)
+
+                # Extract relevance determination from the beginning of the relevance explanation
+                relevance_determination = relevance_explanation.split('\n', 1)[0].strip()
+                # Remove relevance determination from the relevance explanation
+                relevance_explanation = relevance_explanation.replace(relevance_determination, "").strip()
+
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
 
                 st.markdown(formatted_relevant_keywords)
                 st.markdown(formatted_relevance_determination)
                 st.markdown(formatted_relevance_explanation)
+# end existing code
 # end existing code
 
 # end snippet

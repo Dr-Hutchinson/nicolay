@@ -290,7 +290,7 @@ if submit_button_1:
 
         examples = [
             {"question": "1. Question: What points does Lincoln make about currency reform?", "output": currency_question},
-            {"question": "1. Question Does Lincoln discuss Japan, and if so, what is the context of this discussion?", "output": japan_question}
+            {"question": "1. Question Does Lincoln discuss Japan, and if so, what is the context of this discussion?", "output": japan_question},
             {"question": "1. Question: What points does Lincoln make about railroad construction?", "output": railroad_question}
         ]
 

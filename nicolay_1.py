@@ -475,16 +475,30 @@ if submit_button_1:
         # Modify the regex pattern to include the optional "Key Words:" string followed by any characters and a newline character
         # Modify the regex pattern to accommodate multiple newline characters between "Relevance Determination:" and "Section_"
         # Update the regex pattern to make the entire pattern case-insensitive
-        regex = re.compile(r'(?i)Section_.*?:\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)', re.DOTALL)
+        #regex = re.compile(r'(?i)Section_.*?:\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)', re.DOTALL)
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column
         #combined_df['mask'] = combined_df['r_check'].str.contains(regex)
         # Apply the regex pattern to the 'r_check' column using the str.match() function
-        combined_df['mask'] = combined_df['r_check'].str.match(regex)
+        #combined_df['mask'] = combined_df['r_check'].str.match(regex)
 
 
         # Create a second mask to capture "this is relevant"
+        #combined_df['second_mask'] = combined_df['r_check'].str.contains(r'this section is relevant', flags=re.IGNORECASE)
+
+        # Combine the two masks using the bitwise OR operator (|) and store the result in the 'mask' column
+        #combined_df['mask'] = combined_df['mask'] | combined_df['second_mask']
+
+        # Filter the combined dataframe to include only rows where the 'mask' column is True
+        #relevant_df = combined_df.loc[combined_df['mask']].copy()
+
+        regex = re.compile(r'(?i)Section_\d+:\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
+
+        # Apply the regex pattern to the 'r_check' column using the str.contains() function
+        combined_df['mask'] = combined_df['r_check'].str.contains(regex)
+
+        # Create a second mask to capture "this section is relevant"
         combined_df['second_mask'] = combined_df['r_check'].str.contains(r'this section is relevant', flags=re.IGNORECASE)
 
         # Combine the two masks using the bitwise OR operator (|) and store the result in the 'mask' column
@@ -492,6 +506,10 @@ if submit_button_1:
 
         # Filter the combined dataframe to include only rows where the 'mask' column is True
         relevant_df = combined_df.loc[combined_df['mask']].copy()
+
+
+
+
 
         # Check if there are any rows in the relevant_df dataframe
         if relevant_df.empty:

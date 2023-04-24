@@ -460,22 +460,14 @@ if submit_button_1:
                 st.markdown(combined_text_1)
 # end snippet
 
-# end existing code
-# end existing code
-
-# end snippet
-
-                # end snippet
-
-
-
-
-
         #st.dataframe(combined_df)
         st.write("Next step: Answer the user question with supporting quotations from the relevant texts.")
 
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive
-        regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)
+        #regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)
+        # Replace the original regex pattern with the updated one
+        regex = re.compile(r'Relevance Determination.*?:\s*(Relevant)', re.IGNORECASE | re.DOTALL)
+
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column
         combined_df['mask'] = combined_df['r_check'].str.contains(regex)
@@ -509,7 +501,7 @@ if submit_button_1:
             evidence_df = pd.DataFrame(final_sections)
 
             evidence = '\n\n'.join(evidence_df['combined_string'])
-            evidence_df.to_csv('evidence.csv')
+            #evidence_df.to_csv('evidence.csv')
 
             #print(evidence)
 

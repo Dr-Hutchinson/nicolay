@@ -466,7 +466,9 @@ if submit_button_1:
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive
         #regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)
         # Replace the original regex pattern with the updated one
-        regex = re.compile(r'Relevance Determination.*?:\s*(Relevant)', re.IGNORECASE | re.DOTALL)
+        #regex = re.compile(r'Relevance Determination.*?:\s*(Relevant)', re.IGNORECASE | re.DOTALL)
+        # Modify the regex pattern to include both "Relevance Determination" and "Relevance Explanation"
+        regex = re.compile(r'Relevance (?:Determination|Explanation).*?:\s*(Relevant)', re.IGNORECASE | re.DOTALL)
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column

@@ -438,14 +438,19 @@ if submit_button_1:
                         # If splitting is still unsuccessful, set empty values to avoid errors
                         relevance_determination, relevance_explanation = "", ""
 
-                relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
-                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
+                # begin snippet
+                relevance_determination = relevance_determination.replace("3. Key Words: ", "").strip()
+                relevance_explanation = relevance_explanation.replace("4. Relevance Determination: ", "").strip()
 
+                formatted_keywords = "**3. Key Words:** {}".format(keywords)
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
 
+                st.markdown(formatted_keywords)
                 st.markdown(formatted_relevance_determination)
                 st.markdown(formatted_relevance_explanation)
+# end snippet
+
                 # end snippet
 
 

@@ -429,33 +429,29 @@ if submit_button_1:
                 # Check if the split was successful
                 # existing code
                 if len(split_text) == 3:
-                    _, relevant_keywords, relevance_explanation = split_text
+                    _, relevance_determination, relevance_explanation = split_text
                 else:
                     # If the split wasn't successful, try splitting the text differently
                     split_text = combined_text_1.split('\n\n', 1)
                     if len(split_text) == 2:
-                        relevant_keywords, relevance_explanation = split_text
+                        relevance_determination, relevance_explanation = split_text
                     else:
                         # If splitting is still unsuccessful, set empty values to avoid errors
-                        relevant_keywords, relevance_explanation = "", ""
+                        relevance_determination, relevance_explanation = "", ""
 
-                # begin snippet
-                relevant_keywords = relevant_keywords.replace("3. Key Words: ", "").strip()
-                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
-
-                formatted_relevant_keywords = "**3. Key Words:** {}".format(relevant_keywords)
-
-                # Extract relevance determination from the beginning of the relevance explanation
-                relevance_determination = relevance_explanation.split('\n', 1)[0].strip()
-                # Remove relevance determination from the relevance explanation
+                relevance_determination = relevance_explanation.split('4. Relevance Explanation:', 1)[0].strip()
                 relevance_explanation = relevance_explanation.replace(relevance_determination, "").strip()
 
+                relevance_determination = relevance_determination.replace("4. Relevance Determination: ", "").strip()
+
+                formatted_keywords = "**3. Key Words:** {}".format(relevance_determination)
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
 
-                st.markdown(formatted_relevant_keywords)
+                st.markdown(formatted_keywords)
                 st.markdown(formatted_relevance_determination)
                 st.markdown(formatted_relevance_explanation)
+
 # end existing code
 # end existing code
 

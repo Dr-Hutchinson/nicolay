@@ -552,49 +552,59 @@ if submit_button_1:
             final_analysis_df = pd.DataFrame({'output_values': output_values, 'final_analysis': final_analysis_results})
 
             # Save the dataframe to a CSV file
-            final_analysis_df.to_csv('final_analysis.csv', index=False)
+            #final_analysis_df.to_csv('final_analysis.csv', index=False)
 
             st.subheader("Nicolay's Final Analysis:")
-            st.write("Step 3 complete: Here are Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.")
-            st.dataframe(final_analysis_df)
-            st.write('\n\n')
+            st.markdown("**Step 3 complete: Here are Nicolay's analysis of Lincoln's speeches based on your question. Click on the dataframe boxes below to see the full outputs.**")
+            #st.dataframe(final_analysis_df)
+            #st.write('\n\n')
 
+            for i in range(num_rows_x):
+            # Get the current row
+                row = final_analysis_df.iloc[i]
 
+                # working code - don't DELETE
 
-        #for result in final_analysis_results:
-          #print(result)
+                with st.expander(label="Nicolay's Response: " + str(i) + ":", expanded=True):
+                        # Display each cell in the row as a separate block of text
+                    st.markdown("**1. Question:**")
+                    st.write(submission_text)
+                    st.write("**2. Answer:**")
 
-        #def rearrange_combined_output(combined_output):
-            #lines = combined_output.strip().split("\n")
+                    combined_text_x = row['final_analysis']
+                    combinex_text_x = combined_text_x.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-            #source_line = next(line for line in lines if "Source:" in line)
-            #source_line_parts = source_line.split(":", 2)
-            #source_line_formatted = f"{source_line_parts[0]}:{source_line_parts[1]}\n{source_line_parts[2].strip()}"
+                    st.markdown(combined_text_x)
 
-            #summary_line_start = next(i for i, line in enumerate(lines) if "Summary:" in line)
-            #keywords_line_start = next(i for i, line in enumerate(lines) if "Keywords:" in line)
-            #summary_lines = lines[summary_line_start:keywords_line_start]
-            #keywords_line = lines[keywords_line_start]
+                    st.markdown("**3. Text Information:**")
 
-            #full_text_start = next(i for i, line in enumerate(lines) if "Text" in line) + 1
-            #full_text_end = summary_line_start - 1
-            #full_text = "\n".join(lines[full_text_start:full_text_end])
+                    combined_text_0 = row['output_values']
+                    combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-            #source_data = f"""Source Data:
+                    text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
 
-        #{source_line_formatted}
+                    text_num = text_num.replace("Text #:", "").strip()
+                    source = source.replace("Source:", "").strip()
+                    summary = summary.replace("Summary:", "").strip()
+                    keywords = keywords.replace("Keywords:", "").strip()
+                    full_text = full_text.replace("Full Text:", "").strip()
 
-        #{' '.join(summary_lines)}
+                    formatted_text_num = "**Text #:** {}".format(text_num)
+                    formatted_source = "**Source:** {}".format(source)
+                    formatted_summary = "**Summary:** {}".format(summary)
+                    formatted_keywords = "**Keywords:** {}".format(keywords)
 
-        #{keywords_line}
+                    st.markdown(formatted_text_num)
+                    st.markdown(formatted_source)
+                    st.markdown(formatted_summary)
+                    st.markdown(formatted_keywords)
 
-        #Full Text:
-        #{full_text}
-        #"""
-            #return source_data
+                    st.markdown("**Full Text:**")
+                    text_lines = full_text.split('\n')
+                    for line in text_lines:
+                        st.markdown(line.replace('\n', '<br>'))
 
-        #source_data = rearrange_combined_output(combined1)
-        #print(source_data)
+                    
 
 
     if search_method == semantic_search:

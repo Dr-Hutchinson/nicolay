@@ -473,7 +473,8 @@ if submit_button_1:
         #regex = re.compile(r'Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
         # Modify the regex pattern to include the optional "Relevance Determination" string followed by any characters and a newline character
         # Modify the regex pattern to include the optional "Key Words:" string followed by any characters and a newline character
-        regex = re.compile(r'(?:Key Words:.*?\n)?(?:Relevance Determination.*?\n)?Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
+        # Modify the regex pattern to accommodate multiple newline characters between "Relevance Determination:" and "Section_"
+        regex = re.compile(r'(?:Key Words:.*?\n)?(?:Relevance Determination.*?\n+)?Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column

@@ -438,8 +438,8 @@ if submit_button_1:
                         # If splitting is still unsuccessful, set empty values to avoid errors
                         relevance_determination, relevance_explanation = "", ""
 
-                relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "Relevance Determination: ", "").strip()
-                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "Relevance Explanation: ", "").strip()
+                relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
+                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
 
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)

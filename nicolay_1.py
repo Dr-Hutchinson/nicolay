@@ -475,7 +475,7 @@ if submit_button_1:
         # Modify the regex pattern to include the optional "Key Words:" string followed by any characters and a newline character
         # Modify the regex pattern to accommodate multiple newline characters between "Relevance Determination:" and "Section_"
         # Update the regex pattern to make the entire pattern case-insensitive
-        regex = re.compile(r'(?i)Section_.*?:\s*(Relevant)(?:\.|,)', re.DOTALL)
+        regex = re.compile(r'(?i)Section_.*?:\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)', re.DOTALL)
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column

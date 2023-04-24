@@ -421,10 +421,23 @@ if submit_button_1:
                 combined_text_1 = row['r_check']
                 combined_text_1 = combined_text_1.replace('\\n\\n', '\n\n')
 
-                _, relevance_determination, relevance_explanation = combined_text_1.split('\n\n', 2)  # Updated this line
+                # Try to split the text into three sections
+                split_text = combined_text_1.split('\n\n', 2)
 
-                relevance_determination = relevance_determination.replace("4. Relevance Determination: ", "").strip()
-                relevance_explanation = relevance_explanation.replace("5. Relevance Explanation: ", "").strip()
+                # Check if the split was successful
+                if len(split_text) == 3:
+                    _, relevance_determination, relevance_explanation = split_text
+                else:
+                    # If the split wasn't successful, try splitting the text differently
+                    split_text = combined_text_1.split('\n\n', 1)
+                    if len(split_text) == 2:
+                        relevance_determination, relevance_explanation = split_text
+                    else:
+                        # If splitting is still unsuccessful, set empty values to avoid errors
+                        relevance_determination, relevance_explanation = "", ""
+
+                relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
+                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
 
                 formatted_relevance_determination = "**3. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**4. Relevance Explanation:** {}".format(relevance_explanation)

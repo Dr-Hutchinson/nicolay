@@ -479,7 +479,10 @@ if submit_button_1:
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column
-        combined_df['mask'] = combined_df['r_check'].str.contains(regex)
+        #combined_df['mask'] = combined_df['r_check'].str.contains(regex)
+        # Apply the regex pattern to the 'r_check' column using the str.match() function
+        combined_df['mask'] = combined_df['r_check'].str.match(regex)
+
 
         # Create a second mask to capture "this is relevant"
         combined_df['second_mask'] = combined_df['r_check'].str.contains(r'this section is relevant', flags=re.IGNORECASE)

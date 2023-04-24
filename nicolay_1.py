@@ -429,36 +429,35 @@ if submit_button_1:
                 # Check if the split was successful
                 # existing code
                 # begin snippet
-                # begin snippet
-                if len(split_text) == 3:
-                    _, relevant_keywords, relevance_explanation = split_text
-                else:
+                #if len(split_text) == 3:
+                #    _, relevant_keywords, relevance_explanation = split_text
+                #else:
                     # If the split wasn't successful, try splitting the text differently
-                    split_text = combined_text_1.split('\n\n', 1)
-                    if len(split_text) == 2:
-                        relevant_keywords, relevance_explanation = split_text
-                    else:
+                #    split_text = combined_text_1.split('\n\n', 1)
+                #    if len(split_text) == 2:
+                #        relevant_keywords, relevance_explanation = split_text
+                #    else:
                         # If splitting is still unsuccessful, set empty values to avoid errors
-                        relevant_keywords, relevance_explanation = "", ""
+                #        relevant_keywords, relevance_explanation = "", ""
 
-                relevant_keywords = relevant_keywords.replace("3. Key Words: ", "").strip()
-                relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
+                #relevant_keywords = relevant_keywords.replace("3. Key Words: ", "").strip()
+                #relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()
 
-                formatted_relevant_keywords = "**3. Key Words:** {}".format(relevant_keywords)
+                #formatted_relevant_keywords = "**3. Key Words:** {}".format(relevant_keywords)
 
                 # Extract relevance determination from the beginning of the relevance explanation
-                relevance_determination = relevance_determination.split('\n', 1)[0].strip().replace("4. Relevance Determination: ", "")
+                #relevance_determination = relevance_explanation.split('\n', 1)[0].strip().replace("4. Relevance Determination: ", "")
                 # Remove relevance determination from the relevance explanation
-                relevance_explanation = relevance_explanation[len(relevance_explanation):].strip()
+                #relevance_explanation = relevance_explanation.replace(relevance_determination, "").strip()
 
-                formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
-                formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
+                #formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
+                #formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
 
-                st.markdown(formatted_relevant_keywords)
-                st.markdown(formatted_relevance_determination)
-                st.markdown(formatted_relevance_explanation)
-# end snippet
+                #st.markdown(formatted_relevant_keywords)
+                #st.markdown(formatted_relevance_determination)
+                #st.markdown(formatted_relevance_explanation)
 
+                st.markdown(split_text)
 # end snippet
 
 # end existing code

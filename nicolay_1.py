@@ -461,7 +461,7 @@ if submit_button_1:
 # end snippet
 
         #st.dataframe(combined_df)
-        st.write("Next step: Answer the user question with supporting quotations from the relevant texts.")
+        st.markdown("**Next step: Answer the user question with supporting quotations from the relevant texts.**")
 
         # Use the re.IGNORECASE flag to make the regular expression case-insensitive
         #regex = re.compile(r'Relevance Explanation.*?(relevant)', re.IGNORECASE | re.DOTALL)
@@ -559,7 +559,7 @@ if submit_button_1:
             #st.dataframe(final_analysis_df)
             #st.write('\n\n')
 
-            for i in range(num_rows_x):
+            for i in range(num_rows):
             # Get the current row
                 row = final_analysis_df.iloc[i]
 
@@ -604,7 +604,7 @@ if submit_button_1:
                     for line in text_lines:
                         st.markdown(line.replace('\n', '<br>'))
 
-                    
+
 
 
     if search_method == semantic_search:

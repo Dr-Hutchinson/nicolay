@@ -429,6 +429,7 @@ if submit_button_1:
                 # Check if the split was successful
                 # existing code
                 # begin snippet
+                # begin snippet
                 if len(split_text) == 3:
                     _, relevant_keywords, relevance_explanation = split_text
                 else:
@@ -448,7 +449,7 @@ if submit_button_1:
                 # Extract relevance determination from the beginning of the relevance explanation
                 relevance_determination = relevance_explanation.split('\n', 1)[0].strip().replace("4. Relevance Determination: ", "")
                 # Remove relevance determination from the relevance explanation
-                relevance_explanation = relevance_explanation.replace(relevance_determination, "").strip()
+                relevance_explanation = relevance_explanation[len(relevance_determination):].strip()
 
                 formatted_relevance_determination = "**4. Relevance Determination:** {}".format(relevance_determination)
                 formatted_relevance_explanation = "**5. Relevance Explanation:** {}".format(relevance_explanation)
@@ -456,6 +457,8 @@ if submit_button_1:
                 st.markdown(formatted_relevant_keywords)
                 st.markdown(formatted_relevance_determination)
                 st.markdown(formatted_relevance_explanation)
+# end snippet
+
 # end snippet
 
 # end existing code

@@ -472,7 +472,8 @@ if submit_button_1:
         # Modify the regex pattern to include the case when there is no "Relevance Determination" or "Relevance Explanation" string
         #regex = re.compile(r'Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
         # Modify the regex pattern to include the optional "Relevance Determination" string followed by any characters and a newline character
-        regex = re.compile(r'(?:Relevance Determination.*?\n)?Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
+        # Modify the regex pattern to include the optional "Key Words:" string followed by any characters and a newline character
+        regex = re.compile(r'(?:Key Words:.*?\n)?(?:Relevance Determination.*?\n)?Section_.*?:\s*(Relevant)(?:\.|,).*?Relevance Explanation.*', re.IGNORECASE | re.DOTALL)
 
 
         # Apply the regex pattern to the 'r_check' column and store the results in a new 'mask' column

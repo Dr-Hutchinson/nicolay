@@ -424,7 +424,7 @@ if submit_button_1:
                 combined_text_1 = combined_text_1.replace('\\n\\n', '\n\n')
 
                 # Try to split the text into three sections
-                split_text = combined_text_1.split('\n\n', 2)
+                #split_text = combined_text_1.split('\n\n', 2)
 
                 # Check if the split was successful
                 # existing code
@@ -457,7 +457,7 @@ if submit_button_1:
                 #st.markdown(formatted_relevance_determination)
                 #st.markdown(formatted_relevance_explanation)
 
-                st.markdown(split_text)
+                st.markdown(combined_text_1)
 # end snippet
 
 # end existing code

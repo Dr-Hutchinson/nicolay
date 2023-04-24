@@ -421,7 +421,7 @@ if submit_button_1:
                 combined_text_1 = row['r_check']
                 combined_text_1 = combined_text_1.replace('\\n\\n', '\n\n')
 
-                relevance_determination, relevance_explanation = combined_text_1.split('\n\n', 1)
+                _, relevance_determination, relevance_explanation = combined_text_1.split('\n\n', 2)  # Updated this line
 
                 relevance_determination = relevance_determination.replace("3. Relevance Determination: ", "").strip()
                 relevance_explanation = relevance_explanation.replace("4. Relevance Explanation: ", "").strip()

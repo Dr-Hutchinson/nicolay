@@ -559,7 +559,7 @@ if submit_button_1:
             #st.dataframe(final_analysis_df)
             #st.write('\n\n')
 
-            for i in range(num_rows):
+            for i in range(len(final_analysis_df)):
             # Get the current row
                 row = final_analysis_df.iloc[i]
 

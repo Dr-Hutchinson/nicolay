@@ -494,7 +494,8 @@ if submit_button_1:
         #relevant_df = combined_df.loc[combined_df['mask']].copy()
 
         # Modified regex pattern
-        regex = re.compile(r'(?i)Section_\s*\d+\s*:\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
+        # Updated regex pattern
+        regex = re.compile(r'(?i)(?:Relevance Determination:)?\s*Section_\s*\d+\s*[:=]\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
 
         # Apply the regex pattern to the 'r_check' column using the str.contains() function
         combined_df['mask'] = combined_df['r_check'].str.contains(regex)
@@ -507,6 +508,7 @@ if submit_button_1:
 
         # Filter the combined dataframe to include only rows where the 'mask' column is True
         relevant_df = combined_df.loc[combined_df['mask']].copy()
+
 
 
 

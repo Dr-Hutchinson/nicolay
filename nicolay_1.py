@@ -42,7 +42,7 @@ credentials = service_account.Credentials.from_service_account_info(
 gc = pygsheets.authorize(custom_credentials=credentials)
 
 st.set_page_config(
-    page_title="Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln (version 0.1)",
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.1)",
     layout='wide',
     page_icon='🔍'
 )
@@ -51,7 +51,7 @@ os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 openai.api_key = os.getenv("OPENAI_API_KEY")
 #os.environ["SERPAPI_API_KEY"] = st.secrets["serpapi_api_key"]
 
-st.title("Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln")
+st.title("Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.1)")
 
 
 st.write("This application uses OpenAI's GPT AI models to answer questions about the collected speeches of Abraham Lincoln. Choose one of the options below, and pose a question about the text.")

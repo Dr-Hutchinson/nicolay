@@ -55,20 +55,20 @@ st.title("Nicolay: An AI Search Tool for the Speeches of Abraham Lincoln")
 
 
 st.write("This application uses OpenAI's GPT AI models to answer questions about the collected speeches of Abraham Lincoln. Choose one of the options below, and pose a question about the text.")
-semantic_search = "Semantic Search: Enter a question, and recieve sections of Lincoln's speeches that are the most closely related."
+semantic_search = "Semantic Search: Enter a question, and recieve sections of Lincoln's speeches that are the most closely related semantically."
 #ask_a_paragraph = "Ask a Paragraph: Internet Search. Select a Section from the text, and then pose a question. GPT-3 will search the internet to answer your question."
 #ask_wiki = "Ask a Paragraph: Wikipedia. Select a Section from the text, and then pose a question. GPT-3 will search Wikipedia to answer your question."
 ask_a_source = "Ask Nicolay: Pose a question about Lincoln's speeches, and a GPT AI model will share answers drawn from the text."
 
 
 search_method = st.radio("Choose a method:", (semantic_search, ask_a_source))
-model_choice = st.selectbox("Choose an AI model:", ('GPT-3.5', 'GPT-4'), index=1)
+model_choice = st.selectbox("Choose an AI model for Ask Nicolay:", ('GPT-3.5', 'GPT-4'), index=1)
 #section_number = st.number_input('Select a section number if you have selected Ask a Paragraph. You can find the section numbers to the bottom left, or through a semantic search.', step=1)
 submission_text = st.text_area("Enter your question below. ")
 submit_button_1 = st.button(label='Click here to submit your question.')
 if submit_button_1:
 
-    st.subheader("Nicolay's analysis is underway. It can take a minute or two for every step of the process to be completed, so thank you for your patience. Nicolay's progress will be documented below.")
+    st.subheader("Nicolay's analysis is underway. It can take several minutes for every step of the process to be completed. Thank you for your patience. Nicolay's progress will be documented below.")
 
     os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 
@@ -633,31 +633,31 @@ if submit_button_1:
 
                     #st.markdown("**3. Text Information:**")
 
-                    #combined_text_0 = row['output_values']
-                    #combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
+                    combined_text_0 = row['output_values']
+                    combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
 
-                    #text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
+                    text_num, source, summary, keywords, full_text = combined_text_0.split('\n\n', 4)
 
-                    #text_num = text_num.replace("Text #:", "").strip()
-                    #source = source.replace("Source:", "").strip()
-                    #summary = summary.replace("Summary:", "").strip()
-                    #keywords = keywords.replace("Keywords:", "").strip()
-                    #full_text = full_text.replace("Full Text:", "").strip()
+                    text_num = text_num.replace("Text #:", "").strip()
+                    source = source.replace("Source:", "").strip()
+                    summary = summary.replace("Summary:", "").strip()
+                    keywords = keywords.replace("Keywords:", "").strip()
+                    full_text = full_text.replace("Full Text:", "").strip()
 
-                    #formatted_text_num = "**Text #:** {}".format(text_num)
-                    #formatted_source = "**Source:** {}".format(source)
-                    #formatted_summary = "**Summary:** {}".format(summary)
-                    #formatted_keywords = "**Keywords:** {}".format(keywords)
+                    formatted_text_num = "**Text #:** {}".format(text_num)
+                    formatted_source = "**Source:** {}".format(source)
+                    formatted_summary = "**Summary:** {}".format(summary)
+                    formatted_keywords = "**Keywords:** {}".format(keywords)
 
-                    #st.markdown(formatted_text_num)
-                    #st.markdown(formatted_source)
-                    #st.markdown(formatted_summary)
-                    #st.markdown(formatted_keywords)
+                    st.markdown(formatted_text_num)
+                    st.markdown(formatted_source)
+                    st.markdown(formatted_summary)
+                    st.markdown(formatted_keywords)
 
-                    #st.markdown("**Full Text:**")
-                    #text_lines = full_text.split('\n')
-                    #for line in text_lines:
-                        #st.markdown(line.replace('\n', '<br>'))
+                    st.markdown("**Full Text:**")
+                    text_lines = full_text.split('\n')
+                    for line in text_lines:
+                        st.markdown(line.replace('\n', '<br>'))
 
 
 

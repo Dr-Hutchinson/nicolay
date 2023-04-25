@@ -135,7 +135,7 @@ if submit_button_1:
 
             # working code - don't DELETE
 
-            with st.expander(label="Text Section  " + str(i) + ":", expanded=True):
+            with st.expander(label="Text Section  " + str(i+1) + ":", expanded=True):
                     # Display each cell in the row as a separate block of text
                 st.markdown("**Question:**")
                 st.write(submission_text)
@@ -231,7 +231,7 @@ if submit_button_1:
 
             # working code - don't DELETE
 
-            with st.expander(label="Text Section  " + str(i) + ":", expanded=False):
+            with st.expander(label="Text Section  " + str(i+1) + ":", expanded=False):
                     # Display each cell in the row as a separate block of text
                 st.markdown("**Question:**")
                 st.write(submission_text)
@@ -328,7 +328,7 @@ if submit_button_1:
 
             # working code - don't DELETE
 
-            with st.expander(label="Relevance Check " + str(i) + ":", expanded=False):
+            with st.expander(label="Relevance Check " + str(i+1) + ":", expanded=False):
                     # Display each cell in the row as a separate block of text
                 st.markdown("**1. Question:**")
                 st.write(submission_text)
@@ -599,7 +599,7 @@ if submit_button_1:
 
                 # working code - don't DELETE
 
-                with st.expander(label="Nicolay's Response: " + str(i) + ":", expanded=False):
+                with st.expander(label="Nicolay's Response: " + str(i+1) + ":", expanded=False):
                     # Display each cell in the row as a separate block of text
                     st.markdown("**1. Question:**")
                     st.write(submission_text)

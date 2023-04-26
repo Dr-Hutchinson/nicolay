@@ -62,7 +62,7 @@ ask_a_source = "Ask Nicolay: Pose a question about Lincoln's speeches, and a GPT
 
 
 search_method = st.radio("Choose a method:", (semantic_search, ask_a_source))
-model_choice = st.selectbox("Choose an AI model for Ask Nicolay:", ('GPT-3.5', 'GPT-4'), index=1)
+model_choice = st.selectbox("Choose an AI model for Ask Nicolay:", ('ChatGPT', 'GPT-4'), index=1)
 #section_number = st.number_input('Select a section number if you have selected Ask a Paragraph. You can find the section numbers to the bottom left, or through a semantic search.', step=1)
 submission_text = st.text_area("Enter your question below. ")
 submit_button_1 = st.button(label='Click here to submit your question.')

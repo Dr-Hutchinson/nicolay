@@ -54,7 +54,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 st.title("Nicolay: Exploring the Speeches of Abraham Lincoln with AI")
 
 
-st.write("This application uses OpenAI's GPT AI models to answer questions about the collected speeches of Abraham Lincoln. Choose one of the options below, and pose a question about the text.")
+st.write("This application uses OpenAI's GPT AI models to answer questions about the collected speeches of Abraham Lincoln. Choose one of the options below, and pose a question about Lincoln's speeches.")
 semantic_search = "Semantic Search: Enter a question, and recieve sections of Lincoln's speeches that are the most closely related semantically."
 #ask_a_paragraph = "Ask a Paragraph: Internet Search. Select a Section from the text, and then pose a question. GPT-3 will search the internet to answer your question."
 #ask_wiki = "Ask a Paragraph: Wikipedia. Select a Section from the text, and then pose a question. GPT-3 will search Wikipedia to answer your question."

@@ -58,7 +58,7 @@ st.write("This application uses OpenAI's GPT AI models to answer questions about
 semantic_search = "Semantic Search: Enter a question, and recieve sections of Lincoln's speeches that are the most closely related semantically."
 #ask_a_paragraph = "Ask a Paragraph: Internet Search. Select a Section from the text, and then pose a question. GPT-3 will search the internet to answer your question."
 #ask_wiki = "Ask a Paragraph: Wikipedia. Select a Section from the text, and then pose a question. GPT-3 will search Wikipedia to answer your question."
-ask_a_source = "Ask Nicolay: Pose a question about Lincoln's speeches, and a GPT AI model will share answers drawn from the text."
+ask_a_source = "Ask Nicolay: Pose a question about Lincoln's speeches, and a GPT AI model will share answers drawn from the text. This process can take several minutes to complete."
 
 
 search_method = st.radio("Choose a method:", (semantic_search, ask_a_source))

@@ -1,5 +1,7 @@
 # Nicolay: Exploring the Speeches of Abraham Lincoln with AI
 
+![Nicolay Logo](title_card.png)
+
 Nicolay is a digital history experiment that uses artificial intelligence to explore the speeches of Abraham Lincoln. The app is named after John George Nicolay, a German-born American author and diplomat who served as the private secretary to US President Abraham Lincoln.
 
 ## Contents

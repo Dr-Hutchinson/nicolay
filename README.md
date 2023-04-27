@@ -7,7 +7,7 @@ Nicolay is a digital history experiment that uses artificial intelligence to exp
 ## Contents
 
 - [Summary](#summary)
-- [Who was Nicolay](#who-was-nicolay)
+- [Who was Nicolay?](#who-was-nicolay)
 - [Data Source](#data-source)
 - [Methods](#methods)
 - [How to Use](#how-to-use)
@@ -18,7 +18,7 @@ Nicolay is a digital history experiment that uses artificial intelligence to exp
 
 Nicolay utilizes large language models to analyze 15 of Lincoln's most important speeches, totaling around 96,000 words or 300 pages of text. The app allows users to explore a substantial collection of Lincoln's ideas, rhetoric, and important moments in the nation's history.
 
-## Who was Nicolay
+## Who was Nicolay?
 
 [John George Nicolay](https://en.wikipedia.org/wiki/John_George_Nicolay) was a German-born American author and diplomat who served as the private secretary to US President Abraham Lincoln. Nicolay collaborated with his fellow Lincoln secretary, John Hay, to compose a 10-volume biography of Lincoln's life. Their substantial research played an important role in the future scholarship of the life and times of Lincoln. This app has been named
 Nicolay to honor his role in documenting and preserving the words and legacy of Abraham Lincoln for future generations.

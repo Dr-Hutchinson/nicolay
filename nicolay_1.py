@@ -495,7 +495,9 @@ if submit_button_1:
 
         # Modified regex pattern
         # Updated regex pattern
-        regex = re.compile(r'(?i)(?:\d+\.?\s*)?Relevance Determination:\s*(?:\n|\r\n)?\s*Section_\s*\d+\s*[:=]\s*(?:\n|\r\n)?\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
+        #regex = re.compile(r'(?i)(?:\d+\.?\s*)?Relevance Determination:\s*(?:\n|\r\n)?\s*Section_\s*\d+\s*[:=]\s*(?:\n|\r\n)?\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
+        regex = re.compile(r'(?i)(?:\d+\.?\s*)?Relevance Determination:\s*(?:\n|\r\n)?\s*(High\s*)?Section_\s*\d+\s*[:=]\s*(?:\n|\r\n)?\s*(Relevant)(?:\s*\(.+?\))?(?:\.|,)?', re.DOTALL)
+
 
         # Apply the regex pattern to the 'r_check' column using the str.contains() function
         combined_df['mask'] = combined_df['r_check'].str.contains(regex)

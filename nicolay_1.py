@@ -332,7 +332,9 @@ if submit_button_1:
                     # Display each cell in the row as a separate block of text
                 st.markdown("**1. Question:**")
                 st.write(submission_text)
-                st.markdown("**2. Text Information:**")
+                st.markdown("**2. Relevance Check:")
+                st.markdown(combined_text_1)
+                st.markdown("**Text Information:**")
                 #st.write(row['similarities'])
 
                 #combined_text = row['combined']
@@ -393,6 +395,8 @@ if submit_button_1:
                 # working code - don't DELETE
 
             # begin snippet
+
+
 
                 combined_text_0 = row['output']
                 combined_text_0 = combined_text_0.replace('\\n\\n', '\n\n')  # Convert plain string to actual newline characters
@@ -457,7 +461,7 @@ if submit_button_1:
                 #st.markdown(formatted_relevance_determination)
                 #st.markdown(formatted_relevance_explanation)
 
-                st.markdown(combined_text_1)
+                #st.markdown(combined_text_1)
 # end snippet
 
         #st.dataframe(combined_df)

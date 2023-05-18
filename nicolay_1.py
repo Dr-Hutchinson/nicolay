@@ -332,8 +332,8 @@ if submit_button_1:
                     # Display each cell in the row as a separate block of text
                 st.markdown("**1. Question:**")
                 st.write(submission_text)
-                st.markdown("**2. Relevance Check:")
-                st.markdown(combined_text_1)
+                #st.markdown("**2. Relevance Check:")
+                #st.markdown(combined_text_1)
                 st.markdown("**Text Information:**")
                 #st.write(row['similarities'])
 
@@ -461,7 +461,7 @@ if submit_button_1:
                 #st.markdown(formatted_relevance_determination)
                 #st.markdown(formatted_relevance_explanation)
 
-                #st.markdown(combined_text_1)
+                st.markdown(combined_text_1)
 # end snippet
 
         #st.dataframe(combined_df)

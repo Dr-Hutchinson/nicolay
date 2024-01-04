@@ -11,6 +11,7 @@ st.header("Sources & Acknowledgements:")
 st.subheader("**Data Sources:**")
 
 st.write("The project relies on the speeches of Abraham Lincoln produced and curated by the [University of Virginia's Miller Center](https://millercenter.org/). Their [corpus of presidential speeches](https://millercenter.org/presidential-speeches-downloadable-data) is an important primary source for studying American history.")
+st.write("Data used for linguistic analysis of the Lincoln corpus was created using [Voyant.](https://voyant-tools.org/)")
 
 st.write("Additional data sources used by the app can be found in the [project Github page.](https://github.com/Dr-Hutchinson/nicolay)")
 

@@ -72,7 +72,7 @@ image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.
 st.subheader("**Navigating this App:**")
 st.write("Expand the What Is RAG? box below for a walkthrough of the app. Continue to the query below to being exploring Lincoln's speeches.")
 
-with st.expander("Exploring Hay and Nicolay"):
+with st.expander("**How It Works - Hay and Nicolay**"):
     st.write(app_intro)
 
 

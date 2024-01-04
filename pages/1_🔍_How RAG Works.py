@@ -731,7 +731,7 @@ with st.form("Search Interface"):
                                             st.markdown(formatted_full_text, unsafe_allow_html=True)
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                        st.markdown("Full text not found.")
+                                            st.markdown("Full text not found.")
 
 
                             # Displaying the Analysis Metadata

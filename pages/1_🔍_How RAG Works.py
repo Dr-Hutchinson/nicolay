@@ -758,14 +758,17 @@ with st.form("Search Interface"):
                                     st.markdown("**Match Analysis:**")
                                     for match_key, match_info in model_output["Match Analysis"].items():
                                         st.markdown(f"- **{match_key}:**")
+                                        sub_items_html = ""
                                         for key, value in match_info.items():
-                                            # Adding an extra level of indentation for each item under a match
+                                            # Check if the value is a dictionary (for nested structures)
                                             if isinstance(value, dict):
-                                                st.markdown(f"  - **{key}:**")
-                                                for sub_key, sub_value in value.items():
-                                                    st.markdown(f"    - {sub_key}: {sub_value}")
+                                                nested_items_html = "".join([f"<li>{sub_key}: {sub_value}</li>" for sub_key, sub_value in value.items()])
+                                                sub_items_html += f"<li><b>{key}:</b><ul>{nested_items_html}</ul></li>"
                                             else:
-                                                st.markdown(f"    - **{key}:** {value}")
+                                                sub_items_html += f"<li><b>{key}:</b> {value}</li>"
+
+                                        # Render the HTML list
+                                        st.markdown(f"<ul>{sub_items_html}</ul>", unsafe_allow_html=True)
 
 
                                 # Displaying Meta Analysis

@@ -300,7 +300,7 @@ with st.form("Search Interface"):
 
             if user_query:
 
-                client = OpenAI(api_key=openai_api_key)
+                client = OpenAI()
 
                 # Construct the messages for the model
                 messages_for_model = [

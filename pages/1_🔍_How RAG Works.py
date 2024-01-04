@@ -380,10 +380,11 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
-                        with st.expander("How Does This Work?"):
+                        st.markdown("### Keyword Search Results")
+
+                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
                             st.write(keyword_search_explainer)
 
-                        st.markdown("### Keyword Search Results")
                         for idx, result in enumerate(search_results, start=1):
                             expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
                             with st.expander(expander_label):

@@ -1,8 +1,8 @@
-**How It Works: Dynamically Weighted Keyword Search**
+**How Does This Work?: Dynamically Weighted Keyword Search**
 
 The search process is initiated by Hay, a fine-tuned large language model, analyzes a user's query and offers weighted keywords for exploring the Lincoln corpus. The process can be broken down into several key stages:
 
-**Model's Initial Response:** Upon receiving a user query, Hay generates an initial response. This response not only addresses the query but also identifies key terms or concepts relevant to the query. For example, in a query about an analysis of rhetorical style of Lincoln’s Second Inaugural Address, the model might highlight terms like "Malice," "Charity," "Bible," and "Pray."  
+**Model's Initial Response:** Upon receiving a user query, Hay generates an initial response. This response not only addresses the query but also identifies key terms or concepts relevant to the query. For example, in a query about an analysis of rhetorical style of Lincoln’s Second Inaugural Address, the model might highlight terms like "Malice," "Charity," "Bible," and "Pray."
 
 **Weighted Keywords Generation:** The model assigns weights to these keywords based on their perceived importance in the context of the query. These weights are determined by considering both the frequency of the terms in the query and their significance in the Lincoln corpus.
 
@@ -10,7 +10,7 @@ The search process is initiated by Hay, a fine-tuned large language model, analy
 
 **Dynamic Weighting and Scoring:** The search function then employs a dynamic weighting mechanism. This mechanism adjusts the weights of the keywords based on their relative frequencies in the Lincoln speech corpus. This approach gives more weight to rare terms within the corpus, thereby amplifying the significance of less frequent but potentially more meaningful words. These weights help determine the weighted score, which quantifies the relevance of the text to the user query.
 
-**Quote Retrieval**: For each top match, the system then extracts a snippet surrounding the highest weighted keyword position, providing a contextual glimpse into the document. 
+**Quote Retrieval**: For each top match, the system then extracts a snippet surrounding the highest weighted keyword position, providing a contextual glimpse into the document.
 
 **Keyword Counts**: Alongside the snippet, the system provides counts for each weighted keyword, offering insights into how frequently each term is mentioned in that specific context. This information helps in understanding the thematic emphasis of the excerpt.
 

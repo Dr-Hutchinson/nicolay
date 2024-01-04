@@ -423,7 +423,7 @@ with st.form("Search Interface"):
                         embedding_size = 1536
                         st.markdown("### Semantic Search Results")
 
-                        with st.expander():
+                        with st.expander("**How Does This Work?: Semantic Search with HyDE**"):
                             st.write(semantic_search_explainer)
 
                         # Before starting the semantic search

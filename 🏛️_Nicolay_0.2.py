@@ -80,3 +80,7 @@ st.write("**Ask Nicolay:** (Coming Winter 2024) this interactive feature invites
 st.write("**Evaluating Nicolay:** (Coming Winter 2024) This section presents preliminary data on the effectiveness of RAG technoqies for analyzing the Lincoln corpus. It will offer insights into the potential improvements and current limitations of these technologies, providing a transparent view into the evolving capabilities of AI for historical research and interpretation.")
 
 st.write("**Project Goals, Methods, and Acknowledgements**: Explores the aims of this project, some of the methods used, and thanks those who contributed to this project.")
+
+st.subheader("**Developer:**")
+
+st.write("[Daniel Hutchinson](https://danielhutchinson.org/)")

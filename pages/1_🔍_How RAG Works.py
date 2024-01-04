@@ -53,6 +53,8 @@ def load_prompts():
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
     if 'app_into' not in st.session_state:
         st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
+    if 'keyword_search_explainer' not in st.session_state:
+        st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -61,6 +63,8 @@ load_prompts()
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
 app_intro = st.session_state['app_intro']
+keyword_search_explainer = st.session_state['keyword_search_explainer']
+
 
 # Streamlit interface
 st.title("Exploring RAG with Nicolay and Hay")
@@ -375,6 +379,9 @@ with st.form("Search Interface"):
                             text_keywords=text_keywords,
                             top_n_results=5  # You can adjust the number of results
                             )
+
+                        with st.expander("How Does This Work?")
+                            st.write(keyword_search_explainer)
 
                         st.markdown("### Keyword Search Results")
                         for idx, result in enumerate(search_results, start=1):

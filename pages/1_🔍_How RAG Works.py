@@ -93,7 +93,7 @@ with st.form("Search Interface"):
         st.warning("Response & Analysis requires at least one of the search methods (keyword or semantic).")
 
     with st.expander("Additional Search Options (In Development)"):
-        st.markdown("The model will suggest keywords based on your query, but you can select your own criteria for more focused keyword search using the interface below.")
+        st.markdown("The Hay model will suggest keywords based on your query, but you can select your own criteria for more focused keyword search using the interface below.")
 
         st.markdown("Weighted Keywords")
         default_values = [1.0, 1.0, 1.0, 1.0, 1.0]  # Default weights as floats
@@ -355,10 +355,10 @@ with st.form("Search Interface"):
                     text_keywords = model_text_keywords
 
 
-                with st.expander("**Initial Response**", expanded=True):
+                with st.expander("**Hay's Response**", expanded=True):
                     st.markdown(initial_answer)
                     st.write("**How Does This Work?**")
-                    st.write("The Initial Response is a answer given by a finetuned large language model based on the user query. This response helps the model in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Initial Answer with the Response and Analysis section to see how RAG techniques utilize historical sources.")
+                    st.write("The Initial Response based on the user quer is given by Hay, a finetuned large language model. This response helps Hay steer in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Hay's Response Answer with Nicolay's Response and Analysis to see how RAG techniques utilize historical sources.")
 
                 # Use st.columns to create two columns
                 col1, col2 = st.columns(2)

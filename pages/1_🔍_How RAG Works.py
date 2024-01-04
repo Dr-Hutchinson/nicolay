@@ -21,9 +21,9 @@ st.set_page_config(
 )
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-#openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI()
 
-cohere_api_key = st.secrets["cohere_api_key"]
+os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
 co = cohere.Client()
 
 scope = ['https://spreadsheets.google.com/feeds',
@@ -300,8 +300,6 @@ with st.form("Search Interface"):
 
 
             if user_query:
-
-                client = OpenAI()
 
                 # Construct the messages for the model
                 messages_for_model = [

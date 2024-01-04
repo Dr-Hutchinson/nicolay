@@ -52,7 +52,7 @@ def load_prompts():
     if 'response_model_system_prompt' not in st.session_state:
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
     if 'app_into' not in st.session_state:
-        st.session_state['app_intro'] = load_prompt('prompts/app_into.txt')
+        st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
 
 # Ensure prompts are loaded
 load_prompts()

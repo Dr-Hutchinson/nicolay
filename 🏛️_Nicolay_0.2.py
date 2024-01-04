@@ -20,9 +20,11 @@ st.set_page_config(
 # global environment settings
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-openai.api_key = os.getenv("OPENAI_API_KEY")
+#openai.api_key = os.getenv("OPENAI_API_KEY")
 
 #client = OpenAI(api_key=openai_api_key)
+client = OpenAI()
+
 
 cohere_api_key = st.secrets["cohere_api_key"]
 

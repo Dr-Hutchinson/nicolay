@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import pygsheets
+from google.oauth2 import service_account
 import re
 from openai import OpenAI
 import cohere

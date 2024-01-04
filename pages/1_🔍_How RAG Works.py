@@ -11,6 +11,7 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
+import re
 
 # version 0.3 - Experiment for making sequential API calls for semantic search.
 
@@ -312,34 +313,30 @@ with st.form("Search Interface"):
             def get_full_text_by_id(text_id, data):
                 return next((item['full_text'] for item in data if item['text_id'] == text_id), None)
 
-            # Function for matching quotes for highlighting final texts
-            def find_best_match(full_text, key_quote, threshold=70, window_size=5):
+            # Function to highlight truncated quotes for Nicolay model outputs
+            def highlight_key_quote(text, key_quote):
+                # Example based on your quotes
+                # Split the key_quote into beginning and ending parts
+                parts = key_quote.split("...")
+                if len(parts) >= 2:
+                    # Construct a regex pattern with the stable beginning and end
+                    pattern = re.escape(parts[0]) + r".*?" + re.escape(parts[-1])
+                else:
+                    # If there's no '...', use the entire quote
+                    pattern = re.escape(key_quote)
 
-                # Fuzzy String Matching
-                words = full_text.split()
-                best_score = 0
-                best_match = ""
+                # Compile the regex pattern for efficiency
+                regex = re.compile(pattern, re.IGNORECASE)
 
-                # Find best fuzzy match
-                for i in range(len(words)):
-                    for j in range(i, len(words)):
-                        substring = ' '.join(words[i:j + 1])
-                        score = fuzz.partial_ratio(substring.lower(), key_quote.lower())
-                        if score > best_score:
-                            best_score = score
-                            best_match = substring
+                # Find all matches
+                matches = regex.findall(text)
 
-                if best_score >= threshold:
-                    return best_match
+                # Replace matches with highlighted version
+                for match in matches:
+                    text = text.replace(match, f"<mark>{match}</mark>")
 
-                # Window-Based Matching if fuzzy matching is not sufficient
-                key_quote_words = set(key_quote.lower().split())
-                for i in range(len(words)):
-                    window = words[max(i - window_size, 0):min(i + window_size, len(words))]
-                    if key_quote_words.issubset(set(window)):
-                        return ' '.join(window)
+                return text
 
-                return ""
 
 
             def record_api_outputs():
@@ -692,6 +689,24 @@ with st.form("Search Interface"):
                                     # Increment the counter for each match
                                     doc_match_counter += 1
 
+                                    #if speech:
+                                        # Use the doc_match_counter in the expander label
+                                    #    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
+                                    #    with st.expander(expander_label, expanded=False):
+                                    #        st.markdown(f"**Source:** {speech['source']}")
+                                    #        st.markdown(f"**Text ID:** {speech['text_id']}")
+                                    #        st.markdown(f"**Summary:**\n{speech['summary']}")
+
+                                            # Handling escaped line breaks and highlighting the key quote
+                                    #        formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+
+                                    #        st.markdown(f"**Key Quote:**\n{key_quote}")
+                                    #        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                                    #        st.markdown(formatted_full_text, unsafe_allow_html=True)
+                                    #else:
+                                    #    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
+                                    #        st.markdown("Full text not found.")
+
                                     if speech:
                                         # Use the doc_match_counter in the expander label
                                         expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
@@ -700,8 +715,13 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Text ID:** {speech['text_id']}")
                                             st.markdown(f"**Summary:**\n{speech['summary']}")
 
-                                            # Handling escaped line breaks and highlighting the key quote
-                                            formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+                                            # Attempt direct highlighting
+                                            if key_quote in speech['full_text']:
+                                                formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+                                            else:
+                                                # If direct highlighting fails, use regex-based approach
+                                                formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
+                                                formatted_full_text = formatted_full_text.replace("\\n", "<br>")
 
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
@@ -709,8 +729,6 @@ with st.form("Search Interface"):
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")
-
-
 
 
                             # Displaying the Analysis Metadata

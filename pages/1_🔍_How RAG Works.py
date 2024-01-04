@@ -319,11 +319,11 @@ with st.form("Search Interface"):
                 # Split the key_quote into beginning and ending parts
                 parts = key_quote.split("...")
                 if len(parts) >= 2:
-                    # Construct a regex pattern with the stable beginning and end
-                    pattern = re.escape(parts[0]) + r".*?" + re.escape(parts[-1])
+                    # Construct a regex pattern with the stable beginning and end, allowing for optional punctuation and spaces
+                    pattern = re.escape(parts[0]) + r"\s*.*?\s*" + re.escape(parts[-1]) + r"[.;,]?"
                 else:
-                    # If there's no '...', use the entire quote
-                    pattern = re.escape(key_quote)
+                    # If there's no '...', use the entire quote with optional punctuation and spaces at the end
+                    pattern = re.escape(key_quote) + r"\s*[.;,]?"
 
                 # Compile the regex pattern for efficiency
                 regex = re.compile(pattern, re.IGNORECASE)
@@ -336,8 +336,6 @@ with st.form("Search Interface"):
                     text = text.replace(match, f"<mark>{match}</mark>")
 
                 return text
-
-
 
             def record_api_outputs():
                 now = dt.now()

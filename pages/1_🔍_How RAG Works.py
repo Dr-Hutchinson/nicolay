@@ -19,21 +19,21 @@ st.set_page_config(
     page_icon='🔍'
 )
 
-#os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 #openai.api_key = os.getenv("OPENAI_API_KEY")
 
-#cohere_api_key = st.secrets["cohere_api_key"]
+cohere_api_key = st.secrets["cohere_api_key"]
 
-#scope = ['https://spreadsheets.google.com/feeds',
-#             'https://www.googleapis.com/auth/drive']
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
 
-#credentials = service_account.Credentials.from_service_account_info(
-#                    st.secrets["gcp_service_account"], scopes = scope)
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
 
-#gc = pygsheets.authorize(custom_credentials=credentials)
+gc = pygsheets.authorize(custom_credentials=credentials)
 
-#api_sheet = gc.open('api_outputs')
-#api_outputs = api_sheet.sheet1
+api_sheet = gc.open('api_outputs')
+api_outputs = api_sheet.sheet1
 
 
 # System prompt

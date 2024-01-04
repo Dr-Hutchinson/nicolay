@@ -2,7 +2,7 @@
 
 The final step is an assessment of the top three results obtained in the RAG process by Nicolay, a [instruction-finetuned](https://www.promptingguide.ai/models/flan.en#whats-new) version of OpenAI’s GPT-3.5 model. This model has been trained to provide a response and detailed analysis when presented with a user query, Hay’s Response, and relevant excerpts of Lincoln’s speeches. Here’s how Nicolay works:
 
-**Prompting Nicolay**: Nicolay begins its work when given the user's query, the initial answer from Hay, and the search results. Nicolay then delivers a response based on the  (chain-of-thought prompting approach)[https://www.promptingguide.ai/techniques/cot] to help the model break down the query's intent, context, and how well the initial answer addresses the query.
+**Prompting Nicolay**: Nicolay begins its work when given the user's query, the initial answer from Hay, and the search results. Nicolay then delivers a response based on a [chain-of-thought prompting approach][https://www.promptingguide.ai/techniques/cot] to help the model break down the query's intent, context, and how well the initial answer addresses the query.
 
 **Analysis and Synthesis:** Nicolay analyzes the search results to assess the relevance of each match to the query, extract key quotes, and provide historical context. Nicolay then synthesizes a response to the user query based on this analysis and informed by the content in the search results.
 

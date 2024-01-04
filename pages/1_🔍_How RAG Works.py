@@ -11,7 +11,6 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
-from fuzzywuzzy import fuzz
 
 # version 0.3 - Experiment for making sequential API calls for semantic search.
 
@@ -693,25 +692,6 @@ with st.form("Search Interface"):
                                     # Increment the counter for each match
                                     doc_match_counter += 1
 
-                                    #if speech:
-                                        # Use the doc_match_counter in the expander label
-                                    #    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                    #    with st.expander(expander_label, expanded=False):
-                                    #        st.markdown(f"**Source:** {speech['source']}")
-                                    #        st.markdown(f"**Text ID:** {speech['text_id']}")
-                                    #        st.markdown(f"**Summary:**\n{speech['summary']}")
-
-                                            # Handling escaped line breaks and highlighting the key quote
-                                    #        formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
-
-                                    #        st.markdown(f"**Key Quote:**\n{key_quote}")
-                                    #        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                                    #        st.markdown(formatted_full_text, unsafe_allow_html=True)
-                                    #else:
-                                    #    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                    #        st.markdown("Full text not found.")
-
-
                                     if speech:
                                         # Use the doc_match_counter in the expander label
                                         expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
@@ -720,11 +700,8 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Text ID:** {speech['text_id']}")
                                             st.markdown(f"**Summary:**\n{speech['summary']}")
 
-                                            # Find the best match for key_quote in the full text
-                                            best_match = find_best_match(speech['full_text'], key_quote)
-
-                                            # Handling escaped line breaks and highlighting the best match
-                                            formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(best_match, f"<mark>{best_match}</mark>")
+                                            # Handling escaped line breaks and highlighting the key quote
+                                            formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
 
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
@@ -732,6 +709,8 @@ with st.form("Search Interface"):
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")
+
+
 
 
                             # Displaying the Analysis Metadata

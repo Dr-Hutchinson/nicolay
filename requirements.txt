@@ -4,5 +4,3 @@ openai==1.6.1
 pandas==2.0.3
 pygsheets==2.0.6
 streamlit==1.29.0
-fuzzywuzzy==0.18.0
-python-Levenshtein==0.23.0

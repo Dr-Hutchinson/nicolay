@@ -1,0 +1,5 @@
+**How It Works: Ranking Relevance with Cohere’s Rerank Model**
+
+In the next stage of the RAG process, the top matches from the keyword and semantic searches are determined for relevance to the user query. Cohere's [Rerank](https://cohere.com/rerank) model plays a pivotal role here, assessing and reordering the top search results based on their relevance to the user query. 
+
+**Interpreting the Results:** Each match is given a relevance score for each document based on the model’s assessment of the semantic alignment with the user's query. The top three matches are then displayed and prepared for the final step: Nicolay’s Response and Analysis. 

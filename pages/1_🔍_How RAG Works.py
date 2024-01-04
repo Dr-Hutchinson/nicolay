@@ -57,6 +57,8 @@ def load_prompts():
         st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
     if 'semantic_search_explainer' not in st.session_state:
         st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
+    if 'relevance_ranking_explainer' not in st.session_state:
+        st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -67,6 +69,7 @@ response_prompt = st.session_state['response_model_system_prompt']
 app_intro = st.session_state['app_intro']
 keyword_search_explainer = st.session_state['keyword_search_explainer']
 semantic_search_explainer = st.session_state['semantic_search_explainer']
+relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
 
 
 # Streamlit interface
@@ -532,6 +535,9 @@ with st.form("Search Interface"):
                                 documents=all_combined_data,
                                 top_n=10
                             )
+
+                            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**")
+                                st.write(relevance_ranking_explainer)
 
                             # DataFrame for storing all reranked results
                             full_reranked_results = []

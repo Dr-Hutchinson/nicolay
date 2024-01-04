@@ -1,6 +1,6 @@
 **How It Works: Semantic Search**
 
-The search process is initiated by Hay, a fine-tuned large language model, analyzes a user's query and offers an initial response. The user’s query and response are then used to conduct a semantic search using cosine similarity via the hypothetical document embedding approach (HyDE). Here’s how that works:
+The search process is initiated when Hay, a fine-tuned large language model, analyzes a user's query and offers an initial response. The user’s query and response are then used to conduct a semantic search using cosine similarity via the hypothetical document embedding approach (HyDE). Here’s how that works:
 
 **The HyDe Approach:**: When a user makes a query, Hay processes a user's query and generates an initial response, which serves as a hypothetical answer. This response will contain a broader range of historical details and language than what can be used in a keyword search. The user query and Hay’s response will be used to search the Lincoln corpus through semantic search. This approach is based on this [academic paper](https://arxiv.org/abs/2212.10496).
 

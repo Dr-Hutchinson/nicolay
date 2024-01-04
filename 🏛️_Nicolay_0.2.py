@@ -1,4 +1,5 @@
 import streamlit as st
+import openai
 
 st.set_page_config(
     page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",

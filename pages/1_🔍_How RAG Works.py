@@ -66,9 +66,6 @@ image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.
 #st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
 #st.image(image_url, use_column_width=True)
 
-st.
-
-
 
 
 

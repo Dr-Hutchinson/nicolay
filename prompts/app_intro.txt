@@ -1,4 +1,6 @@
 
+**How It Works: Exploring RAG with Nicolay and Hay**
+
 How do large language models (LLMs) like ChatGPT represent the past? LLMs can recall significant volumes of historical knowledge gleaned from the vast datasets on which they are trained. Yet they also absorb misinformation, bias, and misperceptions about the record of our collective past. A popular method that seeks to leverage these strengths and mitigate these shortcomings is [retrieval augmented generation (RAG).](https://www.promptingguide.ai/techniques/rag) This app explores the effectiveness of this approach for historical inquiry.
 
 RAG is an advanced approach used in the fields of natural language processing (NLP) and artificial intelligence (AI). At its essence, RAG combines the capabilities of two components: a language generation model and a retrieval-based system. This combination allows for the composition of responses that are not only contextually relevant but also informed by a specific database or corpus of text - in this case the speeches of Abraham Lincoln. This project uses the [Lincoln speech collection](https://millercenter.org/presidential-speeches-downloadable-data) preserved at the [Miller Center](https://millercenter.org/) at the University of Virginia: a total of some 15 texts ranging across the Civil War era, totaling some 96,000 words, or some 300 pages of text.

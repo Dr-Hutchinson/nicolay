@@ -51,6 +51,8 @@ def load_prompts():
         st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
     if 'response_model_system_prompt' not in st.session_state:
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
+    if 'app_into' not in st.session_state:
+        st.session_state['app_intro'] = load_prompt('prompts/app_into.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -58,6 +60,7 @@ load_prompts()
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
+app_into = st.session_state['app_intro']
 
 # Streamlit interface
 st.title("Exploring RAG with Nicolay and Hay")
@@ -69,6 +72,8 @@ image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.
 st.subheader("**Navigating this App:**")
 st.write("Expand the What Is RAG? box below for a walkthrough of the app. Continue to the query below to being exploring Lincoln's speeches.")
 
+st.expander("Exploring Hay and Nicolay")
+    st.write(app_intro)
 
 
 # Query input

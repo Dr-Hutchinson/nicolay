@@ -380,7 +380,7 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
-                        with st.expander("How Does This Work?")
+                        with st.expander("How Does This Work?"):
                             st.write(keyword_search_explainer)
 
                         st.markdown("### Keyword Search Results")

@@ -536,7 +536,7 @@ with st.form("Search Interface"):
                                 top_n=10
                             )
 
-                            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**")
+                            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
                                 st.write(relevance_ranking_explainer)
 
                             # DataFrame for storing all reranked results

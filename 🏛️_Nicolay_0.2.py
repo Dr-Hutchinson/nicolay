@@ -73,7 +73,7 @@ st.write("In an era where advancements in artificial intelligence, machine learn
 
 st.header("Project Elements")
 
-st.write("**How RAG Works:** This section explores how Retrieval Augmented Generation enables large language models to explore extensive text collections. Users can gain familarity with the mechanics of RAG vian an interface for conducting their own searches over the Lincoln speech corpus.")
+st.write("**Exploring RAG with Hay and Nicolay:** This section explores how Retrieval Augmented Generation enables large language models to explore extensive text collections. Users can gain familarity with the mechanics of RAG vian an interface for conducting their own searches over the Lincoln speech corpus using two finetuned LLMs, Hay and Nicolay.")
 
 st.write("**Ask Nicolay:** (Coming Winter 2024) this interactive feature invites users to engage in a dynamic dialogue with Lincoln’s speeches. Powered by a sophisticated RAG-based chatbot, this section offers an unprecedented opportunity to ask open-ended questions and receive responses showcasing Lincoln's historic language.")
 

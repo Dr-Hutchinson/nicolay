@@ -746,12 +746,27 @@ with st.form("Search Interface"):
                                         st.markdown(f"- **{key}:** {value}")
 
                                 # Displaying Match Analysis
+                                #if "Match Analysis" in model_output:
+                                #    st.markdown("**Match Analysis:**")
+                                #    for match_key, match_info in model_output["Match Analysis"].items():
+                                #        st.markdown(f"- **{match_key}:**")
+                                #        for key, value in match_info.items():
+                                #            st.markdown(f"  - {key}: {value}")
+
+                                # Displaying Match Analysis
                                 if "Match Analysis" in model_output:
                                     st.markdown("**Match Analysis:**")
                                     for match_key, match_info in model_output["Match Analysis"].items():
                                         st.markdown(f"- **{match_key}:**")
                                         for key, value in match_info.items():
-                                            st.markdown(f"  - {key}: {value}")
+                                            # Adding an extra level of indentation for each item under a match
+                                            if isinstance(value, dict):
+                                                st.markdown(f"  - **{key}:**")
+                                                for sub_key, sub_value in value.items():
+                                                    st.markdown(f"    - {sub_key}: {sub_value}")
+                                            else:
+                                                st.markdown(f"    - **{key}:** {value}")
+
 
                                 # Displaying Meta Analysis
                                 if "Meta Analysis" in model_output:

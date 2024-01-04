@@ -7,7 +7,7 @@ This RAG application uniquely uses the capabilities of a series of fine-tuned la
 
 Or at least they are supposed to. While LLM “hallucinations” can be mitigated through the RAG process, they can’t be entirely eliminated. The search processes are imperfect too. This project seeks to document these challenges, display the model’s performance over time, and collect data for iterative improvement. The hope is this approach allows a transparent exploration of the potentials and limits of generative AI for historical research. It also allows users to directly explore Lincoln’s speeches with AI. Here’s how.
 
-st.subheader("Functionality at a Glance: Exploring RAG with Nicolay and Hay")
+**Functionality at a Glance: Exploring RAG with Nicolay and Hay**
 
 The application operates in a multi-step process:
 

@@ -59,6 +59,8 @@ def load_prompts():
         st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
     if 'relevance_ranking_explainer' not in st.session_state:
         st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
+    if 'nicolay_model_explainer' not in st.session_state:
+        st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -70,7 +72,7 @@ app_intro = st.session_state['app_intro']
 keyword_search_explainer = st.session_state['keyword_search_explainer']
 semantic_search_explainer = st.session_state['semantic_search_explainer']
 relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
-
+nicolay_model_explainer = st.session_state['nicolay_model_explainer']
 
 # Streamlit interface
 st.title("Exploring RAG with Nicolay and Hay")
@@ -625,6 +627,9 @@ with st.form("Search Interface"):
 
                             #with st.expander("Output Debugging:"):
                             #    st.write(response_content)
+
+                            with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
+                                st.write(nicolay_model_explainer)
 
                             with st.expander("**Nicolay's Response**", expanded=True):
                                 final_answer = model_output.get("FinalAnswer", {})

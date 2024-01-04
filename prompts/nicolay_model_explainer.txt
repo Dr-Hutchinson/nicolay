@@ -1,0 +1,21 @@
+“How It Works: Nicolay’s Response and Analysis”
+
+The final step is an assessment of the top three results obtained in the RAG process by Nicolay, a [instruction-finetuned](https://www.promptingguide.ai/models/flan.en#whats-new) version of OpenAI’s GPT-3.5 model. This model has been trained to provide a response and detailed analysis when presented with a user query, Hay’s Response, and relevant excerpts of Lincoln’s speeches. Here’s how Nicolay works:
+
+**Prompting Nicolay**: Nicolay begins its work when given the user's query, the initial answer from Hay, and the search results. Nicolay then delivers a response based on the  (chain-of-thought prompting approach)[https://www.promptingguide.ai/techniques/cot] to help the model break down the query's intent, context, and how well the initial answer addresses the query.
+
+**Analysis and Synthesis:** Nicolay analyzes the search results to assess the relevance of each match to the query, extract key quotes, and provide historical context. Nicolay then synthesizes a response to the user query based on this analysis and informed by the content in the search results.
+
+**Displaying the Results**: Nicolay's final response and detailed analysis are presented to the user, including citations and references to sources used to compose the answer. The Analysis Metadata section goes further, providing a comprehensive breakdown of the analysis for each match.
+
+**Interpreting Nicolay's Analysis:**
+
+**User Query Analysis:** This section reflects Nicolay’s assessment of the intent behind the user's query and its historical context. This section gives insight into the focus of the query and the relevant historical background.
+
+**Initial Answer Review:** Evaluate how the initial answer from Hay aligns with the query's intent and context. This includes an assessment of the answer's accuracy and points for potential enhancement.
+
+**Match Analysis:** Examine each top-ranked match, focusing on the source, summary, key quote, historical context, and relevance assessment. This section is crucial for understanding how each piece of evidence relates to the query.
+
+**Meta Analysis:** Offers a strategic approach for synthesizing a response based on the matches. It guides how to integrate the information from different matches to form a coherent understanding of the subject.
+
+**Model Feedback:** Reflects on the effectiveness of Nicolay's response and suggests areas for improvement. This includes feedback on how well the response synthesized the available information and addressed the user's query.

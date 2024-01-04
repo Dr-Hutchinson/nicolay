@@ -55,6 +55,8 @@ def load_prompts():
         st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
     if 'keyword_search_explainer' not in st.session_state:
         st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
+    if 'semantic_search_explainer' not in st.session_state:
+        st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -64,6 +66,7 @@ keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
 app_intro = st.session_state['app_intro']
 keyword_search_explainer = st.session_state['keyword_search_explainer']
+semantic_search_explainer = st.session_state['semantic_search_explainer']
 
 
 # Streamlit interface
@@ -420,6 +423,9 @@ with st.form("Search Interface"):
                         embedding_size = 1536
                         st.markdown("### Semantic Search Results")
 
+                        with st.expander():
+                            st.write(semantic_search_explainer)
+
                         # Before starting the semantic search
                         progress_text = "Semantic search in progress."
                         my_bar = st.progress(0, text=progress_text)
@@ -609,7 +615,7 @@ with st.form("Search Interface"):
                             model_output = json.loads(response_content)
 
                             # Displaying the Final Answer
-                            st.header("Response & Analysis:")
+                            st.header("Nicolay's Response & Analysis:")
 
                             #with st.expander("Output Debugging:"):
                             #    st.write(response_content)

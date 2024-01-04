@@ -1,0 +1,11 @@
+**How It Works: Semantic Search**
+
+The search process is initiated by Hay, a fine-tuned large language model, analyzes a user's query and offers an initial response. The user’s query and response are then used to conduct a semantic search using cosine similarity via the hypothetical document embedding approach (HyDE). Here’s how that works:
+
+**The HyDe Approach:**: When a user makes a query, Hay processes a user's query and generates an initial response, which serves as a hypothetical answer. This response will contain a broader range of historical details and language than what can be used in a keyword search. The user query and Hay’s response will be used to search the Lincoln corpus through semantic search. This approach is based on this [academic paper](https://arxiv.org/abs/2212.10496).
+
+**Semantic Search Explained:** Utilizing OpenAI's [Ada text embedding model](https://openai.com/blog/new-and-improved-embedding-model), the system calculates [cosine similarity]((https://mlops.community/vector-similarity-search-from-basics-to-production/)) between Hay's response and each text in the Lincoln corpus. This process involves comparing the numerical representations (embeddings) of Hay's response and the corpus texts. Cosine similarity essentially measures how similar these embeddings are, with higher scores indicating stronger thematic connections. The matches with the highest similarity scores - segments with the closest embeddings to Hay's hypothetical response - are then returned, revealing texts that most closely resonate with the query's themes.
+
+**Quote Extraction:** For more detailed analysis, each top match is further segmented into smaller parts and run again through the embedding process to find the most semantically relevant section of the text. This granularity allows the system to pinpoint specific sections within the document most relevant to the query.
+
+**How to Interpret These Results**: Users can interpret these results by considering both the similarity scores and the relevance of the key quote. High scores in combination with the relevant quote excerpts offers a targeted approach for searching through large text collections.

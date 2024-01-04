@@ -83,4 +83,4 @@ st.write("**Project Goals, Methods, and Acknowledgements**: Explores the aims of
 
 st.subheader("**Developer:**")
 
-st.write("Nicolay was developed by [Daniel Hutchinson](https://danielhutchinson.org/) for  Honest Abe's Information Emporium, a digital history project developed as part of the inaugural Digital Literacy Accelerator program offered by the U.S. Department of Education (2021-2022) and supported by a team of faculty at the University of Texas-San Antonio. Many thanks to Dr. Abe Gibson for the support on this project.")
+st.write("Nicolay was developed by [Daniel Hutchinson](https://danielhutchinson.org/) for [Honest Abe's Information Emporium](https://honestabes.info/), a digital history project developed as part of the inaugural Digital Literacy Accelerator program offered by the U.S. Department of Education (2021-2022) and supported by a team of faculty at the University of Texas-San Antonio. Many thanks to Dr. Abe Gibson for the support on this project.")

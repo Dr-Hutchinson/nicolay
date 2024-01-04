@@ -49,7 +49,10 @@ with col1:
     st.write(' ')
 
 with col2:
-    st.image('./title_card.png', width=600)
+    #st.image('./title_card.png', width=600)
+    image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
+    st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
+
 
 with col3:
     st.write(' ')

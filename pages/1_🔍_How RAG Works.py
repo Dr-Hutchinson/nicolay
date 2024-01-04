@@ -24,6 +24,7 @@ os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 #openai.api_key = os.getenv("OPENAI_API_KEY")
 
 cohere_api_key = st.secrets["cohere_api_key"]
+co = cohere.Client()
 
 scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']

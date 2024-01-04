@@ -1,5 +1,5 @@
 
-How large language models (LLMs) like ChatGPT represent the past? LLMs can recall significant volumes of historical knowledge gleaned from the vast datasets on which they are trained. They also absorb misinformation, bias, and misperceptions about the record of our collective past. One method that seeks to leverage these strengths and mitigate these shortcomings is [retrieval augmented generation (RAG).](https://www.promptingguide.ai/techniques/rag)
+How do large language models (LLMs) like ChatGPT represent the past? LLMs can recall significant volumes of historical knowledge gleaned from the vast datasets on which they are trained. They also absorb misinformation, bias, and misperceptions about the record of our collective past. One method that seeks to leverage these strengths and mitigate these shortcomings is [retrieval augmented generation (RAG).](https://www.promptingguide.ai/techniques/rag)
 
 RAG is an advanced approach in the field of natural language processing (NLP) and artificial intelligence (AI). At its essence, RAG combines the capabilities of two components: a language generation model and a retrieval-based system. This combination allows for the generation of responses that are not only contextually relevant but also informed by a specific database or corpus of text - in this case the speeches of Abraham Lincoln. This project uses the [Lincoln speech collection](https://millercenter.org/presidential-speeches-downloadable-data) preserved at the [Miller Center](https://millercenter.org/) at the University of Virginia: a total of some 15 texts ranging across the Civil War era, totaling some 96,000 words, or some 300 pages of text.
 
@@ -17,7 +17,7 @@ The application operates in a multi-step process:
    - A weighted keyword search, dynamically influenced by the frequency of words in Abraham Lincoln's speeches. In using this method, the search can pinpoint the terms that Lincoln used uniquely or infrequently, which might indicate special significance in certain contexts.
    - A semantic search using cosine similarity through OpenAI’s [Ada](https://openai.com/blog/new-and-improved-embedding-model) text embedding model. This enables search of thematic connections rather than specific words. A query about "civil liberties" might not return speeches that explicitly use these words, but a semantic search will uncover discussions on related concepts like freedom, governance, or rights.
 
-3. Contextual Relevance: The search results are then ranked for relevance using the Cohere [Rerank](https://cohere.com/rerank) model. 
+3. Contextual Relevance: The search results are then ranked for relevance using the Cohere [Rerank](https://cohere.com/rerank) model.
 
 4. Final Analysis and Presentation: The top matches are analyzed by "Nicolay", another customized model, which provides a detailed response along with analytical metadata. The application highlights the most pertinent sections of the texts, aiding in the user's understanding and exploration.
 

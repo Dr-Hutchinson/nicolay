@@ -754,21 +754,19 @@ with st.form("Search Interface"):
                                 #            st.markdown(f"  - {key}: {value}")
 
                                 # Displaying Match Analysis
+                                # Displaying Match Analysis
                                 if "Match Analysis" in model_output:
                                     st.markdown("**Match Analysis:**")
                                     for match_key, match_info in model_output["Match Analysis"].items():
-                                        st.markdown(f"- **{match_key}:**")
-                                        sub_items_html = ""
+                                        st.markdown(f"- **{match_key}:**", unsafe_allow_html=True)
                                         for key, value in match_info.items():
                                             # Check if the value is a dictionary (for nested structures)
                                             if isinstance(value, dict):
-                                                nested_items_html = "".join([f"{sub_key}: {sub_value}<br>" for sub_key, sub_value in value.items()])
-                                                sub_items_html += f"<b>{key}:</b><br>{nested_items_html}"
+                                                nested_items_html = "<br>".join([f"<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
+                                                st.markdown(f"<b>{key}:</b><br>{nested_items_html}<br>", unsafe_allow_html=True)
                                             else:
-                                                sub_items_html += f"<b>{key}:</b> {value}<br>"
+                                                st.markdown(f"<b>{key}:</b> {value}<br>", unsafe_allow_html=True)
 
-                                        # Render the HTML without bullet points for sub-items
-                                        st.markdown(sub_items_html, unsafe_allow_html=True)
 
 
 

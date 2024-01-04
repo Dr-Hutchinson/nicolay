@@ -606,7 +606,7 @@ with st.form("Search Interface"):
                             #with st.expander("Output Debugging:"):
                             #    st.write(response_content)
 
-                            with st.expander("**Response**", expanded=True):
+                            with st.expander("**Nicolay's Response**", expanded=True):
                                 final_answer = model_output.get("FinalAnswer", {})
                                 st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
                                 if final_answer.get("References"):

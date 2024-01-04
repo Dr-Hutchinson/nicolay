@@ -342,9 +342,9 @@ with st.form("Search Interface"):
 
 
                 with st.expander("**Initial Response**"):
-                    st.markdown(initial_answer)
+                    st.markdown(initial_answer, expanded=True)
                     st.write("**How Does This Work?**")
-                    st.write("The Initial Response is a answer given by a finetuned large language model based on the user query. This response helps the model in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus.")
+                    st.write("The Initial Response is a answer given by a finetuned large language model based on the user query. This response helps the model in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Initial Answer with the Response and Analysis section to see how RAG techniques utilize historical sources.")
 
                 # Use st.columns to create two columns
                 col1, col2 = st.columns(2)

@@ -1,4 +1,4 @@
-“How It Works: Nicolay’s Response and Analysis”
+“**How Does This Work?: Nicolay’s Response and Analysis**”
 
 The final step is an assessment of the top three results obtained in the RAG process by Nicolay, a [instruction-finetuned](https://www.promptingguide.ai/models/flan.en#whats-new) version of OpenAI’s GPT-3.5 model. This model has been trained to provide a response and detailed analysis when presented with a user query, Hay’s Response, and relevant excerpts of Lincoln’s speeches. Here’s how Nicolay works:
 

@@ -28,6 +28,7 @@ client = OpenAI()
 
 
 cohere_api_key = st.secrets["cohere_api_key"]
+co = cohere.Client(cohere_api_key)
 
 scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']

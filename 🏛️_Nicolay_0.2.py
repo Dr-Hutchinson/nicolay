@@ -22,7 +22,7 @@ st.set_page_config(
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI(api_key=openai_api_key)
+#client = OpenAI(api_key=openai_api_key)
 
 cohere_api_key = st.secrets["cohere_api_key"]
 

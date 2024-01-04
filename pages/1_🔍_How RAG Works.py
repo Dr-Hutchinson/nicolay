@@ -756,39 +756,17 @@ with st.form("Search Interface"):
                                 # Displaying Match Analysis
                                 # Displaying Match Analysis
                                 # Displaying Match Analysis
+                                # Displaying Match Analysis
                                 if "Match Analysis" in model_output:
                                     st.markdown("**Match Analysis:**")
-
-                                    # Custom CSS to remove bullet points for nested lists
-                                    custom_css = """
-                                    <style>
-                                        ul.nested-list {
-                                            list-style-type: none; /* Remove bullet points */
-                                            margin-left: 20px; /* Adjust indentation as needed */
-                                        }
-                                        ul.nested-list li {
-                                            margin-bottom: 5px; /* Spacing between items */
-                                        }
-                                    </style>
-                                    """
-                                    st.markdown(custom_css, unsafe_allow_html=True)
-
                                     for match_key, match_info in model_output["Match Analysis"].items():
                                         st.markdown(f"- **{match_key}:**")
-                                        sub_items_html = ""
                                         for key, value in match_info.items():
                                             if isinstance(value, dict):
-                                                nested_items_html = "".join([f"<li>{sub_key}: {sub_value}</li>" for sub_key, sub_value in value.items()])
-                                                sub_items_html += f"<li><b>{key}:</b><ul class='nested-list'>{nested_items_html}</ul></li>"
+                                                nested_items_html = "<br>".join([f"&emsp;&emsp;<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
+                                                st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>")
                                             else:
-                                                sub_items_html += f"<li><b>{key}:</b> {value}</li>"
-
-                                        # Render the HTML list with custom styling for nested lists
-                                        st.markdown(f"<ul>{sub_items_html}</ul>", unsafe_allow_html=True)
-
-
-
-
+                                                st.markdown(f"&emsp;<b>{key}:</b> {value}<br>")
 
                                 # Displaying Meta Analysis
                                 if "Meta Analysis" in model_output:

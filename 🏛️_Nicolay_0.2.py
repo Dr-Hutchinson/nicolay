@@ -6,6 +6,26 @@ st.set_page_config(
     page_icon='🎩'
 )
 
+# global environment settings
+
+os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+cohere_api_key = st.secrets["cohere_api_key"]
+
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
+
+gc = pygsheets.authorize(custom_credentials=credentials)
+
+api_sheet = gc.open('api_outputs')
+api_outputs = api_sheet.sheet1
+
+
+
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:

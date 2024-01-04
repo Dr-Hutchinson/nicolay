@@ -63,7 +63,7 @@ response_prompt = st.session_state['response_model_system_prompt']
 st.title("Exploring RAG with Nicolay and Hay")
 
 image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.png'
-st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
+st.image(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
 
 
 

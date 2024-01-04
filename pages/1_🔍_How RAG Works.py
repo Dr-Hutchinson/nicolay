@@ -72,7 +72,7 @@ st.image(image_url, width=600)
 st.subheader("**Navigating this App:**")
 st.write("Expand the What Is RAG? box below for a walkthrough of the app. Continue to the query below to being exploring Lincoln's speeches.")
 
-with st.expander("**How It Works - Hay and Nicolay**"):
+with st.expander("**How It Works - Exploring RAG with Hay and Nicolay**"):
     st.write(app_intro)
 
 

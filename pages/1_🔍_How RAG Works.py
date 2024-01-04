@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 # version 0.3 - Experiment for making sequential API calls for semantic search.
 
 st.set_page_config(
-    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.1)",
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
     layout='wide',
     page_icon='🔍'
 )
@@ -66,7 +66,8 @@ image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.
 #st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
 #st.image(image_url, use_column_width=True)
 
-
+st.subheader("**Navigating this App:**")
+st.write("Expand the What Is RAG? box below for a walkthrough of the app. Continue to the query below to being exploring Lincoln's speeches.")
 
 
 

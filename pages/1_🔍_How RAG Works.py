@@ -757,16 +757,18 @@ with st.form("Search Interface"):
                                 # Displaying Match Analysis
                                 # Displaying Match Analysis
                                 # Displaying Match Analysis
+                                # Displaying Match Analysis
                                 if "Match Analysis" in model_output:
-                                    st.markdown("**Match Analysis:**")
+                                    st.markdown("**Match Analysis:**", unsafe_allow_html=True)
                                     for match_key, match_info in model_output["Match Analysis"].items():
-                                        st.markdown(f"- **{match_key}:**")
+                                        st.markdown(f"- **{match_key}:**", unsafe_allow_html=True)
                                         for key, value in match_info.items():
                                             if isinstance(value, dict):
                                                 nested_items_html = "<br>".join([f"&emsp;&emsp;<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
-                                                st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>")
+                                                st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>", unsafe_allow_html=True)
                                             else:
-                                                st.markdown(f"&emsp;<b>{key}:</b> {value}<br>")
+                                                st.markdown(f"&emsp;<b>{key}:</b> {value}<br>", unsafe_allow_html=True)
+
 
                                 # Displaying Meta Analysis
                                 if "Meta Analysis" in model_output:

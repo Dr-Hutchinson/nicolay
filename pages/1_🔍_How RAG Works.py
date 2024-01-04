@@ -762,13 +762,14 @@ with st.form("Search Interface"):
                                         for key, value in match_info.items():
                                             # Check if the value is a dictionary (for nested structures)
                                             if isinstance(value, dict):
-                                                nested_items_html = "".join([f"<li>{sub_key}: {sub_value}</li>" for sub_key, sub_value in value.items()])
-                                                sub_items_html += f"<li><b>{key}:</b><ul>{nested_items_html}</ul></li>"
+                                                nested_items_html = "".join([f"{sub_key}: {sub_value}<br>" for sub_key, sub_value in value.items()])
+                                                sub_items_html += f"<b>{key}:</b><br>{nested_items_html}"
                                             else:
-                                                sub_items_html += f"<li><b>{key}:</b> {value}</li>"
+                                                sub_items_html += f"<b>{key}:</b> {value}<br>"
 
-                                        # Render the HTML list
-                                        st.markdown(f"<ul>{sub_items_html}</ul>", unsafe_allow_html=True)
+                                        # Render the HTML without bullet points for sub-items
+                                        st.markdown(sub_items_html, unsafe_allow_html=True)
+
 
 
                                 # Displaying Meta Analysis

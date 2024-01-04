@@ -19,20 +19,43 @@ st.set_page_config(
     page_icon='🔍'
 )
 
-openai_api_key = ' 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'
+os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-co = cohere.Client('2s2HTe9Ov2LAXHc64diRswj41DnOZpdjBaeZL8gV')
+cohere_api_key = st.secrets["cohere_api_key"]
 
-gc = pygsheets.authorize(service_file='C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\credentials.json')
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
+
+gc = pygsheets.authorize(custom_credentials=credentials)
+
 api_sheet = gc.open('api_outputs')
 api_outputs = api_sheet.sheet1
 
 
 # System prompt
-system_prompt = "Generate a detailed and accurate initial response to the user's query, focusing on Abraham Lincoln's perspectives and historical context. After the initial response, identify and list a set of weighted keywords. These keywords should be unique and specifically tailored to the query, with an emphasis on low-frequency, single-word terms that are likely to appear in Lincoln's speeches and writings. Prioritize words that are significant yet less common, as they will be more effective for dynamic keyword searches against the Lincoln speech corpus. Additionally, if a particular speech or document by Lincoln is highly relevant to the query, please specify it. This approach will aid in narrowing down the search to the most pertinent texts. Ensure that the keywords and references are historically accurate and directly address the user's query."
 
-response_model_system_prompt = "You will be given a user query along with a formatted list of excerpts from the speeches of Abraham Lincoln. This list contains a text i.d., a summary, a key quote, and a relevance score. Based on these inputs generate a detailed and structured response in a JSON format based on the structure below:\n\n{\n  \"User Query Analysis\": {\n    \"Query Intent\": \"An analysis of the user query to determine what information is being sought.\",\n    \"Historical Context\": \"A brief context of the query in relation to Lincoln's era and views.\"\n  },\n  \"Initial Answer Review\": {\n    \"Answer Evaluation\": \"An analysis of the earlier model's response, evaluating its accuracy and completeness.\",\n    \"Quote Integration Points\": \"Identification of areas where quotes from Lincoln's speeches could be incorporated.\"\n  },\n  \"Match Analysis\": {\n    \"RerankedMatch1\": {\n      \"Text ID\": \"The text_id value of the first match\",\n      \"Source\": \"The source information of the first match\",\n      \"Summary\": \"A brief summary of the match, noting its relation to the user query.\",\n      \"Key Quote\": \"An excerpt from the Key Quote passage that best fits the user query.\",\n      \"Historical Context\": \"Contextual information relating the match to Lincoln's era and perspectives.\",\n      \"Relevance Assessment\": \"A qualitative assessment of the match's relevance: High, Medium, or Low.\"\n    },\n    \"RerankedMatch2\": { ... }, // Similar structure as RerankedMatch1\n    \"RerankedMatch3\": { ... }  // Similar structure as RerankedMatch1\n  },\n  \"Meta Analysis\": {\n    \"Strategy for Response Composition\": {\n      \"Match1\": \"How the content of Match1 can be used in the response.\",\n      \"Match2\": \"How the content of Match2 can be used in the response.\",\n      \"Match3\": \"How the content of Match3 can be used in the response.\"\n    },\n    \"Synthesis\": \"A synthesis of the key points or quotes from different matches.\"\n  },\n  \"FinalAnswer\": {\n    \"Text\": \"A well-written and informative response incorporating relevant key quotes with citations.\",\n    \"References\": \"A list of references and citations for the direct quotes used.\"\n  },\n  \"Model Feedback\": {\n    \"Response Effectiveness\": \"An evaluation of the response's effectiveness.\",\n    \"Suggestions for Improvement\": \"Constructive feedback for model refinement.\"\n  }\n}"
+def load_prompt(file_name):
+    """Load prompt from a file."""
+    with open(file_name, 'r') as file:
+        return file.read()
 
+# Function to ensure prompts are loaded into session state
+def load_prompts():
+    if 'keyword_model_system_prompt' not in st.session_state:
+        st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
+    if 'response_model_system_prompt' not in st.session_state:
+        st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
+
+# Ensure prompts are loaded
+load_prompts()
+
+# Now you can use the prompts from session state
+keyword_prompt = st.session_state['keyword_model_system_prompt']
+response_prompt = st.session_state['response_model_system_prompt']
 
 # Streamlit interface
 st.title("Search the Lincoln Corpus with RAG")
@@ -86,9 +109,9 @@ with st.form("Search Interface"):
 
             # Load data
             #lincoln_speeches_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\lincoln-speeches_final_formatted.json'
-            lincoln_speeches_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\enhanced_cleaned_lincoln_speeches.json'
-            keyword_frequency_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\voyant_word_counts.json'
-            lincoln_speeches_embedded = "C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\lincoln_index_embedded.csv"
+            lincoln_speeches_file_path = 'data/lincoln_speech_corpus.json'
+            keyword_frequency_file_path = 'data/voyant_word_counts.json'
+            lincoln_speeches_embedded = "lincoln_index_embedded.csv"
 
             # define functions
 
@@ -242,23 +265,6 @@ with st.form("Search Interface"):
                 #st.write("After Deduplication:", deduplicated_results.shape)
                 return deduplicated_results
 
-            #def format_reranked_results_for_model_input(reranked_results):
-            #    formatted_results = []
-            #    for result in reranked_results:
-                    # Formatting each result
-            #        formatted_entry = f"Match {result['Rank']}: " \
-            #                          f"Search Type - {result['Search Type']}, " \
-            #                          f"Text ID - {result['Text ID']}, " \
-            #                          f"Source - {result['Source']}, " \
-            #                          f"Summary - {result['Summary']}, " \
-            #                          f"Key Quote - {result['Key Quote']}, " \
-            #                          f"Relevance Score - {result['Relevance Score']:.2f}"
-            #        formatted_results.append(formatted_entry)
-
-                    # Joining all formatted entries into a single string
-            #        return "\n".join(formatted_results)
-            #        st.write("\n".join(formatted_results))
-
             def format_reranked_results_for_model_input(reranked_results):
                 formatted_results = []
                 # Limiting to the top 3 results
@@ -297,7 +303,7 @@ with st.form("Search Interface"):
 
                 # Construct the messages for the model
                 messages_for_model = [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": keyword_prompt},
                     {"role": "user", "content": user_query}
                 ]
 
@@ -548,21 +554,14 @@ with st.form("Search Interface"):
                         st.dataframe(reranked_df)
                         st.write("**Formatted Results:**")
                         st.write(formatted_input_for_model)
-                #    st.write(f"Number of reranked results before formatting: {len(full_reranked_results)}")
 
-                    # Debugging: Print a sample of the reranked results
-                #    if full_reranked_results:
-                #        st.write("Sample of reranked results:", full_reranked_results[:3])
-
-                    # Format reranked results for model input
-                    #formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
 
                     # API Call to the second GPT-3.5 model
                     if formatted_input_for_model:
 
                         # Construct the message for the model
                         messages_for_second_model = [
-                            {"role": "system", "content": response_model_system_prompt},
+                            {"role": "system", "content": response_prompt},
                             {"role": "user", "content": f"User Query: {user_query}\n\n"
                                                         f"Initial Answer: {initial_answer}\n\n"
                                                         f"{formatted_input_for_model}"}
@@ -584,11 +583,6 @@ with st.form("Search Interface"):
                         response_content = second_model_response.choices[0].message.content
 
                         if response_content:  # Assuming 'response_content' is the output from the second model
-
-                            #st.write("Response Debugging:")
-                            #st.write(response_content)
-
-
 
                             model_output = json.loads(response_content)
 

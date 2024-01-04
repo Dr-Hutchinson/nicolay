@@ -133,7 +133,7 @@ with st.form("Search Interface"):
 
         if valid_search_condition:
 
-            st.subheader("Starting Search Process:")
+            st.subheader("Starting RAG Process: (takes about 30-60 seconds in total)")
 
 
             # Load data

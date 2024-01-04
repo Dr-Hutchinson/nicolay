@@ -67,7 +67,7 @@ st.title("Exploring RAG with Nicolay and Hay")
 
 image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.png'
 #st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
-st.image(image_url, width=200)
+st.image(image_url, width=400)
 
 st.subheader("**Navigating this App:**")
 st.write("Expand the What Is RAG? box below for a walkthrough of the app. Continue to the query below to being exploring Lincoln's speeches.")

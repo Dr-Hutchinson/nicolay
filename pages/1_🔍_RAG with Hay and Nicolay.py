@@ -394,7 +394,7 @@ with st.form("Search Interface"):
                 with st.expander("**Hay's Response**", expanded=True):
                     st.markdown(initial_answer)
                     st.write("**How Does This Work?**")
-                    st.write("The Initial Response based on the user quer is given by Hay, a finetuned large language model. This response helps Hay steer in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Hay's Response Answer with Nicolay's Response and Analysis and the end of the RAG process to see how AI techniques can be used for historical sources.")
+                    st.write("The Initial Response based on the user query is given by Hay, a finetuned large language model. This response helps Hay steer in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Hay's Response Answer with Nicolay's Response and Analysis and the end of the RAG process to see how AI techniques can be used for historical sources.")
 
                 # Use st.columns to create two columns
                 col1, col2 = st.columns(2)

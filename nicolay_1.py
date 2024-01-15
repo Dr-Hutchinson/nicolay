@@ -51,7 +51,7 @@ with col1:
 with col2:
     #st.image('./title_card.png', width=600)
     image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
-    st.markdown(f'<img src="{image_url}" width="350">', unsafe_allow_html=True)
+    st.markdown(f'<img src="{image_url}" width="500">', unsafe_allow_html=True)
 
 
 with col3:

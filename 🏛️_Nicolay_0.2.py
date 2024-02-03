@@ -69,7 +69,7 @@ api_outputs = api_sheet.sheet1
     #st.title("Can AIs Accurately Interpret History? A Digital History Experiment")
 
 image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
-st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
+st.markdown(f'<img src="{image_url}" width="525">', unsafe_allow_html=True)
 
 st.header("Nicolay: Exploring the Speeches of Abraham Lincoln with AI")
 

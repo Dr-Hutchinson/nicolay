@@ -55,7 +55,8 @@ with col2:
     # ORIGINAL DON'T DELETE
 
     image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
-    st.markdown(f'<div style="text-align: center;"><img src="{image_url}" width="700"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="width: 100%; text-align: left;"><img src="{image_url}" width="350" style="margin-left: 0;"></div>', unsafe_allow_html=True)
+
 
 
 

@@ -81,7 +81,7 @@ st.header("Project Elements")
 
 instruction = """
 <div style='text-align: center; border: 2px solid #4CAF50; padding: 10px; border-radius: 5px;'>
-    <h4 style='color: #4CAF50; margin-bottom: 0;'>👈 Click on the > arrow in the top left corner to access different parts of the site!</h4>
+    <h4 style='color: #4CAF50; margin-bottom: 0;'>👈 Click on the > arrow in the top left corner to access different parts of the site, or the fullscreen option below.</h4>
 </div>
 """
 

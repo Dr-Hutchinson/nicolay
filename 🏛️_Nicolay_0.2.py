@@ -43,33 +43,33 @@ api_outputs = api_sheet.sheet1
 
 
 
-col1, col2, col3, col4, col5 = st.columns(5)
+#col1, col2, col3, col4, col5 = st.columns(5)
 
-with col1:
-    st.write(' ')
+#with col1:
+#    st.write(' ')
 
-with col2:
+#with col2:
     #st.image('./title_card.png', width=600)
-    #image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
-    #st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
+#    image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
+#    st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
     # ORIGINAL DON'T DELETE
 
-    image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
-    st.markdown(f'<div style="width: 100%; text-align: left;"><img src="{image_url}" width="700" style="margin-left: 0;"></div>', unsafe_allow_html=True)
 
 
 
+#with col3:
+#    st.write(' ')
 
-with col3:
-    st.write(' ')
+#with col4:
+#    st.write(' ')
 
-with col4:
-    st.write(' ')
-
-with col5:
-    st.write(' ')
+#with col5:
+#    st.write(' ')
 
     #st.title("Can AIs Accurately Interpret History? A Digital History Experiment")
+
+image_url = 'http://danielhutchinson.org/wp-content/uploads/2023/05/title_card.png'
+st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
 
 st.header("Nicolay: Exploring the Speeches of Abraham Lincoln with AI")
 

@@ -1,0 +1,10 @@
+text_id: Text #: 54
+
+source: Source:  Emancipation Proclamation. January 1, 1863.
+
+full_text: 
+
+summary: Summary: The Emancipation Proclamation, issued on January 1, 1863 by President Abraham Lincoln, declared that all slaves in states and designated parts of states in rebellion against the United States were to be set free. This historic document served as a war measure to suppress the ongoing rebellion and enabled the Executive Government, including military and naval authorities, to recognize and maintain the freedom of those slaves. Lincoln also encouraged the newly freed individuals to abstain from violence unless in self-defense and to work for reasonable wages. Furthermore, the proclamation announced that suitable freed slaves would be accepted into the armed service of the United States to help garrison forts, positions, and stations, as well as man vessels in the nation's service. The President invoked the considerate judgment of mankind and the favor of Almighty God on this act, which he believed to be just and warranted by the Constitution based on military necessity.
+
+keywords: Keywords:  Emancipation Proclamation, January 1 1863, President Abraham Lincoln, slaves, rebellion, United States, freedom, military, naval authorities, Arkansas, Texas, Louisiana, Mississippi, Alabama, Florida, Georgia, South Carolina, North Carolina, Virginia, West Virginia, self-defense, armed service, Constitution, military necessity.
+

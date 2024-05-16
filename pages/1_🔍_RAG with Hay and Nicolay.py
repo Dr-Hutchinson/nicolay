@@ -686,6 +686,7 @@ with st.form("Search Interface"):
                                 all_combined_data.append(combined_data)
                             elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
                                 # Format as semantic search result
+                                full_text = semantic_matches[semantic_matches.text_id == result.text_id]['full_text'].iloc[0] 
                                 segments = segment_text(result.full_text)
                                 segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
                                 top_segment = max(segment_scores, key=lambda x: x[1])

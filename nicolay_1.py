@@ -71,13 +71,13 @@ st.header("Nicolay: Exploring the Speeches of Abraham Lincoln with AI")
 
 st.subheader("Project Description")
 
-st.write("In an era where advancements in artificial intelligence, machine learning, and 'deepfakes' have raised concerns about their potential to distort our understanding of the past, this project spearheads a different approach. We explore whether these same technologies, particularly Retrieval Augmented Generation (RAG), can enhance our interaction with historic texts. Our focus: the collected speeches of Abraham Lincoln as a lens for understanding the Civil War era.\n\nThis project, using RAG techniques, opens a new window into these pivotal moments. *Nicolay*, our AI-powered app named after Lincoln's personal secretary, navigates Lincoln's collected speeches to respond to your questions about this crucial period in the history of the United States.")
+st.write("In an era where advancements in artificial intelligence, machine learning, and 'deepfakes' have raised concerns about their potential to distort our understanding of the past, this project spearheads a different approach. We explore whether these same technologies, particularly Retrieval Augmented Generation (RAG), can enhance our interaction with historic texts. Our focus: the collected speeches of Abraham Lincoln as a lens for understanding the Civil War era.\n\nThis project, using RAG techniques, opens a new window into these pivotal moments. *Nicolay*, our AI-powered app named after Lincoln's personal secretary, navigates Lincoln's collected speeches words to respond to your questions about this crucial period in the history of the United States.")
 
 st.header("Project Elements")
 
 st.write("**Exploring RAG with Hay and Nicolay:** This section explores how Retrieval Augmented Generation enables large language models to explore extensive text collections. Users can gain familarity with the mechanics of RAG via an interface for conducting their own searches over the Lincoln speech corpus using two finetuned LLMs, Hay and Nicolay.")
 
-st.write("**Ask Nicolay:** (Coming Winter 2024) This interactive feature invites users to engage a RAG-powered chatbot in dialogue about Lincoln’s speeches, allowing for open-ended questions and responses showcasing Lincoln's historic language.")
+st.write("**Ask Nicolay:** (Coming Winter 2024) This interactive feature invites users to engage in a dynamic dialogue with Lincoln’s speeches. Powered by a sophisticated RAG-based chatbot, this section offers an unprecedented opportunity to ask open-ended questions and receive responses showcasing Lincoln's historic language.")
 
 st.write("**Evaluating Nicolay:** (Coming Winter 2024) This section presents preliminary data on the effectiveness of RAG techniques for analyzing the Lincoln corpus. It will offer insights into the potential improvements and current limitations of these technologies, providing a transparent view into the evolving capabilities of AI for historical research and interpretation.")
 

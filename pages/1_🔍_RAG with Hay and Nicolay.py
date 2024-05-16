@@ -388,14 +388,15 @@ with st.form("Search Interface"):
 
                         # Check if keyword search results are empty
                         if not search_results:
-                            st.write("No keyword search results found.")
                             search_results = pd.DataFrame()  # Create an empty DataFrame for consistency
+
+                            # Display message for no results found
+                            st.markdown("### Keyword Search Results")
+                            with st.expander("No keyword search results found."):
+                                st.write("No keyword search results found based on your query and filters.")
                         else:
                             st.markdown("### Keyword Search Results")
                             # (Existing code for displaying keyword search results)
-
-                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                                st.write(keyword_search_explainer)
 
                             for idx, result in enumerate(search_results, start=1):
                                 expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
@@ -408,23 +409,27 @@ with st.form("Search Interface"):
                                     st.markdown("**Keyword Counts:**")
                                     st.json(result['keyword_counts'])
 
-                            with st.expander("**Keyword Search Metadata**"):
-                                st.write("**Keyword Search Metadata**")
-                                st.write("**User Query:**")
-                                st.write(user_query)
-                                st.write("**Model Response:**")
-                                st.write(initial_answer)
-                                st.write("**Weighted Keywords:**")
-                                st.json(weighted_keywords)  # Display the weighted keywords
-                                st.write("**Year Keywords:**")
-                                st.json(year_keywords)
-                                st.write("**Text Keywords:**")
-                                st.json(text_keywords)
-                                #st.json(text_keywords)  # Display the weighted keywords
-                                st.write("**Raw Search Results**")
-                                st.dataframe(search_results)
-                                st.write("**Full Model Output**")
-                                st.write(msg)
+                        # Display "How Does This Work?" expander
+                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                            st.write(keyword_search_explainer)
+
+                        # Display "Keyword Search Metadata" expander
+                        with st.expander("**Keyword Search Metadata**"):
+                            st.write("**Keyword Search Metadata**")
+                            st.write("**User Query:**")
+                            st.write(user_query)
+                            st.write("**Model Response:**")
+                            st.write(initial_answer)
+                            st.write("**Weighted Keywords:**")
+                            st.json(weighted_keywords)  # Display the weighted keywords
+                            st.write("**Year Keywords:**")
+                            st.json(year_keywords)
+                            st.write("**Text Keywords:**")
+                            st.json(text_keywords)
+                            st.write("**Raw Search Results**")
+                            st.dataframe(search_results)
+                            st.write("**Full Model Output**")
+                            st.write(msg)
 
                 # Display semantic search results in the second column
                 with col2:

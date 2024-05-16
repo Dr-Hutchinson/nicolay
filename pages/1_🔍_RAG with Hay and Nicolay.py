@@ -680,14 +680,14 @@ with st.form("Search Interface"):
                         # Format deduplicated results for reranking
                         for index, result in deduplicated_results.iterrows():
                             # Check if the result is from keyword search or semantic search
-                            if result.text_id in search_results.text_id.values and perform_keyword_search:
+                            if perform_keyword_search and result.text_id in search_results.text_id.values:
                                 # Format as keyword search result
                                 combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
                                 all_combined_data.append(combined_data)
-                            elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                            elif perform_semantic_search and result.text_id in semantic_matches.text_id.values:
                                 # Format as semantic search result
-                                full_text = semantic_matches[semantic_matches.text_id == result.text_id]['full_text'].iloc[0] 
-                                segments = segment_text(result.full_text)
+                                full_text = semantic_matches[semantic_matches.text_id == result.text_id]['full_text'].iloc[0]
+                                segments = segment_text(full_text)
                                 segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
                                 top_segment = max(segment_scores, key=lambda x: x[1])
 

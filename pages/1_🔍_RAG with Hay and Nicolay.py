@@ -386,6 +386,8 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
+                        st.markdown("### Keyword Search Results")
+
                         # Display "How Does This Work?" expander
                         with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
                             st.write(keyword_search_explainer)
@@ -395,7 +397,7 @@ with st.form("Search Interface"):
                             search_results = pd.DataFrame()  # Create an empty DataFrame for consistency
 
                             # Display message for no results found
-                            st.markdown("### Keyword Search Results")
+                            #st.markdown("### Keyword Search Results")
                             with st.expander("No keyword search results found."):
                                 st.write("**No keyword search results found based on your query and Hays's outputs. Try again or modify your query. You can also use the Additional Search Options box above to search for specific terms, speeches, and years.**")
                         else:

@@ -576,7 +576,9 @@ with st.form("Search Interface"):
                 #            st.error("Error in reranking: " + str(e))
 
                 # Reranking results with Cohere's Reranker API Endpoint
+                # Reranking results with Cohere's Reranker API Endpoint
                 if perform_reranking:
+
                     if isinstance(search_results, list):
                         search_results = pd.DataFrame(search_results)
 
@@ -625,11 +627,12 @@ with st.form("Search Interface"):
                             )
                             with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
                                 st.write(relevance_ranking_explainer)
+
                             # DataFrame for storing all reranked results
                             full_reranked_results = []
-                            for idx, result in reranked_response:
-                                combined_data = result.document['text']
-                                data_parts = combined_data.split("|")
+                            for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
+                                combined_data = result.document
+                                data_parts = combined_data['text'].split("|")
                                 if len(data_parts) >= 4:
                                     search_type, text_id_part, summary, quote = data_parts
                                     text_id = str(text_id_part.split(":")[-1].strip())

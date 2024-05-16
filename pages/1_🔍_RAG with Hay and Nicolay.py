@@ -658,7 +658,7 @@ with st.form("Search Interface"):
                     semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
 
                     # Now, conditionally include results from keyword search in reranking
-                    if perform_keyword_search and search_results:  # Check if keyword search results exist
+                    if perform_keyword_search and not search_results.empty:  # Check if keyword search results exist (not empty)
                         deduplicated_results = remove_duplicates(search_results, semantic_matches)
 
                         all_combined_data = []

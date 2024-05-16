@@ -398,8 +398,8 @@ with st.form("Search Interface"):
 
                             # Display message for no results found
                             #st.markdown("### Keyword Search Results")
-                            with st.expander("No keyword search results found."):
-                                st.write("**No keyword search results found based on your query and Hays's outputs. Try again or modify your query. You can also use the Additional Search Options box above to search for specific terms, speeches, and years.**")
+                            with st.expander("**No keyword search results found.**"):
+                                st.write("No keyword search results found based on your query and Hays's outputs. Try again or modify your query. You can also use the Additional Search Options box above to search for specific terms, speeches, and years.**")
                         else:
                             st.markdown("### Keyword Search Results")
                             # (Existing code for displaying keyword search results)

@@ -652,13 +652,20 @@ with st.form("Search Interface"):
                         search_results = pd.DataFrame(search_results)
 
                     # Convert 'text_id' in search_results to numeric format
-                    search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+                    #search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+                    if perform_keyword_search and not search_results.empty:  # Check if keyword search results exist (not empty)
+                        search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+
 
                     # Rename the identifier column in semantic_matches to align with search_results
                     semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
                     semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
 
-                    deduplicated_results = remove_duplicates(search_results, semantic_matches)
+                    #deduplicated_results = remove_duplicates(search_results, semantic_matches)
+
+                    # Now, conditionally include results from keyword search in reranking
+                    if perform_keyword_search and not search_results.empty:  # Check if keyword search results exist (not empty)
+                        deduplicated_results = remove_duplicates(search_results, semantic_matches)
 
                     all_combined_data = []
 

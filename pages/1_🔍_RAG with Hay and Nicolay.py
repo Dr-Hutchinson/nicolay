@@ -644,6 +644,41 @@ with st.form("Search Interface"):
                 #        except Exception as e:
                 #            st.error("Error in reranking: " + str(e))
 
+                # Reranking results with Cohere's Reranker API Endpoint
+
+                if perform_reranking:
+
+                    if isinstance(search_results, list):
+                        search_results = pd.DataFrame(search_results)
+
+                    # Convert 'text_id' in search_results to numeric format
+                    search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+
+                    # Rename the identifier column in semantic_matches to align with search_results
+                    semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+                    semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
+
+                    deduplicated_results = remove_duplicates(search_results, semantic_matches)
+
+                    all_combined_data = []
+
+                    # Format deduplicated results for reranking
+                    for index, result in deduplicated_results.iterrows():
+                        # Check if the result is from keyword search or semantic search
+                        if result.text_id in search_results.text_id.values and perform_keyword_search:
+                            # Format as keyword search result
+                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                            all_combined_data.append(combined_data)
+                        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                            # Format as semantic search result
+                            segments = segment_text(result.full_text)
+                            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                            top_segment = max(segment_scores, key=lambda x: x[1])
+
+                            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
+                            all_combined_data.append(combined_data)
+
+
                 if all_combined_data:
                     st.markdown("### Ranked Search Results")
                     try:

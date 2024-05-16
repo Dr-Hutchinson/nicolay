@@ -412,78 +412,39 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
-                        # Check if keyword search returned any results
-                        if search_results:
-                            st.markdown("### Keyword Search Results")
+                        st.markdown("### Keyword Search Results")
 
-                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                                st.write(keyword_search_explainer)
+                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                            st.write(keyword_search_explainer)
 
-                            for idx, result in enumerate(search_results, start=1):
-                                expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                                with st.expander(expander_label):
-                                    st.markdown(f"{result['source']}")
-                                    st.markdown(f"{result['text_id']}")
-                                    st.markdown(f"{result['summary']}")
-                                    st.markdown(f"**Key Quote:**\n{result['quote']}")
-                                    st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                                    st.markdown("**Keyword Counts:**")
-                                    st.json(result['keyword_counts'])
+                        for idx, result in enumerate(search_results, start=1):
+                            expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
+                            with st.expander(expander_label):
+                                st.markdown(f"{result['source']}")
+                                st.markdown(f"{result['text_id']}")
+                                st.markdown(f"{result['summary']}")
+                                st.markdown(f"**Key Quote:**\n{result['quote']}")
+                                st.markdown(f"**Weighted Score:** {result['weighted_score']}")
+                                st.markdown("**Keyword Counts:**")
+                                st.json(result['keyword_counts'])
 
-                            with st.expander("**Keyword Search Metadata**"):
-                                st.write("**Keyword Search Metadata**")
-                                st.write("**User Query:**")
-                                st.write(user_query)
-                                st.write("**Model Response:**")
-                                st.write(initial_answer)
-                                st.write("**Weighted Keywords:**")
-                                st.json(weighted_keywords)  # Display the weighted keywords
-                                st.write("**Year Keywords:**")
-                                st.json(year_keywords)
-                                st.write("**Text Keywords:**")
-                                st.json(text_keywords)
-                                #st.json(text_keywords)  # Display the weighted keywords
-                                st.write("**Raw Search Results**")
-                                st.dataframe(search_results)
-                                st.write("**Full Model Output**")
-                                st.write(msg)
-
-                        else:
-                            st.info("No results found using keyword search.")
-
-                        #st.markdown("### Keyword Search Results")
-
-                        #with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                        #    st.write(keyword_search_explainer)
-
-                        #for idx, result in enumerate(search_results, start=1):
-                        #    expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                        #    with st.expander(expander_label):
-                        #        st.markdown(f"{result['source']}")
-                        #        st.markdown(f"{result['text_id']}")
-                        #        st.markdown(f"{result['summary']}")
-                        #        st.markdown(f"**Key Quote:**\n{result['quote']}")
-                        #        st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                        #        st.markdown("**Keyword Counts:**")
-                        #        st.json(result['keyword_counts'])
-
-                        #with st.expander("**Keyword Search Metadata**"):
-                        #    st.write("**Keyword Search Metadata**")
-                        #    st.write("**User Query:**")
-                        #    st.write(user_query)
-                        #    st.write("**Model Response:**")
-                        #    st.write(initial_answer)
-                        #    st.write("**Weighted Keywords:**")
-                        #    st.json(weighted_keywords)  # Display the weighted keywords
-                        #    st.write("**Year Keywords:**")
-                        #    st.json(year_keywords)
-                        #    st.write("**Text Keywords:**")
-                        #    st.json(text_keywords)
+                        with st.expander("**Keyword Search Metadata**"):
+                            st.write("**Keyword Search Metadata**")
+                            st.write("**User Query:**")
+                            st.write(user_query)
+                            st.write("**Model Response:**")
+                            st.write(initial_answer)
+                            st.write("**Weighted Keywords:**")
+                            st.json(weighted_keywords)  # Display the weighted keywords
+                            st.write("**Year Keywords:**")
+                            st.json(year_keywords)
+                            st.write("**Text Keywords:**")
+                            st.json(text_keywords)
                             #st.json(text_keywords)  # Display the weighted keywords
-                        #    st.write("**Raw Search Results**")
-                        #    st.dataframe(search_results)
-                        #    st.write("**Full Model Output**")
-                        #    st.write(msg)
+                            st.write("**Raw Search Results**")
+                            st.dataframe(search_results)
+                            st.write("**Full Model Output**")
+                            st.write(msg)
 
                 # Display semantic search results in the second column
                 with col2:
@@ -661,40 +622,28 @@ with st.form("Search Interface"):
                     semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
                     semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
 
-                    #deduplicated_results = remove_duplicates(search_results, semantic_matches)
+                    deduplicated_results = remove_duplicates(search_results, semantic_matches)
 
-                    # Define deduplicated_results outside the conditional blocks
-                    deduplicated_results = None
+                    all_combined_data = []
 
-                    # Now, conditionally include results from keyword search in reranking
-                    if perform_keyword_search and not search_results.empty:
-                        deduplicated_results = remove_duplicates(search_results, semantic_matches)
+                    # Format deduplicated results for reranking
+                    for index, result in deduplicated_results.iterrows():
+                        # Check if the result is from keyword search or semantic search
+                        if result.text_id in search_results.text_id.values and perform_keyword_search:
+                            # Format as keyword search result
+                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                            all_combined_data.append(combined_data)
+                        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                            # Format as semantic search result
+                            segments = segment_text(result.full_text)
+                            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                            top_segment = max(segment_scores, key=lambda x: x[1])
 
-                    elif perform_semantic_search:
-                        deduplicated_results = semantic_matches
+                                    # Retrieve source information
+                                    text_id_str = f"Text #: {text_id}"
+                                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
 
                     # Use all_combined_data for reranking
-                    if deduplicated_results is not None:  # Check if deduplicated_results was defined
-                        all_combined_data = []
-
-                        # Format deduplicated results for reranking
-                        for index, result in deduplicated_results.iterrows():
-                            # Check if the result is from keyword search or semantic search
-                            if perform_keyword_search and result.text_id in search_results.text_id.values:
-                                # Format as keyword search result
-                                combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
-                                all_combined_data.append(combined_data)
-                            elif perform_semantic_search and result.text_id in semantic_matches.text_id.values:
-                                # Format as semantic search result
-                                full_text = semantic_matches[semantic_matches.text_id == result.text_id]['full_text'].iloc[0]
-                                segments = segment_text(full_text)
-                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                                top_segment = max(segment_scores, key=lambda x: x[1])
-
-                                combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
-                                all_combined_data.append(combined_data)
-
-
                     if all_combined_data:
                         st.markdown("### Ranked Search Results")
                         try:
@@ -704,6 +653,9 @@ with st.form("Search Interface"):
                                 documents=all_combined_data,
                                 top_n=10
                             )
+
+                            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
+                                st.write(relevance_ranking_explainer)
 
                             # DataFrame for storing all reranked results
                             full_reranked_results = []
@@ -742,20 +694,8 @@ with st.form("Search Interface"):
                                             st.markdown(f"{summary}")
                                             st.markdown(f"Key Quote:\n{quote}")
                                             st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
-
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))
-
-                        # Format reranked results for model input
-                        formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
-
-                        # Display full reranked results in an expander
-                        with st.expander("**Result Reranking Metadata**"):
-                            reranked_df = pd.DataFrame(full_reranked_results)
-                            st.dataframe(reranked_df)
-                            st.write("**Formatted Results:**")
-                            st.write(formatted_input_for_model)
-
 
                         # API Call to the second GPT-3.5 model
                         if formatted_input_for_model:

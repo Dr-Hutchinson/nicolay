@@ -386,39 +386,45 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
-                        st.markdown("### Keyword Search Results")
+                        # Check if keyword search results are empty
+                        if not search_results:
+                            st.write("No keyword search results found.")
+                            search_results = pd.DataFrame()  # Create an empty DataFrame for consistency
+                        else:
+                            st.markdown("### Keyword Search Results")
+                            # (Existing code for displaying keyword search results)
 
-                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                            st.write(keyword_search_explainer)
+                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                                st.write(keyword_search_explainer)
 
-                        for idx, result in enumerate(search_results, start=1):
-                            expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                            with st.expander(expander_label):
-                                st.markdown(f"{result['source']}")
-                                st.markdown(f"{result['text_id']}")
-                                st.markdown(f"{result['summary']}")
-                                st.markdown(f"**Key Quote:**\n{result['quote']}")
-                                st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                                st.markdown("**Keyword Counts:**")
-                                st.json(result['keyword_counts'])
+                            for idx, result in enumerate(search_results, start=1):
+                                expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
+                                with st.expander(expander_label):
+                                    st.markdown(f"{result['source']}")
+                                    st.markdown(f"{result['text_id']}")
+                                    st.markdown(f"{result['summary']}")
+                                    st.markdown(f"**Key Quote:**\n{result['quote']}")
+                                    st.markdown(f"**Weighted Score:** {result['weighted_score']}")
+                                    st.markdown("**Keyword Counts:**")
+                                    st.json(result['keyword_counts'])
 
-                        with st.expander("**Keyword Search Metadata**"):
-                            st.write("**Keyword Search Metadata**")
-                            st.write("**User Query:**")
-                            st.write(user_query)
-                            st.write("**Model Response:**")
-                            st.write(initial_answer)
-                            st.write("**Weighted Keywords:**")
-                            st.json(weighted_keywords)  # Display the weighted keywords
-                            st.write("**Year Keywords:**")
-                            st.json(year_keywords)
-                            st.write("**Text Keywords:**")
-                            st.json(text_keywords)
-                            #st.json(text_keywords)  # Display the weighted keywords
-                            st.write("**Raw Search Results**")
-                            st.dataframe(search_results)
-                            st.write("**Full Model Output**")
-                            st.write(msg)
+                            with st.expander("**Keyword Search Metadata**"):
+                                st.write("**Keyword Search Metadata**")
+                                st.write("**User Query:**")
+                                st.write(user_query)
+                                st.write("**Model Response:**")
+                                st.write(initial_answer)
+                                st.write("**Weighted Keywords:**")
+                                st.json(weighted_keywords)  # Display the weighted keywords
+                                st.write("**Year Keywords:**")
+                                st.json(year_keywords)
+                                st.write("**Text Keywords:**")
+                                st.json(text_keywords)
+                                #st.json(text_keywords)  # Display the weighted keywords
+                                st.write("**Raw Search Results**")
+                                st.dataframe(search_results)
+                                st.write("**Full Model Output**")
+                                st.write(msg)
 
                 # Display semantic search results in the second column
                 with col2:
@@ -493,18 +499,103 @@ with st.form("Search Interface"):
                             st.dataframe(semantic_matches)
 
                 # Reranking results with Cohere's Reranker API Endpoint
-                if perform_reranking:
+                #if perform_reranking:
 
+                #    if isinstance(search_results, list):
+                #        search_results = pd.DataFrame(search_results)
+
+                    # Convert 'text_id' in search_results to numeric format
+                #    search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+                    # Rename the identifier column in semantic_matches to align with search_results
+
+                #    semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+                #    semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
+                #    deduplicated_results = remove_duplicates(search_results, semantic_matches)
+                #    all_combined_data = []
+
+                    # Format deduplicated results for reranking
+                #    for index, result in deduplicated_results.iterrows():
+                        # Check if the result is from keyword search or semantic search
+                #        if result.text_id in search_results.text_id.values and perform_keyword_search:
+                            # Format as keyword search result
+                #            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                #            all_combined_data.append(combined_data)
+                #        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                            # Format as semantic search result
+                #            segments = segment_text(result.full_text)
+                #            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                #            top_segment = max(segment_scores, key=lambda x: x[1])
+                #            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
+                #            all_combined_data.append(combined_data)
+
+                    # Use all_combined_data for reranking
+                #    if all_combined_data:
+                #        st.markdown("### Ranked Search Results")
+                #        try:
+                #            reranked_response = co.rerank(
+                #                model='rerank-english-v2.0',
+                #                query=user_query,
+                #                documents=all_combined_data,
+                #                top_n=10
+                #            )
+                #            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
+                #                st.write(relevance_ranking_explainer)
+                            # DataFrame for storing all reranked results
+                #            full_reranked_results = []
+                #            for idx, result in enumerate(reranked_response):
+                #                combined_data = result.document['text']
+                #                data_parts = combined_data.split("|")
+                #                if len(data_parts) >= 4:
+                #                    search_type, text_id_part, summary, quote = data_parts
+                #                    text_id = str(text_id_part.split(":")[-1].strip())
+                #                    summary = summary.strip()
+                #                    quote = quote.strip()
+                                    # Retrieve source information
+                #                    text_id_str = f"Text #: {text_id}"
+                #                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
+                                    # Store each result in the DataFrame
+                #                    full_reranked_results.append({
+                #                        'Rank': idx + 1,
+                #                        'Search Type': search_type,
+                #                        'Text ID': text_id,
+                #                        'Source': source,
+                #                        'Summary': summary,
+                #                        'Key Quote': quote,
+                #                        'Relevance Score': result.relevance_score
+                #                    })
+                                    # Display only the top 3 results
+                #                    if idx < 3:
+                #                        expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
+                #                        with st.expander(expander_label):
+                #                            st.markdown(f"Text ID: {text_id}")
+                #                            st.markdown(f"{source}")
+                #                            st.markdown(f"{summary}")
+                #                            st.markdown(f"Key Quote:\n{quote}")
+                #                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
+                #        except Exception as e:
+                #            st.error("Error in reranking: " + str(e))
+
+                # Reranking results with Cohere's Reranker API Endpoint
+                if perform_reranking:
                     if isinstance(search_results, list):
                         search_results = pd.DataFrame(search_results)
 
-                    # Convert 'text_id' in search_results to numeric format
-                    search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
-                    # Rename the identifier column in semantic_matches to align with search_results
+                    # Convert 'text_id' in search_results to numeric format if it's not empty
+                    if not search_results.empty:
+                        search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+                    else:
+                        search_results = pd.DataFrame(columns=['text_id'])  # Create a DataFrame with the necessary column for consistency
 
+                    # Rename the identifier column in semantic_matches to align with search_results
                     semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
                     semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
-                    deduplicated_results = remove_duplicates(search_results, semantic_matches)
+
+                    # Handle the case where search_results is empty
+                    if search_results.empty:
+                        deduplicated_results = semantic_matches
+                    else:
+                        deduplicated_results = remove_duplicates(search_results, semantic_matches)
+
                     all_combined_data = []
 
                     # Format deduplicated results for reranking
@@ -536,7 +627,7 @@ with st.form("Search Interface"):
                                 st.write(relevance_ranking_explainer)
                             # DataFrame for storing all reranked results
                             full_reranked_results = []
-                            for idx, result in enumerate(reranked_response):
+                            for idx, result in reranked_response:
                                 combined_data = result.document['text']
                                 data_parts = combined_data.split("|")
                                 if len(data_parts) >= 4:
@@ -568,6 +659,9 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))
+
+
+                    #
 
                     # Format reranked results for model input
                     formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)

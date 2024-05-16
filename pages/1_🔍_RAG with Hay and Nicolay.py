@@ -663,257 +663,265 @@ with st.form("Search Interface"):
 
                     #deduplicated_results = remove_duplicates(search_results, semantic_matches)
 
+                    # Define deduplicated_results outside the conditional blocks
+                    deduplicated_results = None
+
                     # Now, conditionally include results from keyword search in reranking
-                    if perform_keyword_search and not search_results.empty:  # Check if keyword search results exist (not empty)
+                    if perform_keyword_search and not search_results.empty:
                         deduplicated_results = remove_duplicates(search_results, semantic_matches)
 
-                    all_combined_data = []
+                    elif perform_semantic_search:
+                        deduplicated_results = semantic_matches
 
-                    # Format deduplicated results for reranking
-                    for index, result in deduplicated_results.iterrows():
-                        # Check if the result is from keyword search or semantic search
-                        if result.text_id in search_results.text_id.values and perform_keyword_search:
-                            # Format as keyword search result
-                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
-                            all_combined_data.append(combined_data)
-                        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                            # Format as semantic search result
-                            segments = segment_text(result.full_text)
-                            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                            top_segment = max(segment_scores, key=lambda x: x[1])
+                    # Use all_combined_data for reranking
+                    if deduplicated_results is not None:  # Check if deduplicated_results was defined
+                        all_combined_data = []
 
-                            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
-                            all_combined_data.append(combined_data)
+                        # Format deduplicated results for reranking
+                        for index, result in deduplicated_results.iterrows():
+                            # Check if the result is from keyword search or semantic search
+                            if result.text_id in search_results.text_id.values and perform_keyword_search:
+                                # Format as keyword search result
+                                combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                                all_combined_data.append(combined_data)
+                            elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                                # Format as semantic search result
+                                segments = segment_text(result.full_text)
+                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                                top_segment = max(segment_scores, key=lambda x: x[1])
 
-
-                if all_combined_data:
-                    st.markdown("### Ranked Search Results")
-                    try:
-                        reranked_response = co.rerank(
-                            model='rerank-english-v2.0',
-                            query=user_query,
-                            documents=all_combined_data,
-                            top_n=10
-                        )
-
-                        # DataFrame for storing all reranked results
-                        full_reranked_results = []
-
-                        for idx, result in enumerate(reranked_response):
-                            combined_data = result.document['text']
-                            data_parts = combined_data.split("|")
-
-                            if len(data_parts) >= 4:
-                                search_type, text_id_part, summary, quote = data_parts
-                                text_id = str(text_id_part.split(":")[-1].strip())
-                                summary = summary.strip()
-                                quote = quote.strip()
-
-                                # Retrieve source information
-                                text_id_str = f"Text #: {text_id}"
-                                source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-
-                                # Store each result in the DataFrame
-                                full_reranked_results.append({
-                                    'Rank': idx + 1,
-                                    'Search Type': search_type,
-                                    'Text ID': text_id,
-                                    'Source': source,
-                                    'Summary': summary,
-                                    'Key Quote': quote,
-                                    'Relevance Score': result.relevance_score
-                                })
-
-                                # Display only the top 3 results
-                                if idx < 3:
-                                    expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
-                                    with st.expander(expander_label):
-                                        st.markdown(f"Text ID: {text_id}")
-                                        st.markdown(f"{source}")
-                                        st.markdown(f"{summary}")
-                                        st.markdown(f"Key Quote:\n{quote}")
-                                        st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
-
-                    except Exception as e:
-                        st.error("Error in reranking: " + str(e))
-
-                    # Format reranked results for model input
-                    formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
-
-                    # Display full reranked results in an expander
-                    with st.expander("**Result Reranking Metadata**"):
-                        reranked_df = pd.DataFrame(full_reranked_results)
-                        st.dataframe(reranked_df)
-                        st.write("**Formatted Results:**")
-                        st.write(formatted_input_for_model)
+                                combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
+                                all_combined_data.append(combined_data)
 
 
-                    # API Call to the second GPT-3.5 model
-                    if formatted_input_for_model:
+                    if all_combined_data:
+                        st.markdown("### Ranked Search Results")
+                        try:
+                            reranked_response = co.rerank(
+                                model='rerank-english-v2.0',
+                                query=user_query,
+                                documents=all_combined_data,
+                                top_n=10
+                            )
 
-                        # Construct the message for the model
-                        messages_for_second_model = [
-                            {"role": "system", "content": response_prompt},
-                            {"role": "user", "content": f"User Query: {user_query}\n\n"
-                                                        f"Initial Answer: {initial_answer}\n\n"
-                                                        f"{formatted_input_for_model}"}
-                        ]
+                            # DataFrame for storing all reranked results
+                            full_reranked_results = []
 
+                            for idx, result in enumerate(reranked_response):
+                                combined_data = result.document['text']
+                                data_parts = combined_data.split("|")
 
-                        # Send the messages to the finetuned model
-                        second_model_response = client.chat.completions.create(
-                            model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Specific finetuned model
-                            messages=messages_for_second_model,
-                            temperature=0,
-                            max_tokens=2000,
-                            top_p=1,
-                            frequency_penalty=0,
-                            presence_penalty=0
-                        )
+                                if len(data_parts) >= 4:
+                                    search_type, text_id_part, summary, quote = data_parts
+                                    text_id = str(text_id_part.split(":")[-1].strip())
+                                    summary = summary.strip()
+                                    quote = quote.strip()
 
-                        # Process and display the model's response
-                        response_content = second_model_response.choices[0].message.content
+                                    # Retrieve source information
+                                    text_id_str = f"Text #: {text_id}"
+                                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
 
-                        if response_content:  # Assuming 'response_content' is the output from the second model
+                                    # Store each result in the DataFrame
+                                    full_reranked_results.append({
+                                        'Rank': idx + 1,
+                                        'Search Type': search_type,
+                                        'Text ID': text_id,
+                                        'Source': source,
+                                        'Summary': summary,
+                                        'Key Quote': quote,
+                                        'Relevance Score': result.relevance_score
+                                    })
 
-                            model_output = json.loads(response_content)
+                                    # Display only the top 3 results
+                                    if idx < 3:
+                                        expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
+                                        with st.expander(expander_label):
+                                            st.markdown(f"Text ID: {text_id}")
+                                            st.markdown(f"{source}")
+                                            st.markdown(f"{summary}")
+                                            st.markdown(f"Key Quote:\n{quote}")
+                                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
 
-                            # Displaying the Final Answer
-                            st.header("Nicolay's Response & Analysis:")
+                        except Exception as e:
+                            st.error("Error in reranking: " + str(e))
 
-                            #with st.expander("Output Debugging:"):
-                            #    st.write(response_content)
+                        # Format reranked results for model input
+                        formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
 
-                            with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
-                                st.write(nicolay_model_explainer)
-
-                            with st.expander("**Nicolay's Response**", expanded=True):
-                                final_answer = model_output.get("FinalAnswer", {})
-                                st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
-                                if final_answer.get("References"):
-                                    st.markdown("**References:**")
-                                    for reference in final_answer["References"]:
-                                        st.markdown(f"{reference}")
-
-
-                            highlight_style = """
-                                <style>
-                                mark {
-                                    background-color: #90ee90;
-                                    color: black;
-                                }
-                                </style>
-                                """
-
-                            doc_match_counter = 0
-
-                            if "Match Analysis" in model_output:
-                                st.markdown(highlight_style, unsafe_allow_html=True)
-                                for match_key, match_info in model_output["Match Analysis"].items():
-                                    text_id = match_info.get("Text ID")
-                                    formatted_text_id = f"Text #: {text_id}"
-                                    key_quote = match_info.get("Key Quote", "")
-
-                                    speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
-
-                                    # Increment the counter for each match
-                                    doc_match_counter += 1
-
-                                    #if speech:
-                                        # Use the doc_match_counter in the expander label
-                                    #    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                    #    with st.expander(expander_label, expanded=False):
-                                    #        st.markdown(f"**Source:** {speech['source']}")
-                                    #        st.markdown(f"**Text ID:** {speech['text_id']}")
-                                    #        st.markdown(f"**Summary:**\n{speech['summary']}")
-
-                                            # Handling escaped line breaks and highlighting the key quote
-                                    #        formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
-
-                                    #        st.markdown(f"**Key Quote:**\n{key_quote}")
-                                    #        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                                    #        st.markdown(formatted_full_text, unsafe_allow_html=True)
-                                    #else:
-                                    #    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                    #        st.markdown("Full text not found.")
-
-                                    if speech:
-                                        # Use the doc_match_counter in the expander label
-                                        expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                        with st.expander(expander_label, expanded=False):
-                                            st.markdown(f"**Source:** {speech['source']}")
-                                            st.markdown(f"**Text ID:** {speech['text_id']}")
-                                            st.markdown(f"**Summary:**\n{speech['summary']}")
-
-                                            # Attempt direct highlighting
-                                            if key_quote in speech['full_text']:
-                                                formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
-                                            else:
-                                                # If direct highlighting fails, use regex-based approach
-                                                formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
-                                                formatted_full_text = formatted_full_text.replace("\\n", "<br>")
-
-                                            st.markdown(f"**Key Quote:**\n{key_quote}")
-                                            st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                                            st.markdown(formatted_full_text, unsafe_allow_html=True)
-                                    else:
-                                        with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                            st.markdown("Full text not found.")
+                        # Display full reranked results in an expander
+                        with st.expander("**Result Reranking Metadata**"):
+                            reranked_df = pd.DataFrame(full_reranked_results)
+                            st.dataframe(reranked_df)
+                            st.write("**Formatted Results:**")
+                            st.write(formatted_input_for_model)
 
 
-                            # Displaying the Analysis Metadata
-                            with st.expander("**Analysis Metadata**"):
-                                # Displaying User Query Analysis
-                                if "User Query Analysis" in model_output:
-                                    st.markdown("**User Query Analysis:**")
-                                    for key, value in model_output["User Query Analysis"].items():
-                                        st.markdown(f"- **{key}:** {value}")
+                        # API Call to the second GPT-3.5 model
+                        if formatted_input_for_model:
 
-                                # Displaying Initial Answer Review
-                                if "Initial Answer Review" in model_output:
-                                    st.markdown("**Initial Answer Review:**")
-                                    for key, value in model_output["Initial Answer Review"].items():
-                                        st.markdown(f"- **{key}:** {value}")
+                            # Construct the message for the model
+                            messages_for_second_model = [
+                                {"role": "system", "content": response_prompt},
+                                {"role": "user", "content": f"User Query: {user_query}\n\n"
+                                                            f"Initial Answer: {initial_answer}\n\n"
+                                                            f"{formatted_input_for_model}"}
+                            ]
 
-                                # Displaying Match Analysis
-                                #if "Match Analysis" in model_output:
-                                #    st.markdown("**Match Analysis:**")
-                                #    for match_key, match_info in model_output["Match Analysis"].items():
-                                #        st.markdown(f"- **{match_key}:**")
-                                #        for key, value in match_info.items():
-                                #            st.markdown(f"  - {key}: {value}")
 
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
+                            # Send the messages to the finetuned model
+                            second_model_response = client.chat.completions.create(
+                                model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Specific finetuned model
+                                messages=messages_for_second_model,
+                                temperature=0,
+                                max_tokens=2000,
+                                top_p=1,
+                                frequency_penalty=0,
+                                presence_penalty=0
+                            )
+
+                            # Process and display the model's response
+                            response_content = second_model_response.choices[0].message.content
+
+                            if response_content:  # Assuming 'response_content' is the output from the second model
+
+                                model_output = json.loads(response_content)
+
+                                # Displaying the Final Answer
+                                st.header("Nicolay's Response & Analysis:")
+
+                                #with st.expander("Output Debugging:"):
+                                #    st.write(response_content)
+
+                                with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
+                                    st.write(nicolay_model_explainer)
+
+                                with st.expander("**Nicolay's Response**", expanded=True):
+                                    final_answer = model_output.get("FinalAnswer", {})
+                                    st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
+                                    if final_answer.get("References"):
+                                        st.markdown("**References:**")
+                                        for reference in final_answer["References"]:
+                                            st.markdown(f"{reference}")
+
+
+                                highlight_style = """
+                                    <style>
+                                    mark {
+                                        background-color: #90ee90;
+                                        color: black;
+                                    }
+                                    </style>
+                                    """
+
+                                doc_match_counter = 0
+
                                 if "Match Analysis" in model_output:
-                                    st.markdown("**Match Analysis:**", unsafe_allow_html=True)
+                                    st.markdown(highlight_style, unsafe_allow_html=True)
                                     for match_key, match_info in model_output["Match Analysis"].items():
-                                        st.markdown(f"- **{match_key}:**", unsafe_allow_html=True)
-                                        for key, value in match_info.items():
-                                            if isinstance(value, dict):
-                                                nested_items_html = "<br>".join([f"&emsp;&emsp;<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
-                                                st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>", unsafe_allow_html=True)
-                                            else:
-                                                st.markdown(f"&emsp;<b>{key}:</b> {value}<br>", unsafe_allow_html=True)
+                                        text_id = match_info.get("Text ID")
+                                        formatted_text_id = f"Text #: {text_id}"
+                                        key_quote = match_info.get("Key Quote", "")
+
+                                        speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+
+                                        # Increment the counter for each match
+                                        doc_match_counter += 1
+
+                                        #if speech:
+                                            # Use the doc_match_counter in the expander label
+                                        #    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
+                                        #    with st.expander(expander_label, expanded=False):
+                                        #        st.markdown(f"**Source:** {speech['source']}")
+                                        #        st.markdown(f"**Text ID:** {speech['text_id']}")
+                                        #        st.markdown(f"**Summary:**\n{speech['summary']}")
+
+                                                # Handling escaped line breaks and highlighting the key quote
+                                        #        formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+
+                                        #        st.markdown(f"**Key Quote:**\n{key_quote}")
+                                        #        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                                        #        st.markdown(formatted_full_text, unsafe_allow_html=True)
+                                        #else:
+                                        #    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
+                                        #        st.markdown("Full text not found.")
+
+                                        if speech:
+                                            # Use the doc_match_counter in the expander label
+                                            expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
+                                            with st.expander(expander_label, expanded=False):
+                                                st.markdown(f"**Source:** {speech['source']}")
+                                                st.markdown(f"**Text ID:** {speech['text_id']}")
+                                                st.markdown(f"**Summary:**\n{speech['summary']}")
+
+                                                # Attempt direct highlighting
+                                                if key_quote in speech['full_text']:
+                                                    formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+                                                else:
+                                                    # If direct highlighting fails, use regex-based approach
+                                                    formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
+                                                    formatted_full_text = formatted_full_text.replace("\\n", "<br>")
+
+                                                st.markdown(f"**Key Quote:**\n{key_quote}")
+                                                st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                                                st.markdown(formatted_full_text, unsafe_allow_html=True)
+                                        else:
+                                            with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
+                                                st.markdown("Full text not found.")
 
 
-                                # Displaying Meta Analysis
-                                if "Meta Analysis" in model_output:
-                                    st.markdown("**Meta Analysis:**")
-                                    for key, value in model_output["Meta Analysis"].items():
-                                        st.markdown(f"- **{key}:** {value}")
+                                # Displaying the Analysis Metadata
+                                with st.expander("**Analysis Metadata**"):
+                                    # Displaying User Query Analysis
+                                    if "User Query Analysis" in model_output:
+                                        st.markdown("**User Query Analysis:**")
+                                        for key, value in model_output["User Query Analysis"].items():
+                                            st.markdown(f"- **{key}:** {value}")
 
-                                # Displaying Model Feedback
-                                if "Model Feedback" in model_output:
-                                    st.markdown("**Model Feedback:**")
-                                    for key, value in model_output["Model Feedback"].items():
-                                        st.markdown(f"- **{key}:** {value}")
+                                    # Displaying Initial Answer Review
+                                    if "Initial Answer Review" in model_output:
+                                        st.markdown("**Initial Answer Review:**")
+                                        for key, value in model_output["Initial Answer Review"].items():
+                                            st.markdown(f"- **{key}:** {value}")
 
-                                st.write("**Full Model Output**:")
-                                st.write(response_content)
+                                    # Displaying Match Analysis
+                                    #if "Match Analysis" in model_output:
+                                    #    st.markdown("**Match Analysis:**")
+                                    #    for match_key, match_info in model_output["Match Analysis"].items():
+                                    #        st.markdown(f"- **{match_key}:**")
+                                    #        for key, value in match_info.items():
+                                    #            st.markdown(f"  - {key}: {value}")
+
+                                    # Displaying Match Analysis
+                                    # Displaying Match Analysis
+                                    # Displaying Match Analysis
+                                    # Displaying Match Analysis
+                                    # Displaying Match Analysis
+                                    if "Match Analysis" in model_output:
+                                        st.markdown("**Match Analysis:**", unsafe_allow_html=True)
+                                        for match_key, match_info in model_output["Match Analysis"].items():
+                                            st.markdown(f"- **{match_key}:**", unsafe_allow_html=True)
+                                            for key, value in match_info.items():
+                                                if isinstance(value, dict):
+                                                    nested_items_html = "<br>".join([f"&emsp;&emsp;<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
+                                                    st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>", unsafe_allow_html=True)
+                                                else:
+                                                    st.markdown(f"&emsp;<b>{key}:</b> {value}<br>", unsafe_allow_html=True)
+
+
+                                    # Displaying Meta Analysis
+                                    if "Meta Analysis" in model_output:
+                                        st.markdown("**Meta Analysis:**")
+                                        for key, value in model_output["Meta Analysis"].items():
+                                            st.markdown(f"- **{key}:** {value}")
+
+                                    # Displaying Model Feedback
+                                    if "Model Feedback" in model_output:
+                                        st.markdown("**Model Feedback:**")
+                                        for key, value in model_output["Model Feedback"].items():
+                                            st.markdown(f"- **{key}:** {value}")
+
+                                    st.write("**Full Model Output**:")
+                                    st.write(response_content)
 
         else:
             st.error("Search halted: Invalid search condition. Please ensure at least one search method is selected.")

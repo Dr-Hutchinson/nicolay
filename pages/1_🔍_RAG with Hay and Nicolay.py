@@ -415,10 +415,6 @@ with st.form("Search Interface"):
                                     st.markdown("**Keyword Counts:**")
                                     st.json(result['keyword_counts'])
 
-                        # Display "How Does This Work?" expander
-                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                            st.write(keyword_search_explainer)
-
                         # Display "Keyword Search Metadata" expander
                         with st.expander("**Keyword Search Metadata**"):
                             st.write("**Keyword Search Metadata**")

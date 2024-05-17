@@ -386,12 +386,6 @@ with st.form("Search Interface"):
                             top_n_results=5  # You can adjust the number of results
                             )
 
-                        #st.markdown("### Keyword Search Results")
-
-                        # Display "How Does This Work?" expander
-                        with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                            st.write(keyword_search_explainer)
-
                         # Check if keyword search results are empty
                         if not search_results:
 

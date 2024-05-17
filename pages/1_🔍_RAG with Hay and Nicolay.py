@@ -87,7 +87,6 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
         keyword_results_logger.record_api_outputs(record)
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches):
-    st.write("Columns in semantic_matches:", semantic_matches.columns)
     now = dt.now()  # Current timestamp
 
     for idx, row in semantic_matches.iterrows():
@@ -899,17 +898,25 @@ with st.form("Search Interface"):
                                     for reference in final_answer["References"]:
                                         st.markdown(f"{reference}")
 
-                            highlight_style = """
-                                <style>
-                                mark {
-                                    background-color: #90ee90;
-                                    color: black;
-                                }
-                                </style>
-                                """
-
                             doc_match_counter = 0
                             highlight_success_dict = {}
+
+                            with st.expander("**Response**", expanded=True):
+                                final_answer = model_output.get("FinalAnswer", {})
+                                st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
+                                if final_answer.get("References"):
+                                    st.markdown("**References:**")
+                                    for reference in final_answer["References"]:
+                                        st.markdown(f"{reference}")
+
+                            highlight_style = """
+                            <style>
+                            mark {
+                                background-color: #90ee90;
+                                color: black;
+                            }
+                            </style>
+                            """
 
                             if "Match Analysis" in model_output:
                                 st.markdown(highlight_style, unsafe_allow_html=True)
@@ -917,24 +924,14 @@ with st.form("Search Interface"):
                                     text_id = match_info.get("Text ID")
                                     formatted_text_id = f"Text #: {text_id}"
                                     key_quote = match_info.get("Key Quote", "")
+
                                     speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+
                                     # Increment the counter for each match
                                     doc_match_counter += 1
-                                    #if speech:
-                                        # Use the doc_match_counter in the expander label
-                                    #    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                    #    with st.expander(expander_label, expanded=False):
-                                    #        st.markdown(f"**Source:** {speech['source']}")
-                                    #        st.markdown(f"**Text ID:** {speech['text_id']}")
-                                    #        st.markdown(f"**Summary:**\n{speech['summary']}")
-                                            # Handling escaped line breaks and highlighting the key quote
-                                    #        formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
-                                    #        st.markdown(f"**Key Quote:**\n{key_quote}")
-                                    #        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                                    #        st.markdown(formatted_full_text, unsafe_allow_html=True)
-                                    #else:
-                                    #    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                    #        st.markdown("Full text not found.")
+
+                                    # Initialize highlight_success for each iteration
+                                    highlight_success = False  # Flag to track highlighting success
 
                                     if speech:
                                         # Use the doc_match_counter in the expander label
@@ -943,13 +940,21 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Source:** {speech['source']}")
                                             st.markdown(f"**Text ID:** {speech['text_id']}")
                                             st.markdown(f"**Summary:**\n{speech['summary']}")
+
+                                            # Replace line breaks for HTML display
+                                            formatted_full_text = speech['full_text'].replace("\\n", "<br>")
+
                                             # Attempt direct highlighting
                                             if key_quote in speech['full_text']:
-                                                formatted_full_text = speech['full_text'].replace("\\n", "<br>").replace(key_quote, f"<mark>{key_quote}</mark>")
+                                                formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
+                                                highlight_success = True
                                             else:
                                                 # If direct highlighting fails, use regex-based approach
                                                 formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
                                                 formatted_full_text = formatted_full_text.replace("\\n", "<br>")
+                                                # Check if highlighting was successful with regex approach
+                                                highlight_success = key_quote in formatted_full_text
+
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
                                             st.markdown(formatted_full_text, unsafe_allow_html=True)
@@ -959,7 +964,6 @@ with st.form("Search Interface"):
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")
-
                                             highlight_success_dict[match_key] = False  # Indicate failure as text not found
 
                             # Displaying the Analysis Metadata
@@ -969,46 +973,38 @@ with st.form("Search Interface"):
                                     st.markdown("**User Query Analysis:**")
                                     for key, value in model_output["User Query Analysis"].items():
                                         st.markdown(f"- **{key}:** {value}")
+
                                 # Displaying Initial Answer Review
                                 if "Initial Answer Review" in model_output:
                                     st.markdown("**Initial Answer Review:**")
                                     for key, value in model_output["Initial Answer Review"].items():
                                         st.markdown(f"- **{key}:** {value}")
-                                # Displaying Match Analysis
-                                #if "Match Analysis" in model_output:
-                                #    st.markdown("**Match Analysis:**")
-                                #    for match_key, match_info in model_output["Match Analysis"].items():
-                                #        st.markdown(f"- **{match_key}:**")
-                                #        for key, value in match_info.items():
-                                #            st.markdown(f"  - {key}: {value}")
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
-                                # Displaying Match Analysis
+
                                 # Displaying Match Analysis
                                 if "Match Analysis" in model_output:
-                                    st.markdown("**Match Analysis:**", unsafe_allow_html=True)
+                                    st.markdown("**Match Analysis:**")
                                     for match_key, match_info in model_output["Match Analysis"].items():
-                                        st.markdown(f"- **{match_key}:**", unsafe_allow_html=True)
+                                        st.markdown(f"- **{match_key}:**")
                                         for key, value in match_info.items():
-                                            if isinstance(value, dict):
-                                                nested_items_html = "<br>".join([f"&emsp;&emsp;<b>{sub_key}:</b> {sub_value}" for sub_key, sub_value in value.items()])
-                                                st.markdown(f"&emsp;<b>{key}:</b><br>{nested_items_html}<br>", unsafe_allow_html=True)
-                                            else:
-                                                st.markdown(f"&emsp;<b>{key}:</b> {value}<br>", unsafe_allow_html=True)
+                                            st.markdown(f"  - {key}: {value}")
+
                                 # Displaying Meta Analysis
                                 if "Meta Analysis" in model_output:
                                     st.markdown("**Meta Analysis:**")
                                     for key, value in model_output["Meta Analysis"].items():
                                         st.markdown(f"- **{key}:** {value}")
+
                                 # Displaying Model Feedback
                                 if "Model Feedback" in model_output:
                                     st.markdown("**Model Feedback:**")
                                     for key, value in model_output["Model Feedback"].items():
                                         st.markdown(f"- **{key}:** {value}")
-                                st.write("**Full Model Output**:")
+
+                                st.write("**Full Model Output:**")
                                 st.write(response_content)
 
+                            # Ensure the function call includes the initialized variable
                             log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict)
+
         else:
             st.error("Search halted: Invalid search condition. Please ensure at least one search method is selected.")

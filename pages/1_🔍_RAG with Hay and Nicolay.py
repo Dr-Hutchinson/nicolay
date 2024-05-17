@@ -410,6 +410,10 @@ with st.form("Search Interface"):
                             st.markdown("### Keyword Search Results")
                             # (Existing code for displaying keyword search results)
 
+                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                                st.write(keyword_search_explainer)
+
+
                             for idx, result in enumerate(search_results, start=1):
                                 expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
                                 with st.expander(expander_label):

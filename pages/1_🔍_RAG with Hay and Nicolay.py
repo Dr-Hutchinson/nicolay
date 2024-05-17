@@ -909,6 +909,7 @@ with st.form("Search Interface"):
                                 """
 
                             doc_match_counter = 0
+                            highlight_success_dict = {}
 
                             if "Match Analysis" in model_output:
                                 st.markdown(highlight_style, unsafe_allow_html=True)
@@ -952,9 +953,14 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
                                             st.markdown(formatted_full_text, unsafe_allow_html=True)
+
+                                            # Update highlight_success_dict for the current match
+                                            highlight_success_dict[match_key] = highlight_success
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")
+
+                                            highlight_success_dict[match_key] = False  # Indicate failure as text not found
 
                             # Displaying the Analysis Metadata
                             with st.expander("**Analysis Metadata**"):

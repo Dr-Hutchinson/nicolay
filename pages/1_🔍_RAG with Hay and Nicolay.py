@@ -88,7 +88,7 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches):
     st.write("Columns in semantic_matches:", semantic_matches.columns)
-    ow = dt.now()  # Current timestamp
+    now = dt.now()  # Current timestamp
 
     for idx, row in semantic_matches.iterrows():
         record = {

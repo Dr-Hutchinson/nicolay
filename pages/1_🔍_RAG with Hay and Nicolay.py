@@ -87,13 +87,13 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
         keyword_results_logger.record_api_outputs(record)
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches):
-    now = dt.now()  # Current timestamp
+    st.write("Columns in semantic_matches:", semantic_matches.columns)
+    ow = dt.now()  # Current timestamp
 
     for idx, row in semantic_matches.iterrows():
         record = {
             'Timestamp': now,
-            #'UserQuery': row['UserQuery'],
-            'UserQuery': user_query,
+            'UserQuery': row['UserQuery'],
             'HyDE_Query': initial_answer,
             'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
             'SimilarityScore': row['similarities'],

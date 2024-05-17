@@ -92,7 +92,8 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches):
     for idx, row in semantic_matches.iterrows():
         record = {
             'Timestamp': now,
-            'UserQuery': row['UserQuery'],
+            #'UserQuery': row['UserQuery'],
+            'UserQuery': user_query,
             'HyDE_Query': initial_answer,
             'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
             'SimilarityScore': row['similarities'],

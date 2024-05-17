@@ -901,14 +901,6 @@ with st.form("Search Interface"):
                             doc_match_counter = 0
                             highlight_success_dict = {}
 
-                            with st.expander("**Response**", expanded=True):
-                                final_answer = model_output.get("FinalAnswer", {})
-                                st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
-                                if final_answer.get("References"):
-                                    st.markdown("**References:**")
-                                    for reference in final_answer["References"]:
-                                        st.markdown(f"{reference}")
-
                             highlight_style = """
                             <style>
                             mark {

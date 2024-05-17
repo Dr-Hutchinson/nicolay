@@ -632,6 +632,8 @@ with st.form("Search Interface"):
                         # After performing the initial semantic search
                         my_bar.progress(50, text=progress_text)  # Update to 50% after initial search
 
+                        top_segments = []  # List to store top segments for each match
+
                         # Loop for top semantic matches
                         for idx, row in semantic_matches.iterrows():
                             # Update progress bar based on the index
@@ -655,11 +657,14 @@ with st.form("Search Interface"):
                                 #segment_scores = compare_segments_with_query(segments, user_query_embedding)
                                 segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
                                 top_segment = max(segment_scores, key=lambda x: x[1])
+                                top_segments.append(top_segment[0])  # Store top segment for logging
                                 st.markdown(f"**Key Quote:** {top_segment[0]}")
                                 st.markdown(f"**Similarity Score:** {top_segment[1]:.2f}")
 
                             # Increment the match counter
                             match_counter += 1
+
+                        semantic_matches["TopSegment"] = top_segments  # Add TopSegment column to semantic_matches DataFrame
 
                         my_bar.progress(100, text="Semantic search completed.")
                         time.sleep(1)

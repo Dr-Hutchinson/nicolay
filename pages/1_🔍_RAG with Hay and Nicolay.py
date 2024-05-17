@@ -385,6 +385,7 @@ with st.form("Search Interface"):
                 user_query_embedding = get_embedding(user_query)
                 df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
                 top_n = df.sort_values("similarities", ascending=False).head(n)
+                top_n["UserQuery"] = user_query  # Add 'UserQuery' column to the DataFrame
                 return top_n, user_query_embedding
 
             def segment_text(text, segment_size=100):

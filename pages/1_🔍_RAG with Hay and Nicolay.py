@@ -488,7 +488,7 @@ with st.form("Search Interface"):
                 )
 
                 msg = response.choices[0].message.content
-                record_api_outputs()
+                #record_api_outputs()
 
                 # Parse the response to extract generated keywords
                 api_response_data = json.loads(msg)
@@ -496,6 +496,17 @@ with st.form("Search Interface"):
                 model_weighted_keywords = api_response_data['weighted_keywords']
                 model_year_keywords = api_response_data['year_keywords']
                 model_text_keywords = api_response_data['text_keywords']
+
+                hays_data = {
+                    'query': user_query,
+                    'initial_answer': initial_answer,
+                    'weighted_keywords': model_weighted_keywords,
+                    'year_keywords': model_year_keywords,
+                    'text_keywords': model_text_keywords,
+                    'full_output': msg
+                }
+
+                hays_data_logger.record_api_outputs(hays_data)
 
                 # Check if user provided any custom weighted keywords
                 if user_weighted_keywords:
@@ -581,6 +592,9 @@ with st.form("Search Interface"):
                             st.write("**Full Model Output**")
                             st.write(msg)
 
+                            search_results_df = pd.DataFrame(search_results)
+                            log_keyword_search_results(keyword_results_logger, search_results_df, user_query)
+
                 # Display semantic search results in the second column
                 with col2:
                     if perform_semantic_search:
@@ -652,6 +666,8 @@ with st.form("Search Interface"):
                         with st.expander("**Semantic Search Metadata**"):
                             st.write("**Semantic Search Metadata**")
                             st.dataframe(semantic_matches)
+
+                        log_semantic_search_results(semantic_results_logger, semantic_matches)
 
                 # Reranking results with Cohere's Reranker API Endpoint
                 #if perform_reranking:
@@ -831,6 +847,8 @@ with st.form("Search Interface"):
                         st.write("**Formatted Results:**")
                         st.write(formatted_input_for_model)
 
+                    log_reranking_results(reranking_results_logger, reranked_df)
+
                     # API Call to the second GPT-3.5 model
                     if formatted_input_for_model:
                         # Construct the message for the model
@@ -977,5 +995,7 @@ with st.form("Search Interface"):
                                         st.markdown(f"- **{key}:** {value}")
                                 st.write("**Full Model Output**:")
                                 st.write(response_content)
+
+                            log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict)
         else:
             st.error("Search halted: Invalid search condition. Please ensure at least one search method is selected.")

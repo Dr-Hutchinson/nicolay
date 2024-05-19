@@ -320,6 +320,12 @@ with st.form("Search Interface"):
                             combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
                             all_combined_data.append(combined_data)
 
+                      # Debug prints
+                    st.write("Deduplicated Results:")
+                    st.dataframe(deduplicated_results)
+                    st.write("All Combined Data:")
+                    st.write(all_combined_data)
+
                     if all_combined_data:
                         st.markdown("### Ranked Search Results")
                         try:
@@ -334,32 +340,31 @@ with st.form("Search Interface"):
                             full_reranked_results = []
                             for idx, result in enumerate(reranked_response):
                                 combined_data = result.document
-                                if isinstance(combined_data, str):  # Check if combined_data is a string
-                                    data_parts = combined_data.split("|")
-                                    if len(data_parts) >= 4:
-                                        search_type, text_id_part, summary, quote = data_parts
-                                        text_id = str(text_id_part.split(":")[-1].strip())
-                                        summary = summary.strip()
-                                        quote = quote.strip()
-                                        text_id_str = f"Text #: {text_id}"
-                                        source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-                                        full_reranked_results.append({
-                                            'Rank': idx + 1,
-                                            'Search Type': search_type,
-                                            'Text ID': text_id,
-                                            'Source': source,
-                                            'Summary': summary,
-                                            'Key Quote': quote,
-                                            'Relevance Score': result.relevance_score
-                                        })
-                                        if idx < 3:
-                                            expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
-                                            with st.expander(expander_label):
-                                                st.markdown(f"Text ID: {text_id}")
-                                                st.markdown(f"{source}")
-                                                st.markdown(f"{summary}")
-                                                st.markdown(f"Key Quote:\n{quote}")
-                                                st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
+                                data_parts = combined_data.split("|")
+                                if len(data_parts) >= 4:
+                                    search_type, text_id_part, summary, quote = data_parts
+                                    text_id = str(text_id_part.split(":")[-1].strip())
+                                    summary = summary.strip()
+                                    quote = quote.strip()
+                                    text_id_str = f"Text #: {text_id}"
+                                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
+                                    full_reranked_results.append({
+                                        'Rank': idx + 1,
+                                        'Search Type': search_type,
+                                        'Text ID': text_id,
+                                        'Source': source,
+                                        'Summary': summary,
+                                        'Key Quote': quote,
+                                        'Relevance Score': result.relevance_score
+                                    })
+                                    if idx < 3:
+                                        expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
+                                        with st.expander(expander_label):
+                                            st.markdown(f"Text ID: {text_id}")
+                                            st.markdown(f"{source}")
+                                            st.markdown(f"{summary}")
+                                            st.markdown(f"Key Quote:\n{quote}")
+                                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))
 

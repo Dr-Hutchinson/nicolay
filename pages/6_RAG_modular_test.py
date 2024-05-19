@@ -16,7 +16,7 @@ from google.oauth2 import service_account
 
 # Importing custom helper modules
 from modules.prompt_loader import load_prompts
-from modules.keyword_search import keyword_search
+from modules.keyword_search import load_json, keyword_search
 from modules.semantic_search import semantic_search, search_text, get_embedding, segment_text, compare_segments_with_query_parallel
 from modules.reranking import rerank_results, format_reranked_results_for_model_input
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output

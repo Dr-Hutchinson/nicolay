@@ -9,7 +9,8 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
-from openai import OpenAI
+#from openai import OpenAI
+import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
@@ -30,8 +31,11 @@ st.set_page_config(
     page_icon='🔍'
 )
 
+#os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+#client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
 co = cohere.Client(api_key=os.environ["CO_API_KEY"])

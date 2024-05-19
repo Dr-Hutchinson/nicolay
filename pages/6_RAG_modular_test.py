@@ -136,7 +136,17 @@ with st.form("Search Interface"):
                     {"role": "user", "content": user_query}
                 ]
 
-                response = client.chat_completions.create(
+                #response = client.chat_completions.create(
+                #    model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
+                #    messages=messages_for_model,
+                #    temperature=0,
+                #    max_tokens=500,
+                #    top_p=1,
+                #    frequency_penalty=0,
+                #    presence_penalty=0
+                #)
+
+                response = openai.ChatCompletion.create(
                     model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                     messages=messages_for_model,
                     temperature=0,
@@ -145,6 +155,7 @@ with st.form("Search Interface"):
                     frequency_penalty=0,
                     presence_penalty=0
                 )
+
 
                 msg = response.choices[0].message.content
 

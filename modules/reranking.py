@@ -1,4 +1,5 @@
 import cohere
+import streamlit as st
 
 def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n=10):
     """

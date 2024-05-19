@@ -136,7 +136,7 @@ with st.form("Search Interface"):
                     {"role": "user", "content": user_query}
                 ]
 
-                response = client.chat_completions.create(
+                response = client.chat.completions.create(
                     model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                     messages=messages_for_model,
                     temperature=0,

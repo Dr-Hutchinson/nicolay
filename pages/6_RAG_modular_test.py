@@ -372,8 +372,8 @@ with st.form("Search Interface"):
                     if all_combined_data:
                         st.markdown("### Ranked Search Results")
                         try:
-                            # Ensure documents are correctly formatted as strings
-                            formatted_documents = [str(doc) for doc in all_combined_data]
+                            # Ensure documents are correctly formatted as strings without special characters
+                            formatted_documents = [str(doc).replace("\n", " ").replace("\r", " ") for doc in all_combined_data]
                             st.write("Formatted Documents for Cohere:", formatted_documents)
 
                             reranked_response = rerank_results(
@@ -426,6 +426,7 @@ with st.form("Search Interface"):
                     else:
                         formatted_input_for_model = ""
                         st.error("No reranked results to format.")
+
 
                     formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
 

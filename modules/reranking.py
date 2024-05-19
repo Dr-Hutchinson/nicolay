@@ -15,20 +15,40 @@ def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n
     Returns:
     list: Reranked results.
     """
+    #co = cohere.Client(api_key)
+    #st.write("Documents sent to Cohere for reranking:")
+    #st.write(documents)  # Debug print to check documents
+    #reranked_response = co.rerank(
+    #    model=model,
+    #    query=query,
+    #    documents=documents,
+    #    top_n=top_n
+    #)
+    #st.write("Reranked response from Cohere:")  # Debug print for the response
+    #st.write(reranked_response)
+    #print("Reranked response from Cohere:")  # Debug print for the response
+    #print(reranked_response)
+    #return reranked_response.results
+    def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n=10):
     co = cohere.Client(api_key)
     st.write("Documents sent to Cohere for reranking:")
     st.write(documents)  # Debug print to check documents
-    reranked_response = co.rerank(
-        model=model,
-        query=query,
-        documents=documents,
-        top_n=top_n
-    )
-    st.write("Reranked response from Cohere:")  # Debug print for the response
-    st.write(reranked_response)
-    #print("Reranked response from Cohere:")  # Debug print for the response
-    #print(reranked_response)
-    return reranked_response.results
+    try:
+        reranked_response = co.rerank(
+            model=model,
+            query=query,
+            documents=documents,
+            top_n=top_n
+        )
+        st.write("Reranked response from Cohere:")  # Debug print for the response
+        st.write(reranked_response)
+        return reranked_response.results
+    except Exception as e:
+        st.error(f"Error in reranking: {str(e)}")
+        return []
+
+
+
 
 def format_reranked_results_for_model_input(reranked_results):
     """

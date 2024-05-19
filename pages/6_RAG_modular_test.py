@@ -9,8 +9,8 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
-#from openai import OpenAI
-import openai
+from openai import OpenAI
+#import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
@@ -31,11 +31,11 @@ st.set_page_config(
     page_icon='🔍'
 )
 
-#os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-#client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-openai.api_key = os.environ["OPENAI_API_KEY"]
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+#os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+#openai.api_key = os.environ["OPENAI_API_KEY"]
 
 os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
 co = cohere.Client(api_key=os.environ["CO_API_KEY"])
@@ -136,17 +136,7 @@ with st.form("Search Interface"):
                     {"role": "user", "content": user_query}
                 ]
 
-                #response = client.chat_completions.create(
-                #    model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
-                #    messages=messages_for_model,
-                #    temperature=0,
-                #    max_tokens=500,
-                #    top_p=1,
-                #    frequency_penalty=0,
-                #    presence_penalty=0
-                #)
-
-                response = openai.ChatCompletion.create(
+                response = client.chat_completions.create(
                     model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                     messages=messages_for_model,
                     temperature=0,
@@ -155,7 +145,6 @@ with st.form("Search Interface"):
                     frequency_penalty=0,
                     presence_penalty=0
                 )
-
 
                 msg = response.choices[0].message.content
 

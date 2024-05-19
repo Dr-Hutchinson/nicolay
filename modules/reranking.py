@@ -29,24 +29,28 @@ def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n
     #print("Reranked response from Cohere:")  # Debug print for the response
     #print(reranked_response)
     #return reranked_response.results
-    def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n=10):
-        co = cohere.Client(api_key)
-        st.write("Documents sent to Cohere for reranking:")
-        st.write(documents)  # Debug print to check documents
-        try:
-            reranked_response = co.rerank(
-                model=model,
-                query=query,
-                documents=documents,
-                top_n=top_n
-            )
-            st.write("Reranked response from Cohere:")  # Debug print for the response
-            st.write(reranked_response)
-            return reranked_response.results
-        except Exception as e:
-            st.error(f"Error in reranking: {str(e)}")
+    co = cohere.Client(api_key)
+    st.write("Documents sent to Cohere for reranking:")
+    st.write(documents)  # Debug print to check documents
+    try:
+        reranked_response = co.rerank(
+            model=model,
+            query=query,
+            documents=documents,
+            top_n=top_n
+        )
+        st.write("Reranked response from Cohere:")  # Debug print for the response
+        st.write(reranked_response)
+        if reranked_response is None or reranked_response.results is None:
+            st.error("Reranking response or results are None.")
             return []
-
+        return reranked_response.results
+    except cohere.CohereAPIError as e:
+        st.error(f"Cohere API error: {e}")
+        return []
+    except Exception as e:
+        st.error(f"Error in reranking: {str(e)}")
+        return []
 
 
 

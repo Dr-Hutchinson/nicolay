@@ -29,7 +29,7 @@ gc = pygsheets.authorize(custom_credentials=credentials)
 #gcp_service_account = secrets['gcp_service_account']
 
 # Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key)
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
 
 # Streamlit Chatbot Interface
 st.title("Abraham Lincoln Speeches Chatbot")

@@ -127,7 +127,7 @@ class RAGProcess:
     def rerank_results(self, user_query, combined_data):
         try:
             # Debugging statement to ensure combined_data is a list of strings
-            st.write("Reranking input combined_data:", combined_data)
+            #st.write("Reranking input combined_data:", combined_data)
 
             # Ensure combined_data is a list of strings
             combined_data_strs = [cd if isinstance(cd, str) else cd['text'] for cd in combined_data]
@@ -141,11 +141,11 @@ class RAGProcess:
 
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
-                st.write(f"Reranked result {idx}: {result}")
+                #st.write(f"Reranked result {idx}: {result}")
                 combined_data_text = result.document['text'] if isinstance(result.document, dict) and 'text' in result.document else result.document  # Access the document attribute directly
-                st.write(f"Combined data {idx}: {combined_data_text}")
+                #st.write(f"Combined data {idx}: {combined_data_text}")
                 data_parts = combined_data_text.split("|")
-                st.write(f"Data parts {idx}: {data_parts}")
+                #st.write(f"Data parts {idx}: {data_parts}")
                 if len(data_parts) >= 4:
                     search_type = data_parts[0].strip()
                     text_id_part = data_parts[1].strip()
@@ -282,7 +282,7 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
-            st.write("Reranking input combined_data:", all_combined_data)
+            #st.write("Reranking input combined_data:", all_combined_data)
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)

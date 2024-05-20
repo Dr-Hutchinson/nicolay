@@ -15,11 +15,14 @@ openai_api_key = st.secrets["openai_api_key"]
 
 os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
 co = cohere.Client()
+cohere_api_key = st.secrets["cohere_api_key"]
 
 scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
 credentials = service_account.Credentials.from_service_account_info(
                     st.secrets["gcp_service_account"], scopes = scope)
+gcp_service_account = credentials
+
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 

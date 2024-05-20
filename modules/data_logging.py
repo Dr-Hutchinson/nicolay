@@ -79,52 +79,72 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
         raise ValueError("reranked_df should be a DataFrame")
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict):
-    final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
-    references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
+    """
+    Logs the final model output from Nicolay to Google Sheets.
+    """
+    try:
+        # If model_output is a string, we should handle it correctly
+        if isinstance(model_output, str):
+            model_output = json.loads(model_output)
 
-    query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
-    historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
+        # Extract key information from model output
+        final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
+        references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
 
-    answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
-    quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
+        # User query analysis
+        query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
+        historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
 
-    response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
-    suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
+        # Initial answer review
+        answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
+        quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
 
-    match_analysis = model_output.get("Match Analysis", {})
-    match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
-    match_data = {}
+        # Response effectiveness and suggestions
+        response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
+        suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
 
-    for match_key, match_details in match_analysis.items():
-        match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
-        match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
+        # Match analysis - concatenating details of each match into single strings
+        match_analysis = model_output.get("Match Analysis", {})
+        match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
+        match_data = {}
 
-        if speech:
-            highlight_success_dict[match_key] = highlight_success
-        else:
-            highlight_success_dict[match_key] = False
+        for match_key, match_details in match_analysis.items():
+            match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
+            match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
 
-    meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
-    meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
+            if 'speech' in match_details:
+                highlight_success_dict[match_key] = match_details['speech']
+            else:
+                highlight_success_dict[match_key] = False
 
-    record = {
-        'Timestamp': dt.now(),
-        'UserQuery': user_query,
-        'initial_Answer': initial_answer,
-        'FinalAnswer': final_answer_text,
-        'References': references,
-        'QueryIntent': query_intent,
-        'HistoricalContext': historical_context,
-        'AnswerEvaluation': answer_evaluation,
-        'QuoteIntegration': quote_integration,
-        **match_data,  # Unpack match data into the record
-        'MetaStrategy': str(meta_strategy),  # Convert dictionary to string if needed
-        'MetaSynthesis': meta_synthesis,
-        'ResponseEffectiveness': response_effectiveness,
-        'Suggestions': suggestions_for_improvement
-    }
+        # Meta analysis
+        meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
+        meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
 
-    for match_key, success in highlight_success_dict.items():
-        record[f'{match_key}_HighlightSuccess'] = success
+        # Construct a record for logging
+        record = {
+            'Timestamp': dt.now(),
+            'UserQuery': user_query,
+            'initial_Answer': initial_answer,
+            'FinalAnswer': final_answer_text,
+            'References': references,
+            'QueryIntent': query_intent,
+            'HistoricalContext': historical_context,
+            'AnswerEvaluation': answer_evaluation,
+            'QuoteIntegration': quote_integration,
+            **match_data,  # Unpack match data into the record
+            'MetaStrategy': str(meta_strategy),  # Convert dictionary to string if needed
+            'MetaSynthesis': meta_synthesis,
+            'ResponseEffectiveness': response_effectiveness,
+            'Suggestions': suggestions_for_improvement
+        }
 
-    nicolay_data_logger.record_api_outputs(record)
+        # Add highlight success information for each match
+        for match_key, success in highlight_success_dict.items():
+            record[f'{match_key}_HighlightSuccess'] = success
+
+        # Log the record
+        nicolay_data_logger.record_api_outputs(record)
+
+    except Exception as e:
+        st.error(f"Error in logging Nicolay model output: {e}")

@@ -136,7 +136,7 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                 st.write(f"Reranked result {idx}: {result}")
-                combined_data = result.document
+                combined_data = result.document['text']  # Access the 'text' field from the dictionary
                 st.write(f"Combined data {idx}: {combined_data}")
                 data_parts = combined_data.split("|")
                 st.write(f"Data parts {idx}: {data_parts}")
@@ -163,6 +163,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):

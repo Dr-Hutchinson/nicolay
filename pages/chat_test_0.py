@@ -1,5 +1,3 @@
-# chatbot.py
-
 import streamlit as st
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
@@ -12,11 +10,9 @@ from google.oauth2 import service_account
 
 # Set environment variables and initialize API clients
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-client = OpenAI()
 openai_api_key = st.secrets["openai_api_key"]
 
 os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
-co = cohere.Client()
 cohere_api_key = st.secrets["cohere_api_key"]
 
 # Extract Google Cloud service account details
@@ -27,14 +23,15 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
 gc = pygsheets.authorize(custom_credentials=credentials)
 
+# Initialize the RAG Process
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
+
+# Initialize DataLoggers
 hays_data_logger = DataLogger(gc, 'hays_data')
 keyword_results_logger = DataLogger(gc, 'keyword_search_results')
 semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
-
-# Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
 
 # Streamlit Chatbot Interface
 st.title("Abraham Lincoln Speeches Chatbot")
@@ -44,33 +41,32 @@ user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
 if st.button("Submit"):
     if user_query:
         st.write("Processing your query...")
-        response = rag.run_rag_process(user_query)
+        try:
+            results = rag.run_rag_process(user_query)
+            if results is None:
+                st.error("An error occurred during the RAG process.")
+            else:
+                # Unpack the results
+                response = results["response"]
+                search_results = results["search_results"]
+                semantic_matches = results["semantic_matches"]
+                reranked_results = results["reranked_results"]
+                initial_answer = results["initial_answer"]
+                model_weighted_keywords = results["model_weighted_keywords"]
+                model_year_keywords = results["model_year_keywords"]
+                model_text_keywords = results["model_text_keywords"]
+                highlight_success_dict = results["highlight_success_dict"]
+                model_output = results["model_output"]
 
-        # Unpack the results
-        response = results["response"]
-        search_results = results["search_results"]
-        semantic_matches = results["semantic_matches"]
-        reranked_results = results["reranked_results"]
-        initial_answer = results["initial_answer"]
-        model_weighted_keywords = results["model_weighted_keywords"]
-        model_year_keywords = results["model_year_keywords"]
-        model_text_keywords = results["model_text_keywords"]
-        highlight_success_dict = results["highlight_success_dict"]
-        model_output = results["model_output"]
+                # Log the different parts of the process
+                log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+                log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+                log_reranking_results(reranking_results_logger, reranked_results, user_query)
+                log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict)
 
-        # Log keyword search results
-        log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-
-        # Log semantic search results
-        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-
-        # Log reranking results
-        log_reranking_results(reranking_results_logger, reranked_results, user_query)
-
-        # Log final model output
-        log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict)
-
-        st.markdown("### Response")
-        st.write(response)
+                st.markdown("### Response")
+                st.write(response)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
     else:
         st.error("Please enter a query.")

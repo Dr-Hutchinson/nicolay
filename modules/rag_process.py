@@ -95,7 +95,7 @@ class RAGProcess:
                         end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
                         snippet = entry['full_text'][start_quote:end_quote]
                         instances.append({
-                            "text_id": entry['text_id'],  # Ensure 'text_id' is included
+                            "text_id": entry['text_id'],
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
                             "quote": snippet.replace('\n', ' '),
@@ -104,7 +104,6 @@ class RAGProcess:
                         })
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
-
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -123,9 +122,6 @@ class RAGProcess:
         combined_results = pd.concat([search_results, semantic_matches])
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         return deduplicated_results
-
-
-    # rag_process.py
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -162,24 +158,6 @@ class RAGProcess:
         except Exception as e:
             raise Exception("Error in reranking: " + str(e))
 
-        # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
-        all_combined_data = [
-            f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
-        ] + [
-            f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
-        ]
-
-        # Debug: st.write the first few entries of all_combined_data to check formatting
-        st.write("all_combined_data sample:", all_combined_data[:5])
-
-# Verify all entries in all_combined_data are strings
-for i, entry in enumerate(all_combined_data):
-    if not isinstance(entry, str):
-        raise ValueError(f"Entry at index {i} is not a string: {entry}")
-
-
-
-
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
             {"role": "system", "content": response_prompt},
@@ -202,6 +180,7 @@ for i, entry in enumerate(all_combined_data):
         df = pd.read_csv("lincoln_index_embedded.csv")
 
         lincoln_dict = {item['text_id']: item for item in lincoln_data}
+        self.lincoln_dict = lincoln_dict  # Ensure lincoln_dict is available in the instance
 
         df['full_text'] = df['combined'].apply(extract_full_text)
         df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
@@ -279,9 +258,6 @@ for i, entry in enumerate(all_combined_data):
         return final_model_response
 
 
-
-
-
 # Helper Functions
 
 def extract_full_text(record):
@@ -306,7 +282,6 @@ def format_reranked_results_for_model_input(reranked_results):
         formatted_entry = f"Match {result['Rank']}: Search Type - {result['Search Type']}, Text ID - {result['Text ID']}, Source - {result['Source']}, Summary - {result['Summary']}, Key Quote - {result['Key Quote']}, Relevance Score - {result['Relevance Score']:.2f}"
         formatted_results.append(formatted_entry)
     return "\n\n".join(formatted_results)
-
 
 def segment_text(text, segment_size=100):
     words = text.split()

@@ -10,6 +10,7 @@ import cohere
 import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
+import streamlit as st
 
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account):

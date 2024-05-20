@@ -54,7 +54,6 @@ class RAGProcess:
             top_n=top_n_results
         )
 
-
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
         if text_keywords:
@@ -218,6 +217,10 @@ class RAGProcess:
         st.write("search_results_df columns:", search_results_df.columns)
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
+
+        # Rename 'Unnamed: 0' to 'text_id' in semantic_matches
+        semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+
         top_segments = []
         for idx, row in semantic_matches.iterrows():
             segments = segment_text(row['full_text'])

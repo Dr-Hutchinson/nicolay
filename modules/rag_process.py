@@ -54,6 +54,7 @@ class RAGProcess:
             top_n=top_n_results
         )
 
+
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
         if text_keywords:
@@ -122,6 +123,7 @@ class RAGProcess:
         combined_results = pd.concat([search_results, semantic_matches])
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         return deduplicated_results
+
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -205,8 +207,11 @@ class RAGProcess:
             year_keywords=model_year_keywords,
             text_keywords=model_text_keywords,
             top_n_results=5,
-            lincoln_data=lincoln_data
+            lincoln_data=lincoln_data  # Pass lincoln_data here
         )
+
+        # Ensure search_results is a DataFrame
+        search_results_df = pd.DataFrame(search_results)
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
         top_segments = []
@@ -217,7 +222,7 @@ class RAGProcess:
             top_segments.append(top_segment[0])
         semantic_matches["TopSegment"] = top_segments
 
-        deduplicated_results = self.remove_duplicates(search_results, semantic_matches)
+        deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
         all_combined_data = [
             f"Keyword|Text ID: {result['text_id']}|{result['summary']}|{result['quote']}" for result in search_results
         ] + [
@@ -229,6 +234,7 @@ class RAGProcess:
         final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
         return final_model_response
+
 
 # Helper Functions
 

@@ -177,17 +177,23 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
+            # Load data
             lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
             keyword_data = self.load_json('data/voyant_word_counts.json')
             df = pd.read_csv("lincoln_index_embedded.csv")
 
+            # Convert JSON data to a dictionary with 'text_id' as the key for easy access
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict  # Ensure lincoln_dict is available in the instance
 
+            # Prepare DataFrame
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
+            st.write("Loaded and prepared data successfully.")
+
+            # Initial API call
             response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                 messages=[
@@ -200,12 +206,16 @@ class RAGProcess:
                 frequency_penalty=0,
                 presence_penalty=0
             )
+
             api_response_data = json.loads(response.choices[0].message.content)
             initial_answer = api_response_data['initial_answer']
             model_weighted_keywords = api_response_data['weighted_keywords']
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 
+            st.write("Received initial API response successfully.")
+
+            # Keyword search
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
                 json_data=keyword_data,
@@ -217,9 +227,10 @@ class RAGProcess:
 
             search_results_df = pd.DataFrame(search_results)
 
-            # Debug: st.write the columns of search_results_df
+            st.write("Performed keyword search successfully.")
             st.write("search_results_df columns:", search_results_df.columns)
 
+            # Semantic search
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
             # Rename 'Unnamed: 0' to 'text_id' in semantic_matches
@@ -233,9 +244,10 @@ class RAGProcess:
                 top_segments.append(top_segment[0])
             semantic_matches["TopSegment"] = top_segments
 
-            # Debug: st.write the columns of semantic_matches
+            st.write("Performed semantic search successfully.")
             st.write("semantic_matches columns:", semantic_matches.columns)
 
+            # Deduplicate results
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
@@ -245,7 +257,7 @@ class RAGProcess:
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
 
-            # Debug: st.write the first few entries of all_combined_data to check formatting
+            st.write("Combined search results successfully.")
             st.write("all_combined_data sample:", all_combined_data[:5])
 
             # Verify all entries in all_combined_data are strings
@@ -253,10 +265,17 @@ class RAGProcess:
                 if not isinstance(entry, str):
                     raise ValueError(f"Entry at index {i} is not a string: {entry}")
 
+            # Rerank results
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_df = pd.DataFrame(reranked_results)  # Convert reranked_results to DataFrame
             formatted_input_for_model = format_reranked_results_for_model_input(reranked_df)
+
+            st.write("Reranked results successfully.")
+
+            # Final model response
             final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
+
+            st.write("Generated final model response successfully.")
 
             return {
                 "response": final_model_response,
@@ -273,6 +292,7 @@ class RAGProcess:
         except Exception as e:
             st.error(f"Error in run_rag_process: {e}")
             return None
+
 
 
 

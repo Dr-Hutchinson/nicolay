@@ -11,6 +11,7 @@ from google.oauth2 import service_account
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()
+openai_api_key = st.secrets["openai_api_key"]
 
 os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
 co = cohere.Client()

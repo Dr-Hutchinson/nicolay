@@ -54,6 +54,7 @@ class RAGProcess:
             top_n=top_n_results
         )
 
+
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
         if text_keywords:
@@ -133,7 +134,7 @@ class RAGProcess:
             )
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
-                combined_data = result.document
+                combined_data = result.document['text']
                 data_parts = combined_data.split("|")
                 if len(data_parts) >= 4:
                     search_type, text_id_part, summary, quote = data_parts
@@ -257,7 +258,6 @@ class RAGProcess:
 
         return final_model_response
 
-
 # Helper Functions
 
 def extract_full_text(record):
@@ -299,7 +299,7 @@ def load_prompts():
         st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
     if 'response_model_system_prompt' not in st.session_state:
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
-    if 'app_into' not in st.session_state:
+    if 'app_intro' not in st.session_state:
         st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
     if 'keyword_search_explainer' not in st.session_state:
         st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')

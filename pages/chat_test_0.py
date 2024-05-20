@@ -21,8 +21,6 @@ scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
 credentials = service_account.Credentials.from_service_account_info(
                     st.secrets["gcp_service_account"], scopes = scope)
-gcp_service_account = credentials
-
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 
@@ -31,7 +29,7 @@ gc = pygsheets.authorize(custom_credentials=credentials)
 #gcp_service_account = secrets['gcp_service_account']
 
 # Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
+rag = RAGProcess(openai_api_key, cohere_api_key)
 
 # Streamlit Chatbot Interface
 st.title("Abraham Lincoln Speeches Chatbot")

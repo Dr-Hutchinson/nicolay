@@ -47,7 +47,7 @@ class RAGProcess:
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
-            original_weights=user_keywords,  # Using user-provided keywords as original weights for snippet centering
+            original_weights=user_keywords,
             data=lincoln_data,
             year_keywords=year_keywords,
             text_keywords=text_keywords,
@@ -96,7 +96,7 @@ class RAGProcess:
                         end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
                         snippet = entry['full_text'][start_quote:end_quote]
                         instances.append({
-                            "text_id": entry['text_id'],
+                            "text_id": entry['text_id'],  # Ensure 'text_id' is included
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
                             "quote": snippet.replace('\n', ' '),
@@ -105,6 +105,7 @@ class RAGProcess:
                         })
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -213,6 +214,9 @@ class RAGProcess:
 
         search_results_df = pd.DataFrame(search_results)
 
+        # Debug: Print the columns of search_results_df
+        st.write("search_results_df columns:", search_results_df.columns)
+
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
         top_segments = []
         for idx, row in semantic_matches.iterrows():
@@ -222,9 +226,11 @@ class RAGProcess:
             top_segments.append(top_segment[0])
         semantic_matches["TopSegment"] = top_segments
 
+        # Debug: Print the columns of semantic_matches
+        st.write("semantic_matches columns:", semantic_matches.columns)
+
         deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
-        # Ensure deduplicated_results is a list of dictionaries
         all_combined_data = [
             f"Keyword|Text ID: {result['text_id']}|{result['summary']}|{result['quote']}" for _, result in deduplicated_results.iterrows()
         ] + [

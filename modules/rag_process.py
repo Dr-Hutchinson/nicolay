@@ -134,15 +134,15 @@ class RAGProcess:
                 top_n=10
             )
             full_reranked_results = []
-            for idx, result in enumerate(reranked_response):
-                combined_data = result.document['text']
+            for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
+                combined_data = result.document
                 data_parts = combined_data.split("|")
                 if len(data_parts) >= 4:
                     search_type, text_id_part, summary, quote = data_parts
                     text_id = str(text_id_part.split(":")[-1].strip())
                     summary = summary.strip()
                     quote = quote.strip()
-                    source = lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
+                    source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
                     full_reranked_results.append({
                         'Rank': idx + 1,
                         'Search Type': search_type,
@@ -155,6 +155,7 @@ class RAGProcess:
             return full_reranked_results
         except Exception as e:
             raise Exception("Error in reranking: " + str(e))
+
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
@@ -207,10 +208,9 @@ class RAGProcess:
             year_keywords=model_year_keywords,
             text_keywords=model_text_keywords,
             top_n_results=5,
-            lincoln_data=lincoln_data  # Pass lincoln_data here
+            lincoln_data=lincoln_data
         )
 
-        # Ensure search_results is a DataFrame
         search_results_df = pd.DataFrame(search_results)
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
@@ -223,10 +223,12 @@ class RAGProcess:
         semantic_matches["TopSegment"] = top_segments
 
         deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+
+        # Ensure deduplicated_results is a list of dictionaries
         all_combined_data = [
-            f"Keyword|Text ID: {result['text_id']}|{result['summary']}|{result['quote']}" for result in search_results
+            f"Keyword|Text ID: {result['text_id']}|{result['summary']}|{result['quote']}" for _, result in deduplicated_results.iterrows()
         ] + [
-            f"Semantic|Text ID: {result['text_id']}|{result['summary']}|{result['TopSegment']}" for result in semantic_matches
+            f"Semantic|Text ID: {result['text_id']}|{result['summary']}|{result['TopSegment']}" for _, result in semantic_matches.iterrows()
         ]
 
         reranked_results = self.rerank_results(user_query, all_combined_data)
@@ -234,6 +236,7 @@ class RAGProcess:
         final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
         return final_model_response
+
 
 
 # Helper Functions
@@ -260,6 +263,7 @@ def format_reranked_results_for_model_input(reranked_results):
         formatted_entry = f"Match {result['Rank']}: Search Type - {result['Search Type']}, Text ID - {result['Text ID']}, Source - {result['Source']}, Summary - {result['Summary']}, Key Quote - {result['Key Quote']}, Relevance Score - {result['Relevance Score']:.2f}"
         formatted_results.append(formatted_entry)
     return "\n\n".join(formatted_results)
+
 
 def segment_text(text, segment_size=100):
     words = text.split()

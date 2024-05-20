@@ -174,9 +174,11 @@ class RAGProcess:
         keyword_data = self.load_json('data/voyant_word_counts.json')
         df = pd.read_csv("lincoln_index_embedded.csv")
 
+        lincoln_dict = {item['text_id']: item for item in lincoln_data}
+
         df['full_text'] = df['combined'].apply(extract_full_text)
         df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
-        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(get_source_and_summary))
+        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
         response = self.openai_client.chat.completions.create(
             model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
@@ -239,7 +241,7 @@ def extract_full_text(record):
     else:
         return ""
 
-def get_source_and_summary(text_id):
+def get_source_and_summary(text_id, lincoln_dict):
     text_id_str = f"Text #: {text_id}"
     return lincoln_dict.get(text_id_str, {}).get('source'), lincoln_dict.get(text_id_str, {}).get('summary')
 

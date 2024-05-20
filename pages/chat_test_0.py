@@ -4,9 +4,18 @@ import streamlit as st
 from modules.rag_process import RAGProcess
 import json
 
-# Load secrets from a JSON file or Streamlit secrets
-with open('secrets.json') as f:
-    secrets = json.load(f)
+os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+client = OpenAI()
+
+os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
+co = cohere.Client()
+
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
+
+gc = pygsheets.authorize(custom_credentials=credentials)
 
 openai_api_key = secrets['openai_api_key']
 cohere_api_key = secrets['cohere_api_key']

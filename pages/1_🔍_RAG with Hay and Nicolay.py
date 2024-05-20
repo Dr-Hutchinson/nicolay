@@ -34,9 +34,6 @@ credentials = service_account.Credentials.from_service_account_info(
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 
-api_sheet = gc.open('api_outputs')
-api_outputs = api_sheet.sheet1
-
 class DataLogger:
     def __init__(self, gc, sheet_name):
         self.gc = gc

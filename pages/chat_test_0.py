@@ -22,9 +22,9 @@ credentials = service_account.Credentials.from_service_account_info(
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 
-openai_api_key = secrets['openai_api_key']
-cohere_api_key = secrets['cohere_api_key']
-gcp_service_account = secrets['gcp_service_account']
+#openai_api_key = secrets['openai_api_key']
+#cohere_api_key = secrets['cohere_api_key']
+#gcp_service_account = secrets['gcp_service_account']
 
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)

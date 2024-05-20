@@ -214,8 +214,8 @@ class RAGProcess:
 
         search_results_df = pd.DataFrame(search_results)
 
-        # Debug: Print the columns of search_results_df
-        print("search_results_df columns:", search_results_df.columns)
+        # Debug: st.write the columns of search_results_df
+        st.write("search_results_df columns:", search_results_df.columns)
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
@@ -230,8 +230,8 @@ class RAGProcess:
             top_segments.append(top_segment[0])
         semantic_matches["TopSegment"] = top_segments
 
-        # Debug: Print the columns of semantic_matches
-        print("semantic_matches columns:", semantic_matches.columns)
+        # Debug: st.write the columns of semantic_matches
+        st.write("semantic_matches columns:", semantic_matches.columns)
 
         deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
@@ -242,8 +242,8 @@ class RAGProcess:
             f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
         ]
 
-        # Debug: Print the first few entries of all_combined_data to check formatting
-        print("all_combined_data sample:", all_combined_data[:5])
+        # Debug: st.write the first few entries of all_combined_data to check formatting
+        st.write("all_combined_data sample:", all_combined_data[:5])
 
         # Verify all entries in all_combined_data are strings
         for i, entry in enumerate(all_combined_data):

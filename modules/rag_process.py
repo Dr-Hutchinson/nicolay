@@ -13,7 +13,7 @@ import pygsheets
 import streamlit as st
 
 class RAGProcess:
-    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account):
+    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
         # Initialize OpenAI and Cohere clients
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.cohere_client = cohere.Client(api_key=cohere_api_key)
@@ -22,6 +22,9 @@ class RAGProcess:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
         self.gc = pygsheets.authorize(custom_credentials=credentials)
+
+        # Store the hays_data_logger
+        self.hays_data_logger = hays_data_logger
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:
@@ -188,11 +191,6 @@ class RAGProcess:
             raise Exception("Error in reranking: " + str(e))
 
 
-
-
-
-
-
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
             {"role": "system", "content": response_prompt},
@@ -252,7 +250,7 @@ class RAGProcess:
                 'full_output': response.choices[0].message.content
             }
 
-            hays_data_logger.record_api_outputs(hays_data)
+            self.hays_data_logger.record_api_outputs(hays_data)
 
             st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 

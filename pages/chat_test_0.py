@@ -26,10 +26,10 @@ credentials = service_account.Credentials.from_service_account_info(gcp_service_
 gc = pygsheets.authorize(custom_credentials=credentials)
 
 # Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
+hays_data_logger = DataLogger(gc, 'hays_data')
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
 # Initialize DataLogger objects for each type of data to log
-hays_data_logger = DataLogger(gc, 'hays_data')
 keyword_results_logger = DataLogger(gc, 'keyword_search_results')
 semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')

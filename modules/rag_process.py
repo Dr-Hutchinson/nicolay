@@ -136,49 +136,46 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                 st.write(f"Reranked result {idx}: {result}")
-                if isinstance(result, dict) and 'text' in result.document:
-                    combined_data_text = result.document['text']  # Access the 'text' field from the dictionary
-                    st.write(f"Combined data {idx}: {combined_data_text}")
-                    data_parts = combined_data_text.split("|")
-                    st.write(f"Data parts {idx}: {data_parts}")
-                    if len(data_parts) >= 4:
-                        search_type = data_parts[0].strip()
-                        text_id_part = data_parts[1].strip()
-                        summary = data_parts[2].strip()
-                        quote = data_parts[3].strip()
+                combined_data_text = result.document  # Access the document attribute directly
+                st.write(f"Combined data {idx}: {combined_data_text}")
+                data_parts = combined_data_text.split("|")
+                st.write(f"Data parts {idx}: {data_parts}")
+                if len(data_parts) >= 4:
+                    search_type = data_parts[0].strip()
+                    text_id_part = data_parts[1].strip()
+                    summary = data_parts[2].strip()
+                    quote = data_parts[3].strip()
 
-                        # Debugging to ensure each part is correct
-                        st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
+                    # Debugging to ensure each part is correct
+                    st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
 
-                        # Extract and clean text_id
-                        text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
-                        st.write(f"Extracted text_id: {text_id}")
+                    # Extract and clean text_id
+                    text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
+                    st.write(f"Extracted text_id: {text_id}")
 
-                        # Extract and clean summary
-                        summary = summary.replace("Summary:", "").strip()
-                        st.write(f"Cleaned summary: {summary}")
+                    # Extract and clean summary
+                    summary = summary.replace("Summary:", "").strip()
+                    st.write(f"Cleaned summary: {summary}")
 
-                        # Clean quote
-                        quote = quote.strip()
-                        st.write(f"Cleaned quote: {quote}")
+                    # Clean quote
+                    quote = quote.strip()
+                    st.write(f"Cleaned quote: {quote}")
 
-                        # Retrieve source information
-                        source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
-                        st.write(f"Source: {source}")
+                    # Retrieve source information
+                    source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
+                    st.write(f"Source: {source}")
 
-                        full_reranked_results.append({
-                            'Rank': idx + 1,
-                            'Search Type': search_type,
-                            'Text ID': text_id,
-                            'Source': source,
-                            'Summary': summary,
-                            'Key Quote': quote,
-                            'Relevance Score': result.relevance_score
-                        })
-                    else:
-                        st.write(f"Invalid data_parts length: {len(data_parts)}")
+                    full_reranked_results.append({
+                        'Rank': idx + 1,
+                        'Search Type': search_type,
+                        'Text ID': text_id,
+                        'Source': source,
+                        'Summary': summary,
+                        'Key Quote': quote,
+                        'Relevance Score': result.relevance_score
+                    })
                 else:
-                    st.write("Error: 'text' not in result.document or result is not a dictionary")
+                    st.write(f"Invalid data_parts length: {len(data_parts)}")
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")
@@ -205,23 +202,19 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
-            # Load data
             lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
             keyword_data = self.load_json('data/voyant_word_counts.json')
             df = pd.read_csv("lincoln_index_embedded.csv")
 
-            # Convert JSON data to a dictionary with 'text_id' as the key for easy access
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
-            self.lincoln_dict = lincoln_dict  # Ensure lincoln_dict is available in the instance
+            self.lincoln_dict = lincoln_dict
 
-            # Prepare DataFrame
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
             st.write("Loaded and prepared data successfully.")
 
-            # Initial API call
             response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                 messages=[
@@ -243,7 +236,6 @@ class RAGProcess:
 
             st.write("Received initial API response successfully.")
 
-            # Keyword search
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
                 json_data=keyword_data,
@@ -256,9 +248,7 @@ class RAGProcess:
             search_results_df = pd.DataFrame(search_results)
 
             st.write("Performed keyword search successfully.")
-            st.write("search_results_df columns:", search_results_df.columns)
 
-            # Semantic search
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
             # Rename 'Unnamed: 0' to 'text_id' in semantic_matches
@@ -273,12 +263,9 @@ class RAGProcess:
             semantic_matches["TopSegment"] = top_segments
 
             st.write("Performed semantic search successfully.")
-            st.write("semantic_matches columns:", semantic_matches.columns)
 
-            # Deduplicate results
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
-            # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
             all_combined_data = [
                 f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
             ] + [
@@ -286,24 +273,13 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
-            st.write("all_combined_data sample:", all_combined_data[:5])
 
-            # Verify all entries in all_combined_data are strings
-            for i, entry in enumerate(all_combined_data):
-                if not isinstance(entry, str):
-                    raise ValueError(f"Entry at index {i} is not a string: {entry}")
-
-            # Additional Debug: Check the content of all_combined_data
-            st.write("all_combined_data content:", all_combined_data)
-
-            # Rerank results
             reranked_results = self.rerank_results(user_query, all_combined_data)
-            reranked_df = pd.DataFrame(reranked_results)  # Convert reranked_results to DataFrame
-            formatted_input_for_model = format_reranked_results_for_model_input(reranked_df)
+            reranked_results_df = pd.DataFrame(reranked_results)
 
             st.write("Reranked results successfully.")
 
-            # Final model response
+            formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
             final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
             st.write("Generated final model response successfully.")
@@ -312,17 +288,11 @@ class RAGProcess:
                 "response": final_model_response,
                 "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
-                "reranked_results": reranked_df,  # Return as DataFrame
-                "initial_answer": initial_answer,
-                "model_weighted_keywords": model_weighted_keywords,
-                "model_year_keywords": model_year_keywords,
-                "model_text_keywords": model_text_keywords,
-                "highlight_success_dict": {},  # Initialize with an empty dictionary
-                "model_output": final_model_response  # Assuming final_model_response contains the model output
+                "reranked_results": reranked_results_df
             }
         except Exception as e:
-            st.error(f"Error in run_rag_process: {e}")
-            return None
+            st.write(f"Error in run_rag_process: {e}")
+            raise Exception("An error occurred during the RAG process.")
 
 
 

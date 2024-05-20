@@ -27,6 +27,12 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
 gc = pygsheets.authorize(custom_credentials=credentials)
 
+hays_data_logger = DataLogger(gc, 'hays_data')
+keyword_results_logger = DataLogger(gc, 'keyword_search_results')
+semantic_results_logger = DataLogger(gc, 'semantic_search_results')
+reranking_results_logger = DataLogger(gc, 'reranking_results')
+nicolay_data_logger = DataLogger(gc, 'nicolay_data')
+
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)
 
@@ -51,7 +57,7 @@ if st.button("Submit"):
 
         # Log final model output
         log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict)
-        
+
         st.markdown("### Response")
         st.write(response)
     else:

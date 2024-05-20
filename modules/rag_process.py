@@ -243,6 +243,17 @@ class RAGProcess:
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 
+            hays_data = {
+                'query': user_query,
+                'initial_answer': initial_answer,
+                'weighted_keywords': model_weighted_keywords,
+                'year_keywords': model_year_keywords,
+                'text_keywords': model_text_keywords,
+                'full_output': response.choices[0].message.content
+            }
+
+            hays_data_logger.record_api_outputs(hays_data)
+
             st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
             search_results = self.search_with_dynamic_weights_expanded(
@@ -260,7 +271,6 @@ class RAGProcess:
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-            # Rename 'Unnamed: 0' to 'text_id' in semantic_matches
             semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
 
             top_segments = []
@@ -282,7 +292,6 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
-            #st.write("Reranking input combined_data:", all_combined_data)
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)

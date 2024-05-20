@@ -39,7 +39,7 @@ class RAGProcess:
         norm_vec2 = np.linalg.norm(vec2)
         return dot_product / (norm_vec1 * norm_vec2)
 
-    def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5):
+    def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
         total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
         relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
         inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
@@ -204,7 +204,8 @@ class RAGProcess:
             json_data=keyword_data,
             year_keywords=model_year_keywords,
             text_keywords=model_text_keywords,
-            top_n_results=5
+            top_n_results=5,
+            lincoln_data=lincoln_data
         )
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)

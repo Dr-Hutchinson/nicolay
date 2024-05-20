@@ -153,23 +153,23 @@ class RAGProcess:
                     quote = data_parts[3].strip()
 
                     # Debugging to ensure each part is correct
-                    st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
+                    #st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
 
                     # Extract and clean text_id
                     text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
-                    st.write(f"Extracted text_id: {text_id}")
+                    #st.write(f"Extracted text_id: {text_id}")
 
                     # Extract and clean summary
                     summary = summary.replace("Summary:", "").strip()
-                    st.write(f"Cleaned summary: {summary}")
+                    #st.write(f"Cleaned summary: {summary}")
 
                     # Clean quote
                     quote = quote.strip()
-                    st.write(f"Cleaned quote: {quote}")
+                    #st.write(f"Cleaned quote: {quote}")
 
                     # Retrieve source information
                     source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
-                    st.write(f"Source: {source}")
+                    #st.write(f"Source: {source}")
 
                     full_reranked_results.append({
                         'Rank': idx + 1,
@@ -243,7 +243,7 @@ class RAGProcess:
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 
-            st.write("Received initial API response successfully.")
+            st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
@@ -282,8 +282,7 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
-            # Debugging statement to ensure combined_data is a list of strings
-            st.write("Reranking input combined_data:", all_combined_data)
+            #st.write("Reranking input combined_data:", all_combined_data)
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)
@@ -299,11 +298,13 @@ class RAGProcess:
                 "response": final_model_response,
                 "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
-                "reranked_results": reranked_results_df
+                "reranked_results": reranked_results_df,
+                "initial_answer": initial_answer  # Ensure initial_answer is included in the returned dictionary
             }
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

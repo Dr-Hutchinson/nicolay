@@ -130,7 +130,7 @@ class RAGProcess:
             st.write("Reranking input combined_data:", combined_data)
 
             # Ensure combined_data is a list of strings
-            combined_data_strs = [cd['text'] if isinstance(cd, dict) and 'text' in cd else str(cd) for cd in combined_data]
+            combined_data_strs = [cd if isinstance(cd, str) else cd['text'] for cd in combined_data]
 
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
@@ -186,6 +186,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
 
 
@@ -280,6 +281,8 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
+            # Debugging statement to ensure combined_data is a list of strings
+            st.write("Reranking input combined_data:", all_combined_data)
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)

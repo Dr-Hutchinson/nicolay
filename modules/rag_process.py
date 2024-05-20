@@ -254,14 +254,15 @@ class RAGProcess:
                     raise ValueError(f"Entry at index {i} is not a string: {entry}")
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
-            formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
+            reranked_df = pd.DataFrame(reranked_results)  # Convert reranked_results to DataFrame
+            formatted_input_for_model = format_reranked_results_for_model_input(reranked_df)
             final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
             return {
                 "response": final_model_response,
                 "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
-                "reranked_results": reranked_results,
+                "reranked_results": reranked_df,  # Return as DataFrame
                 "initial_answer": initial_answer,
                 "model_weighted_keywords": model_weighted_keywords,
                 "model_year_keywords": model_year_keywords,
@@ -272,6 +273,7 @@ class RAGProcess:
         except Exception as e:
             st.error(f"Error in run_rag_process: {e}")
             return None
+
 
 
 # Helper Functions

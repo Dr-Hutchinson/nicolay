@@ -265,6 +265,9 @@ class RAGProcess:
                 if not isinstance(entry, str):
                     raise ValueError(f"Entry at index {i} is not a string: {entry}")
 
+            # Additional Debug: Check the content of all_combined_data
+            st.write("all_combined_data content:", all_combined_data)
+
             # Rerank results
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_df = pd.DataFrame(reranked_results)  # Convert reranked_results to DataFrame
@@ -292,6 +295,7 @@ class RAGProcess:
         except Exception as e:
             st.error(f"Error in run_rag_process: {e}")
             return None
+
 
 
 

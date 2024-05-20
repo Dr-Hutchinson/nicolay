@@ -142,7 +142,7 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                 st.write(f"Reranked result {idx}: {result}")
-                combined_data_text = result.document  # Access the document attribute directly
+                combined_data_text = result.document['text'] if isinstance(result.document, dict) and 'text' in result.document else result.document  # Access the document attribute directly
                 st.write(f"Combined data {idx}: {combined_data_text}")
                 data_parts = combined_data_text.split("|")
                 st.write(f"Data parts {idx}: {data_parts}")
@@ -186,6 +186,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
 
 
@@ -303,6 +304,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

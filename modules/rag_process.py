@@ -18,9 +18,9 @@ class RAGProcess:
         self.cohere_client = cohere.Client(api_key=cohere_api_key)
 
         # Initialize Google Sheets client
-        self.scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        self.credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=self.scope)
-        self.gc = pygsheets.authorize(custom_credentials=self.credentials)
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
+        self.gc = pygsheets.authorize(custom_credentials=credentials)
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:

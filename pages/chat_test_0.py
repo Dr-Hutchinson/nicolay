@@ -9,24 +9,22 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
+# Set environment variables and initialize API clients
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()
 openai_api_key = st.secrets["openai_api_key"]
 
-os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
+os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
 co = cohere.Client()
 cohere_api_key = st.secrets["cohere_api_key"]
 
-scope = ['https://spreadsheets.google.com/feeds',
-             'https://www.googleapis.com/auth/drive']
-credentials = service_account.Credentials.from_service_account_info(
-                    st.secrets["gcp_service_account"], scopes = scope)
+# Extract Google Cloud service account details
+gcp_service_account = st.secrets["gcp_service_account"]
 
+# Initialize Google Sheets client
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
 gc = pygsheets.authorize(custom_credentials=credentials)
-
-#openai_api_key = secrets['openai_api_key']
-#cohere_api_key = secrets['cohere_api_key']
-#gcp_service_account = secrets['gcp_service_account']
 
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account)

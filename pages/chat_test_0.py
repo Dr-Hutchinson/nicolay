@@ -63,7 +63,9 @@ if st.button("Submit"):
             log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
             log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
             log_reranking_results(reranking_results_logger, reranked_results, user_query)
-            log_nicolay_model_output(nicolay_data_logger, response, user_query, initial_answer, {})
+
+            # Ensure response is in the correct format for logging
+            log_nicolay_model_output(nicolay_data_logger, json.loads(response), user_query, initial_answer, {})
 
         except Exception as e:
             st.error(f"An error occurred: {e}")

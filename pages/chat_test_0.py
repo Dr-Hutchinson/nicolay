@@ -58,6 +58,11 @@ if st.button("Submit"):
                 highlight_success_dict = results["highlight_success_dict"]
                 model_output = results["model_output"]
 
+                # Debug statements to check variable types
+                st.write(f"search_results type: {type(search_results)}")
+                st.write(f"semantic_matches type: {type(semantic_matches)}")
+                st.write(f"reranked_results type: {type(reranked_results)}")
+
                 # Log the different parts of the process
                 log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
                 log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)

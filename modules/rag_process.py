@@ -142,6 +142,7 @@ class RAGProcess:
                 st.write(f"Data parts {idx}: {data_parts}")
                 if len(data_parts) >= 4:
                     search_type, text_id_part, summary, quote = data_parts
+                    st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
                     # Extract and clean text_id
                     text_id = text_id_part.replace("Text ID:", "").strip()
                     # Extract and clean summary
@@ -163,6 +164,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
 
 
@@ -302,6 +304,7 @@ class RAGProcess:
         except Exception as e:
             st.error(f"Error in run_rag_process: {e}")
             return None
+
 
 
 

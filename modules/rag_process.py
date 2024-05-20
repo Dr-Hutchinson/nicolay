@@ -125,6 +125,8 @@ class RAGProcess:
         return deduplicated_results
 
 
+    # rag_process.py
+
     def rerank_results(self, user_query, combined_data):
         try:
             reranked_response = self.cohere_client.rerank(
@@ -139,13 +141,17 @@ class RAGProcess:
                 data_parts = combined_data.split("|")
                 if len(data_parts) >= 4:
                     search_type, text_id_part, summary, quote = data_parts
-                    text_id = str(text_id_part.split(":")[-1].strip())
-                    summary = summary.strip()
+                    # Extract and clean text_id
+                    text_id = text_id_part.replace("Text ID:", "").strip()
+                    # Extract and clean summary
+                    summary = summary.replace("Summary:", "").strip()
+                    # Clean quote
                     quote = quote.strip()
+                    # Retrieve source information
                     source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
                     full_reranked_results.append({
                         'Rank': idx + 1,
-                        'Search Type': search_type,
+                        'Search Type': search_type.strip(),
                         'Text ID': text_id,
                         'Source': source,
                         'Summary': summary,
@@ -155,6 +161,22 @@ class RAGProcess:
             return full_reranked_results
         except Exception as e:
             raise Exception("Error in reranking: " + str(e))
+
+        # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
+        all_combined_data = [
+            f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
+        ] + [
+            f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
+        ]
+
+        # Debug: st.write the first few entries of all_combined_data to check formatting
+        st.write("all_combined_data sample:", all_combined_data[:5])
+
+# Verify all entries in all_combined_data are strings
+for i, entry in enumerate(all_combined_data):
+    if not isinstance(entry, str):
+        raise ValueError(f"Entry at index {i} is not a string: {entry}")
+
 
 
 

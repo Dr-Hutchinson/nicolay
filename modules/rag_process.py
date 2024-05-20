@@ -256,3 +256,38 @@ def format_reranked_results_for_model_input(reranked_results):
 def segment_text(text, segment_size=100):
     words = text.split()
     return [' '.join(words[i:i+segment_size]) for i in range(0, len(words), segment_size)]
+
+# System prompt
+def load_prompt(file_name):
+    """Load prompt from a file."""
+    with open(file_name, 'r') as file:
+        return file.read()
+
+# Function to ensure prompts are loaded into session state
+def load_prompts():
+    if 'keyword_model_system_prompt' not in st.session_state:
+        st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
+    if 'response_model_system_prompt' not in st.session_state:
+        st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
+    if 'app_into' not in st.session_state:
+        st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
+    if 'keyword_search_explainer' not in st.session_state:
+        st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
+    if 'semantic_search_explainer' not in st.session_state:
+        st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
+    if 'relevance_ranking_explainer' not in st.session_state:
+        st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
+    if 'nicolay_model_explainer' not in st.session_state:
+        st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
+
+# Ensure prompts are loaded
+load_prompts()
+
+# Now you can use the prompts from session state
+keyword_prompt = st.session_state['keyword_model_system_prompt']
+response_prompt = st.session_state['response_model_system_prompt']
+app_intro = st.session_state['app_intro']
+keyword_search_explainer = st.session_state['keyword_search_explainer']
+semantic_search_explainer = st.session_state['semantic_search_explainer']
+relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
+nicolay_model_explainer = st.session_state['nicolay_model_explainer']

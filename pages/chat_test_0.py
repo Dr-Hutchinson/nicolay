@@ -1,7 +1,7 @@
 # chatbot.py
 
 import streamlit as st
-from rag_module import RAGProcess
+from modules.rag_process import RAGProcess
 import json
 
 # Load secrets from a JSON file or Streamlit secrets

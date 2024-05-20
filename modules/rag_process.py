@@ -157,6 +157,7 @@ class RAGProcess:
             raise Exception("Error in reranking: " + str(e))
 
 
+
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
             {"role": "system", "content": response_prompt},
@@ -236,13 +237,18 @@ class RAGProcess:
 
         # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
         all_combined_data = [
-            f"Keyword|Text ID: {row['text_id']}|{row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
+            f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
         ] + [
-            f"Semantic|Text ID: {row['text_id']}|{row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
+            f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
         ]
 
         # Debug: st.write the first few entries of all_combined_data to check formatting
         st.write("all_combined_data sample:", all_combined_data[:5])
+
+        # Verify all entries in all_combined_data are strings
+        for i, entry in enumerate(all_combined_data):
+            if not isinstance(entry, str):
+                raise ValueError(f"Entry at index {i} is not a string: {entry}")
 
         reranked_results = self.rerank_results(user_query, all_combined_data)
         formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)

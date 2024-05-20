@@ -136,30 +136,49 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                 st.write(f"Reranked result {idx}: {result}")
-                combined_data = result.document['text']  # Access the 'text' field from the dictionary
-                st.write(f"Combined data {idx}: {combined_data}")
-                data_parts = combined_data.split("|")
-                st.write(f"Data parts {idx}: {data_parts}")
-                if len(data_parts) >= 4:
-                    search_type, text_id_part, summary, quote = data_parts
-                    st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
-                    # Extract and clean text_id
-                    text_id = text_id_part.replace("Text ID:", "").strip()
-                    # Extract and clean summary
-                    summary = summary.replace("Summary:", "").strip()
-                    # Clean quote
-                    quote = quote.strip()
-                    # Retrieve source information
-                    source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
-                    full_reranked_results.append({
-                        'Rank': idx + 1,
-                        'Search Type': search_type.strip(),
-                        'Text ID': text_id,
-                        'Source': source,
-                        'Summary': summary,
-                        'Key Quote': quote,
-                        'Relevance Score': result.relevance_score
-                    })
+                if 'text' in result.document:
+                    combined_data_text = result.document['text']  # Access the 'text' field from the dictionary
+                    st.write(f"Combined data {idx}: {combined_data_text}")
+                    data_parts = combined_data_text.split("|")
+                    st.write(f"Data parts {idx}: {data_parts}")
+                    if len(data_parts) >= 4:
+                        search_type = data_parts[0].strip()
+                        text_id_part = data_parts[1].strip()
+                        summary = data_parts[2].strip()
+                        quote = data_parts[3].strip()
+
+                        # Debugging to ensure each part is correct
+                        st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
+
+                        # Extract and clean text_id
+                        text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
+                        st.write(f"Extracted text_id: {text_id}")
+
+                        # Extract and clean summary
+                        summary = summary.replace("Summary:", "").strip()
+                        st.write(f"Cleaned summary: {summary}")
+
+                        # Clean quote
+                        quote = quote.strip()
+                        st.write(f"Cleaned quote: {quote}")
+
+                        # Retrieve source information
+                        source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
+                        st.write(f"Source: {source}")
+
+                        full_reranked_results.append({
+                            'Rank': idx + 1,
+                            'Search Type': search_type,
+                            'Text ID': text_id,
+                            'Source': source,
+                            'Summary': summary,
+                            'Key Quote': quote,
+                            'Relevance Score': result.relevance_score
+                        })
+                    else:
+                        st.write(f"Invalid data_parts length: {len(data_parts)}")
+                else:
+                    st.write("Error: 'text' not in result.document")
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")

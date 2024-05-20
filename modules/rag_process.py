@@ -213,7 +213,7 @@ class RAGProcess:
 
         search_results_df = pd.DataFrame(search_results)
 
-        # Debug: Print the columns of search_results_df
+        # Debug: st.write the columns of search_results_df
         st.write("search_results_df columns:", search_results_df.columns)
 
         semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
@@ -229,22 +229,27 @@ class RAGProcess:
             top_segments.append(top_segment[0])
         semantic_matches["TopSegment"] = top_segments
 
-        # Debug: Print the columns of semantic_matches
+        # Debug: st.write the columns of semantic_matches
         st.write("semantic_matches columns:", semantic_matches.columns)
 
         deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
+        # Ensure deduplicated_results is a DataFrame and contains 'text_id', 'summary', and 'quote' columns
         all_combined_data = [
-            f"Keyword|Text ID: {result['text_id']}|{result['summary']}|{result['quote']}" for _, result in deduplicated_results.iterrows()
+            f"Keyword|Text ID: {row['text_id']}|{row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
         ] + [
-            f"Semantic|Text ID: {result['text_id']}|{result['summary']}|{result['TopSegment']}" for _, result in semantic_matches.iterrows()
+            f"Semantic|Text ID: {row['text_id']}|{row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
         ]
+
+        # Debug: st.write the first few entries of all_combined_data to check formatting
+        st.write("all_combined_data sample:", all_combined_data[:5])
 
         reranked_results = self.rerank_results(user_query, all_combined_data)
         formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
         final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
         return final_model_response
+
 
 
 

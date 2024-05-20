@@ -46,6 +46,18 @@ if st.button("Submit"):
         st.write("Processing your query...")
         response = rag.run_rag_process(user_query)
 
+        # Unpack the results
+        response = results["response"]
+        search_results = results["search_results"]
+        semantic_matches = results["semantic_matches"]
+        reranked_results = results["reranked_results"]
+        initial_answer = results["initial_answer"]
+        model_weighted_keywords = results["model_weighted_keywords"]
+        model_year_keywords = results["model_year_keywords"]
+        model_text_keywords = results["model_text_keywords"]
+        highlight_success_dict = results["highlight_success_dict"]
+        model_output = results["model_output"]
+
         # Log keyword search results
         log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 

@@ -256,7 +256,18 @@ class RAGProcess:
         formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
         final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
-        return final_model_response
+        return {
+            "response": final_model_response,
+            "search_results": search_results_df,
+            "semantic_matches": semantic_matches,
+            "reranked_results": reranked_results,
+            "initial_answer": initial_answer,
+            "model_weighted_keywords": model_weighted_keywords,
+            "model_year_keywords": model_year_keywords,
+            "model_text_keywords": model_text_keywords,
+            "highlight_success_dict": {},  # Initialize with an empty dictionary
+            "model_output": final_model_response  # Assuming final_model_response contains the model output
+        }
 
 # Helper Functions
 

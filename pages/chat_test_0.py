@@ -4,6 +4,10 @@ import streamlit as st
 from modules.rag_process import RAGProcess
 import json
 import os
+from openai import OpenAI
+import cohere
+import pygsheets
+from google.oauth2 import service_account
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()

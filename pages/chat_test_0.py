@@ -52,6 +52,9 @@ if st.button("Submit"):
             semantic_matches = results["semantic_matches"]
             reranked_results = results["reranked_results"]
             initial_answer = results["initial_answer"]
+            model_weighted_keywords = results["model_weighted_keywords"]
+            model_year_keywords = results["model_year_keywords"]
+            model_text_keywords = results["model_text_keywords"]
 
             st.markdown("### Response")
             st.write(response)

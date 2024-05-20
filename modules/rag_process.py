@@ -282,7 +282,7 @@ class RAGProcess:
             ]
 
             st.write("Combined search results successfully.")
-            #st.write("Reranking input combined_data:", all_combined_data)
+            st.write("Reranking input combined_data:", all_combined_data)
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)
@@ -299,11 +299,15 @@ class RAGProcess:
                 "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
                 "reranked_results": reranked_results_df,
-                "initial_answer": initial_answer  # Ensure initial_answer is included in the returned dictionary
+                "initial_answer": initial_answer,  # Ensure initial_answer is included in the returned dictionary
+                "model_weighted_keywords": model_weighted_keywords,
+                "model_year_keywords": model_year_keywords,
+                "model_text_keywords": model_text_keywords
             }
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

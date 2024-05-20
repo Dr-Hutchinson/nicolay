@@ -136,7 +136,7 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                 st.write(f"Reranked result {idx}: {result}")
-                if 'text' in result.document:
+                if isinstance(result, dict) and 'text' in result.document:
                     combined_data_text = result.document['text']  # Access the 'text' field from the dictionary
                     st.write(f"Combined data {idx}: {combined_data_text}")
                     data_parts = combined_data_text.split("|")
@@ -178,7 +178,7 @@ class RAGProcess:
                     else:
                         st.write(f"Invalid data_parts length: {len(data_parts)}")
                 else:
-                    st.write("Error: 'text' not in result.document")
+                    st.write("Error: 'text' not in result.document or result is not a dictionary")
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")

@@ -96,7 +96,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         # Display final answer with references
         with st.chat_message("assistant"):
             st.markdown(f"Final Answer: {final_answer}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}")
+        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
 
         # Log the data
         search_results = results["search_results"]

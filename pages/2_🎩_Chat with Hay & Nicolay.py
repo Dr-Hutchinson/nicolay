@@ -65,9 +65,11 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         results = rag.run_rag_process(prompt)
 
         # Unpack the results
+        st.write("RAG process results:", results)  # Debug statement to print the full results
+
         response = results["response"]
         initial_answer = results["initial_answer"]
-        final_answer = results["FinalAnswer"]
+        final_answer = results.get("FinalAnswer", {}).get("Text", "Final answer not available.")
 
         # Display initial answer
         with st.chat_message("assistant"):
@@ -76,8 +78,8 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         # Display final answer
         with st.chat_message("assistant"):
-            st.markdown(f"Final Answer: {final_answer['Text']}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer['Text']}"})
+            st.markdown(f"Final Answer: {final_answer}")
+        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
 
         # Log the data
         search_results = results["search_results"]

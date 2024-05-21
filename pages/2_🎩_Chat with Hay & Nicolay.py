@@ -64,12 +64,12 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         st.write("Processing your query...")
         results = rag.run_rag_process(prompt)
 
-        # Unpack the results
-        st.write("RAG process results:", results)  # Debug statement to print the full results
+        # Debug: Print RAG process results to check JSON structure
+        st.write("RAG process results:", results)
 
-        response = results["response"]
+        response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]
-        final_answer = results.get("FinalAnswer", {}).get("Text", "Final answer not available.")
+        final_answer = response_json.get("FinalAnswer", {}).get("Text", "Final answer not available.")
 
         # Display initial answer
         with st.chat_message("assistant"):
@@ -92,7 +92,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
         log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
         log_reranking_results(reranking_results_logger, reranked_results, prompt)
-        log_nicolay_model_output(nicolay_data_logger, json.loads(response), prompt, initial_answer, {})
+        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

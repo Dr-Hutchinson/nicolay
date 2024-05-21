@@ -27,7 +27,7 @@ except KeyError as e:
     st.stop()
 
 # Initialize OpenAI API key
-openai.api_key = openai_api_key
+#openai.api_key = openai_api_key
 
 # Initialize Google Sheets client
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']

@@ -32,8 +32,8 @@ list_submodules(llama_index.indices)
 import llama_index.llms
 list_submodules(llama_index.llms)
 
-import llama_index.service_context
-list_submodules(llama_index.service_context)
+#import llama_index.service_context
+#list_submodules(llama_index.service_context)
 
 import llama_index.storage
 list_submodules(llama_index.storage)

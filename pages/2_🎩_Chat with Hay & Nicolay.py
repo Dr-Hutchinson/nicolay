@@ -4,26 +4,22 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
-# Set page config
+# Set page config first
 st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
 
-# Conditional import for LlamaIndex components
+# Access secrets
 try:
-    from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
-    st.write("Imported from llama_index")
-except ImportError:
-    from llama_index.core import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
-    st.write("Imported from llama_index.core")
-
-from llama_index.llms.openai import OpenAI as LlamaOpenAI
-from modules.rag_process import RAGProcess
-from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
+    openai_api_key = st.secrets["openai_key"]
+    cohere_api_key = st.secrets["cohere_api_key"]
+    gcp_service_account = st.secrets["gcp_service_account"]
+except KeyError as e:
+    st.error(f"Missing secret: {e}")
+    st.stop()
 
 # Initialize OpenAI API key
-openai.api_key = st.secrets["openai_key"]
+openai.api_key = openai_api_key
 
 # Initialize Google Sheets client
-gcp_service_account = st.secrets["gcp_service_account"]
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
 gc = pygsheets.authorize(custom_credentials=credentials)
@@ -36,7 +32,7 @@ reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
 # Initialize the RAG Process
-rag = RAGProcess(openai.api_key, cohere_api_key, gcp_service_account, hays_data_logger)
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
 @st.cache_resource(show_spinner=False)
 def load_data():
@@ -45,7 +41,7 @@ def load_data():
         docs = reader.load_data()
 
         # Define LLM with a fine-tuned model
-        llm = LlamaOpenAI(model="gpt-3.5-turbo", temperature=0.5)
+        llm = LlamaOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo", temperature=0.5)
         service_context = ServiceContext.from_defaults(llm=llm)
 
         index = VectorStoreIndex.from_documents(docs, service_context=service_context)

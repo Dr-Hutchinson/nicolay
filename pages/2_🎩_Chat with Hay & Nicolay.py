@@ -9,14 +9,24 @@ import pygsheets
 from google.oauth2 import service_account
 from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, ServiceContext, StorageContext, load_index_from_storage
 from langchain.chat_models import ChatOpenAI
-
-# chatbot development - 0.0 - basic UI for RAG search and data logging
+import pkgutil
+#import llama_index
 
 st.set_page_config(
     page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
     layout='wide',
     page_icon='🎩'
 )
+
+
+def list_submodules(package):
+    for importer, modname, ispkg in pkgutil.walk_packages(package.__path__):
+        st.write(f"Module: {modname}, Is a package: {ispkg}")
+
+list_submodules(llama_index)
+
+# chatbot development - 0.0 - basic UI for RAG search and data logging
+
 
 # Set environment variables and initialize API clients
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]

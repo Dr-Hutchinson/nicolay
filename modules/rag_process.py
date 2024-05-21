@@ -311,9 +311,9 @@ class RAGProcess:
                 "model_year_keywords": model_year_keywords,
                 "model_text_keywords": model_text_keywords
             }
-    except Exception as e:
-        st.write(f"Error in run_rag_process: {e}")
-        raise Exception("An error occurred during the RAG process.")
+        except Exception as e:
+            st.write(f"Error in run_rag_process: {e}")
+            raise Exception("An error occurred during the RAG process.")
 
 
 

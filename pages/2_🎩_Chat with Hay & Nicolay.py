@@ -1,9 +1,3 @@
-import streamlit as st
-from modules.rag_process import RAGProcess
-from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
-import json
-import os
-from openai import OpenAI
 import cohere
 import pygsheets
 from google.oauth2 import service_account
@@ -16,19 +10,15 @@ st.set_page_config(
     layout='wide',
     page_icon='🎩'
 )
-
-# Access secrets
-try:
-    openai_api_key = st.secrets["openai_api_key"]
-    cohere_api_key = st.secrets["cohere_api_key"]
-    gcp_service_account = st.secrets["gcp_service_account"]
-except KeyError as e:
-    st.error(f"Missing secret: {e}")
-    st.stop()
-
-# Initialize OpenAI API key
-#openai.api_key = openai_api_key
-
+# Set environment variables and initialize API clients
+os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+client = OpenAI()
+openai_api_key = st.secrets["openai_api_key"]
+os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
+co = cohere.Client()
+cohere_api_key = st.secrets["cohere_api_key"]
+# Extract Google Cloud service account details
+gcp_service_account = st.secrets["gcp_service_account"]
 # Initialize Google Sheets client
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
@@ -39,7 +29,6 @@ keyword_results_logger = DataLogger(gc, 'keyword_search_results')
 semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
-
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 

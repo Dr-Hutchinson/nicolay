@@ -762,13 +762,13 @@ with st.form("Search Interface"):
                                         st.markdown(f"{reference}")
 
                             highlight_style = """
-                                <style>
-                                mark {
-                                    background-color: #90ee90;
-                                    color: black;
-                                }
-                                </style>
-                                """
+                            <style>
+                            mark {
+                                background-color: #90ee90;
+                                color: black;
+                            }
+                            </style>
+                            """
 
                             doc_match_counter = 0
                             highlight_success_dict = {}
@@ -800,19 +800,7 @@ with st.form("Search Interface"):
 
                                     if speech:
                                         # Use the doc_match_counter in the expander label
-
-
-
-
-
-
-
-        Expand All
-
-    @@ -943,13 +940,21 @@ def record_api_outputs():
-
-                                        expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                        with st.expander(expander_label, expanded=False):
+	@@ -943,13 +940,21 @@ def record_api_outputs():
                                             st.markdown(f"**Source:** {speech['source']}")
                                             st.markdown(f"**Text ID:** {speech['text_id']}")
                                             st.markdown(f"**Summary:**\n{speech['summary']}")
@@ -826,19 +814,7 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
                                             st.markdown(formatted_full_text, unsafe_allow_html=True)
-
-
-
-
-
-
-
-        Expand All
-
-    @@ -959,7 +964,6 @@ def record_api_outputs():
-
-                                            # Update highlight_success_dict for the current match
-                                            highlight_success_dict[match_key] = highlight_success
+	@@ -959,7 +964,6 @@ def record_api_outputs():
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")
@@ -846,17 +822,6 @@ with st.form("Search Interface"):
                                             highlight_success_dict[match_key] = False  # Indicate failure as text not found
 
                             # Displaying the Analysis Metadata
-
-
-
-
-
-
-
-        Expand All
-
-    @@ -969,46 +973,38 @@ def record_api_outputs():
-
                             with st.expander("**Analysis Metadata**"):
                                 # Displaying User Query Analysis
                                 if "User Query Analysis" in model_output:

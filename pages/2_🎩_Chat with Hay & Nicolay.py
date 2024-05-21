@@ -7,7 +7,8 @@ from openai import OpenAI
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-import llamaindex as li  # Import LlamaIndex
+from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, ServiceContext, StorageContext, load_index_from_storage
+from langchain.chat_models import ChatOpenAI
 
 # chatbot development - 0.0 - basic UI for RAG search and data logging
 
@@ -45,8 +46,10 @@ nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
 # Initialize LlamaIndex
-index = li.Index()
-index.load('llamaindex_memory.json')  # Load existing memory or create new one
+llm_predictor = LLMPredictor(llm=ChatOpenAI(temperature=0, model="gpt-3.5-turbo", api_key=openai_api_key))
+service_context = ServiceContext.from_defaults(llm_predictor=llm_predictor)
+storage_context = StorageContext.from_defaults(persist_dir="./storage")
+index = load_index_from_storage(storage_context, service_context=service_context)
 
 # Initialize chat messages history
 if "messages" not in st.session_state.keys():
@@ -76,7 +79,7 @@ if st.button("Submit"):
             st.write("Processing your query...")
 
             # Use LlamaIndex to handle memory and interaction
-            conversation_context = index.get_context(user_query)
+            conversation_context = "\n".join([msg["content"] for msg in st.session_state.messages if msg["role"] == "user"])
             full_query = f"{conversation_context}\nUser: {user_query}"
 
             # Run the RAG process
@@ -111,8 +114,8 @@ if st.button("Submit"):
             log_nicolay_model_output(nicolay_data_logger, json.loads(final_response), user_query, initial_answer, {})
 
             # Update LlamaIndex with the new interaction
-            index.update_memory(user_query, final_response)
-            index.save('llamaindex_memory.json')  # Save updated memory
+            index.add_documents([{"text": user_query, "role": "user"}, {"text": final_response, "role": "assistant"}])
+            index.save(persist_dir="./storage")
 
         except Exception as e:
             st.error(f"An error occurred: {e}")

@@ -18,9 +18,19 @@ st.set_page_config(
 )
 
 
-def find_module(module_name):
-    for importer, modname, ispkg in pkgutil.walk_packages(llama_index.__path__):
-        if module_name in modname:
-            st.write(f"Found module: {modname}")
+def list_module_attributes(module):
+    st.write(f"Attributes and methods in {module.__name__}:")
+    for attr in dir(module):
+        st.write(attr)
 
-find_module("SimpleDirectoryReader")
+def explore_modules(package):
+    for importer, modname, ispkg in pkgutil.walk_packages(package.__path__):
+        full_path = f"{package.__name__}.{modname}"
+        st.write(f"Exploring module: {full_path}")
+        try:
+            module = __import__(full_path, fromlist=[""])
+            list_module_attributes(module)
+        except ImportError as e:
+            st.write(f"Failed to import {full_path}: {e}")
+
+explore_modules(llama_index)

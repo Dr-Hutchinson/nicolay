@@ -3,9 +3,11 @@ import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-from llama_index import VectorStoreIndex, ServiceContext, SimpleDirectoryReader
+from llama_index import VectorStoreIndex, ServiceContext
+from llama_index.readers.file import SimpleDirectoryReader
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
+
 
 
 
@@ -51,6 +53,7 @@ def load_data():
         return index
 
 index = load_data()
+
 
 # Initialize the chat engine
 if "chat_engine" not in st.session_state.keys():

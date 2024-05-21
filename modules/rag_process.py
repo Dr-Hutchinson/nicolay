@@ -209,108 +209,108 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
-        lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
-        keyword_data = self.load_json('data/voyant_word_counts.json')
-        df = pd.read_csv("lincoln_index_embedded.csv")
+            lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
+            keyword_data = self.load_json('data/voyant_word_counts.json')
+            df = pd.read_csv("lincoln_index_embedded.csv")
 
-        lincoln_dict = {item['text_id']: item for item in lincoln_data}
-        self.lincoln_dict = lincoln_dict
+            lincoln_dict = {item['text_id']: item for item in lincoln_data}
+            self.lincoln_dict = lincoln_dict
 
-        df['full_text'] = df['combined'].apply(extract_full_text)
-        df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
-        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
+            df['full_text'] = df['combined'].apply(extract_full_text)
+            df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
+            df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-        st.write("Loaded and prepared data successfully.")
+            st.write("Loaded and prepared data successfully.")
 
-        response = self.openai_client.chat.completions.create(
-            model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
-            messages=[
-                {"role": "system", "content": keyword_prompt},
-                {"role": "user", "content": user_query}
-            ],
-            temperature=0,
-            max_tokens=500,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0
-        )
+            response = self.openai_client.chat.completions.create(
+                model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
+                messages=[
+                    {"role": "system", "content": keyword_prompt},
+                    {"role": "user", "content": user_query}
+                ],
+                temperature=0,
+                max_tokens=500,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0
+            )
 
-        api_response_data = json.loads(response.choices[0].message.content)
-        initial_answer = api_response_data['initial_answer']
-        model_weighted_keywords = api_response_data['weighted_keywords']
-        model_year_keywords = api_response_data['year_keywords']
-        model_text_keywords = api_response_data['text_keywords']
+            api_response_data = json.loads(response.choices[0].message.content)
+            initial_answer = api_response_data['initial_answer']
+            model_weighted_keywords = api_response_data['weighted_keywords']
+            model_year_keywords = api_response_data['year_keywords']
+            model_text_keywords = api_response_data['text_keywords']
 
-        hays_data = {
-            'query': user_query,
-            'initial_answer': initial_answer,
-            'weighted_keywords': model_weighted_keywords,
-            'year_keywords': model_year_keywords,
-            'text_keywords': model_text_keywords,
-            'full_output': response.choices[0].message.content
-        }
+            hays_data = {
+                'query': user_query,
+                'initial_answer': initial_answer,
+                'weighted_keywords': model_weighted_keywords,
+                'year_keywords': model_year_keywords,
+                'text_keywords': model_text_keywords,
+                'full_output': response.choices[0].message.content
+            }
 
-        self.hays_data_logger.record_api_outputs(hays_data)
+            self.hays_data_logger.record_api_outputs(hays_data)
 
-        st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+            st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
-        search_results = self.search_with_dynamic_weights_expanded(
-            user_keywords=model_weighted_keywords,
-            json_data=keyword_data,
-            year_keywords=model_year_keywords,
-            text_keywords=model_text_keywords,
-            top_n_results=5,
-            lincoln_data=lincoln_data
-        )
+            search_results = self.search_with_dynamic_weights_expanded(
+                user_keywords=model_weighted_keywords,
+                json_data=keyword_data,
+                year_keywords=model_year_keywords,
+                text_keywords=model_text_keywords,
+                top_n_results=5,
+                lincoln_data=lincoln_data
+            )
 
-        search_results_df = pd.DataFrame(search_results)
+            search_results_df = pd.DataFrame(search_results)
 
-        st.write("Performed keyword search successfully.")
+            st.write("Performed keyword search successfully.")
 
-        semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
+            semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-        semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+            semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
 
-        top_segments = []
-        for idx, row in semantic_matches.iterrows():
-            segments = segment_text(row['full_text'])
-            segment_scores = self.compare_segments_with_query_parallel(segments, user_query_embedding)
-            top_segment = max(segment_scores, key=lambda x: x[1])
-            top_segments.append(top_segment[0])
-        semantic_matches["TopSegment"] = top_segments
+            top_segments = []
+            for idx, row in semantic_matches.iterrows():
+                segments = segment_text(row['full_text'])
+                segment_scores = self.compare_segments_with_query_parallel(segments, user_query_embedding)
+                top_segment = max(segment_scores, key=lambda x: x[1])
+                top_segments.append(top_segment[0])
+            semantic_matches["TopSegment"] = top_segments
 
-        st.write("Performed semantic search successfully.")
+            st.write("Performed semantic search successfully.")
 
-        deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+            deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
-        all_combined_data = [
-            f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
-        ] + [
-            f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
-        ]
+            all_combined_data = [
+                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
+            ] + [
+                f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
+            ]
 
-        st.write("Combined search results successfully.")
+            st.write("Combined search results successfully.")
 
-        reranked_results = self.rerank_results(user_query, all_combined_data)
-        reranked_results_df = pd.DataFrame(reranked_results)
+            reranked_results = self.rerank_results(user_query, all_combined_data)
+            reranked_results_df = pd.DataFrame(reranked_results)
 
-        st.write("Reranked results successfully.")
+            st.write("Reranked results successfully.")
 
-        formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
-        final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
+            formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
+            final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
 
-        st.write("Generated final model response successfully.")
+            st.write("Generated final model response successfully.")
 
-        return {
-            "initial_answer": initial_answer,
-            "response": final_model_response,
-            "search_results": search_results_df,
-            "semantic_matches": semantic_matches,
-            "reranked_results": reranked_results_df,
-            "model_weighted_keywords": model_weighted_keywords,
-            "model_year_keywords": model_year_keywords,
-            "model_text_keywords": model_text_keywords
-        }
+            return {
+                "initial_answer": initial_answer,
+                "response": final_model_response,
+                "search_results": search_results_df,
+                "semantic_matches": semantic_matches,
+                "reranked_results": reranked_results_df,
+                "model_weighted_keywords": model_weighted_keywords,
+                "model_year_keywords": model_year_keywords,
+                "model_text_keywords": model_text_keywords
+            }
     except Exception as e:
         st.write(f"Error in run_rag_process: {e}")
         raise Exception("An error occurred during the RAG process.")

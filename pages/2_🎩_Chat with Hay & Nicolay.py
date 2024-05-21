@@ -47,16 +47,13 @@ rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_
 # Streamlit Chatbot Interface
 st.title("Chat with Hays and Nicolay - in development")
 
-user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
-
-st.title("Chat with Hays and Nicolay - in development")
-
-user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
+# Use unique keys for the text_input widget
+user_query_hays = st.text_input("Ask me anything about Abraham Lincoln's speeches:", key="hays")
 
 st.title("Chat with Hays and Nicolay - in development")
 
 # Use unique keys for the text_input widget
-user_query_hays = st.text_input("Ask me anything about Abraham Lincoln's speeches:", key="hays")
+user_query_hays = st.text_input("Ask me anything about Abraham Lincoln's speeches:", key="query_hays")
 
 if st.button("Submit", key="submit_hays"):
     if user_query_hays:
@@ -81,7 +78,7 @@ if st.button("Submit", key="submit_hays"):
             st.write(final_response['FinalAnswer']['Text'], key="final_hays")
 
             with st.expander("Search Metadata", key="metadata_hays"):
-                st.json(final_response)
+                st.json(final_response, key="json_hays")
 
             # Log the data
             log_keyword_search_results(keyword_results_logger, search_results, user_query_hays, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)

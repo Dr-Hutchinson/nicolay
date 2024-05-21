@@ -7,7 +7,7 @@ from openai import OpenAI
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-import llama_index
+import llama_index.core
 #from langchain.chat_models import ChatOpenAI
 import pkgutil
 #import llama_index
@@ -21,9 +21,9 @@ st.set_page_config(
 
 def list_submodules(package):
     for importer, modname, ispkg in pkgutil.walk_packages(package.__path__):
-        st.write(f"Module: {modname}, Is a package: {ispkg}")
+        print(f"Module: {modname}, Is a package: {ispkg}")
 
-list_submodules(llama_index)
+list_submodules(llama_index.core)
 
 # chatbot development - 0.0 - basic UI for RAG search and data logging
 

@@ -50,11 +50,6 @@ st.title("Chat with Hays and Nicolay - in development")
 # Use unique keys for the text_input widget
 user_query_hays = st.text_input("Ask me anything about Abraham Lincoln's speeches:", key="hays")
 
-st.title("Chat with Hays and Nicolay - in development")
-
-# Use unique keys for the text_input widget
-user_query_hays = st.text_input("Ask me anything about Abraham Lincoln's speeches:", key="query_hays")
-
 if st.button("Submit", key="submit_hays"):
     if user_query_hays:
         try:

@@ -20,14 +20,11 @@ st.set_page_config(
 
 def list_submodules(package):
     for importer, modname, ispkg in pkgutil.walk_packages(package.__path__):
-        st.write(f"Module: {modname}, Is a package: {ispkg}")
+        print(f"Module: {modname}, Is a package: {ispkg}")
 
-# List contents of 'llama_index'
-list_submodules(llama_index)
-
-# If needed, list specific sub-packages
-import llama_index.readers
-list_submodules(llama_index.readers)
+# List contents of specific sub-packages
+import llama_index.core
+list_submodules(llama_index.core)
 
 import llama_index.indices
 list_submodules(llama_index.indices)

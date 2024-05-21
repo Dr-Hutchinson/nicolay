@@ -4,6 +4,9 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
+# Ensure that set_page_config is called first
+st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
+
 # Conditional import for LlamaIndex components
 try:
     from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
@@ -15,18 +18,13 @@ except ImportError:
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
 
-# Configure Streamlit
-st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
-
-# Set environment variables and initialize API clients
+# Initialize other services and loggers as required
 openai.api_key = st.secrets["openai_api_key"]
 cohere_api_key = st.secrets["cohere_api_key"]
+gcp_service_account = st.secrets["gcp_service_account"]
 
 # Initialize Cohere client
 co = cohere.Client(api_key=cohere_api_key)
-
-# Extract Google Cloud service account details
-gcp_service_account = st.secrets["gcp_service_account"]
 
 # Initialize Google Sheets client
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -58,8 +56,6 @@ def load_data():
         return index
 
 index = load_data()
-
-
 
 # Initialize the chat engine
 if "chat_engine" not in st.session_state.keys():

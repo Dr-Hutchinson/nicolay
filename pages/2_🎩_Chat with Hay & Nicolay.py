@@ -47,7 +47,7 @@ rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_
 # Streamlit Chatbot Interface
 st.title("Chat with Hays and Nicolay - in development")
 
-user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
+user_query = st.text_input("Chat interface is in development. The output below comes from the RAG process:")
 
 if st.button("Submit"):
     if user_query:

@@ -7,7 +7,6 @@ from openai import OpenAI
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-import llamaindex as li  # Import LlamaIndex
 
 # chatbot development - 0.0 - basic UI for RAG search and data logging
 

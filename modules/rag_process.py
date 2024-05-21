@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
 
+# rag process 0.1
+
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
         # Initialize OpenAI and Cohere clients
@@ -302,11 +304,11 @@ class RAGProcess:
             st.write("Generated final model response successfully.")
 
             return {
+                "initial_answer": initial_answer,
                 "response": final_model_response,
                 "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
                 "reranked_results": reranked_results_df,
-                "initial_answer": initial_answer,  # Ensure initial_answer is included in the returned dictionary
                 "model_weighted_keywords": model_weighted_keywords,
                 "model_year_keywords": model_year_keywords,
                 "model_text_keywords": model_text_keywords
@@ -314,6 +316,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

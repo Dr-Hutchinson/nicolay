@@ -38,7 +38,6 @@ nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 # Initialize the RAG Process
 rag = RAGProcess(openai.api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
-# Load data and initialize LlamaIndex
 @st.cache_resource(show_spinner=False)
 def load_data():
     with st.spinner(text="Loading and indexing the Lincoln speeches – hang tight! This should take 1-2 minutes."):

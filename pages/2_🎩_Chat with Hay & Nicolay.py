@@ -8,21 +8,25 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
-# Adjust imports based on the correct module paths
-from llama_index.readers.file import SimpleDirectoryReader
-from llama_index.indices.vector_store import GPTVectorStoreIndex
-from llama_index.llms import LLMPredictor
-from llama_index.core.service_context_elements import ServiceContext
-from llama_index.storage import StorageContext, load_index_from_storage
-from langchain.chat_models import ChatOpenAI
-
-# chatbot development - 0.0 - basic UI for RAG search and data logging
+import pkgutil
+import llama_index
 
 st.set_page_config(
     page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
     layout='wide',
     page_icon='🎩'
 )
+
+
+def find_module(module_name):
+    for importer, modname, ispkg in pkgutil.walk_packages(llama_index.__path__):
+        if module_name in modname:
+            st.write(f"Found module: {modname}")
+
+find_module("SimpleDirectoryReader")
+
+
+# chatbot development - 0.0 - basic UI for RAG search and data logging
 
 # Set environment variables and initialize API clients
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]

@@ -3,14 +3,17 @@ import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-from llama_index import GPTVectorStoreIndex, ServiceContext
-from llama_index.readers import SimpleDirectoryReader
+
+# Conditional import for LlamaIndex components
+try:
+    from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    st.write("Imported from llama_index")
+except ImportError:
+    from llama_index.core import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    st.write("Imported from llama_index.core")
+
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
-
-
-
-
 
 # Configure Streamlit
 st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
@@ -47,18 +50,21 @@ def load_data():
         docs = reader.load_data()
 
         # Define LLM with a fine-tuned model
-        llm = LlamaOpenAI(model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK", temperature=0.5)
+        llm = OpenAI(model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK", temperature=0.5)
         service_context = ServiceContext.from_defaults(llm=llm)
 
         index = VectorStoreIndex.from_documents(docs, service_context=service_context)
+        st.write("VectorStoreIndex successfully created")
         return index
 
 index = load_data()
 
 
+
 # Initialize the chat engine
 if "chat_engine" not in st.session_state.keys():
     st.session_state.chat_engine = index.as_chat_engine(chat_mode="condense_question", verbose=True)
+    st.write("Chat engine initialized")
 
 # Initialize chat messages history
 if "messages" not in st.session_state.keys():

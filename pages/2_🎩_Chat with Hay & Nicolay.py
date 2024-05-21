@@ -7,7 +7,7 @@ from openai import OpenAI
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, ServiceContext, StorageContext, load_index_from_storage
+import llama_index
 from langchain.chat_models import ChatOpenAI
 import pkgutil
 #import llama_index

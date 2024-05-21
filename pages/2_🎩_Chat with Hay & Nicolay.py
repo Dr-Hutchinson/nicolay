@@ -4,6 +4,19 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
+# Conditional import for LlamaIndex components
+try:
+    from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    st.write("Imported from llama_index")
+except ImportError:
+    from llama_index.core import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    st.write("Imported from llama_index.core")
+
+from llama_index.llms import OpenAI as LlamaOpenAI
+from modules.rag_process import RAGProcess
+from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
+
+
 # Ensure that set_page_config is called first
 st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
 
@@ -48,7 +61,7 @@ def load_data():
         docs = reader.load_data()
 
         # Define LLM with a fine-tuned model
-        llm = OpenAI(model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK", temperature=0.5)
+        llm = LlamaOpenAI(model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK", temperature=0.5)
         service_context = ServiceContext.from_defaults(llm=llm)
 
         index = VectorStoreIndex.from_documents(docs, service_context=service_context)
@@ -56,6 +69,7 @@ def load_data():
         return index
 
 index = load_data()
+
 
 # Initialize the chat engine
 if "chat_engine" not in st.session_state.keys():

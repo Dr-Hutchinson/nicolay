@@ -9,7 +9,7 @@ st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincol
 
 # Correct import paths for LlamaIndex components
 try:
-    from llama_index import VectorStoreIndex, ServiceContext, SimpleDirectoryReader
+    from llama_index import GPTVectorStoreIndex, ServiceContext, SimpleDirectoryReader
     st.write("Imported from llama_index")
 except ImportError as e:
     st.error(f"Error: Could not import from llama_index. {e}")
@@ -56,7 +56,7 @@ def load_data():
         llm = LlamaOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo", temperature=0.5)
         service_context = ServiceContext.from_defaults(llm=llm)
 
-        index = VectorStoreIndex.from_documents(docs, service_context=service_context)
+        index = GPTVectorStoreIndex.from_documents(docs, service_context=service_context)
         st.write("VectorStoreIndex successfully created")
         return index
 

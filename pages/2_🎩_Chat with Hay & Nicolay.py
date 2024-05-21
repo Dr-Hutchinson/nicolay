@@ -3,11 +3,10 @@ import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-from llama_index.llms.openai import OpenAI as LlamaOpenAI
-from llama_index import VectorStoreIndex, ServiceContext
-from llama_index.readers.file import SimpleDirectoryReader
+from llama_index import VectorStoreIndex, ServiceContext, SimpleDirectoryReader
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
+
 
 
 # Configure Streamlit

@@ -78,7 +78,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         results = rag.run_rag_process(prompt)
 
         # Debug: Print RAG process results to check JSON structure
-        st.write("RAG process results:", results)
+        #st.write("RAG process results:", results)
 
         response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]
@@ -90,26 +90,13 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         # Display initial answer
         with st.chat_message("assistant"):
-            st.markdown(f"Initial Answer: {initial_answer}")
+            st.markdown(f"Hays' Response: {initial_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
         # Display final answer with references
         with st.chat_message("assistant"):
-            st.markdown(f"Final Answer: {final_answer}")
+            st.markdown(f"Nicolay's Response: {final_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
-
-        # Log the data
-        search_results = results["search_results"]
-        semantic_matches = results["semantic_matches"]
-        reranked_results = results["reranked_results"]
-        model_weighted_keywords = results["model_weighted_keywords"]
-        model_year_keywords = results["model_year_keywords"]
-        model_text_keywords = results["model_text_keywords"]
-
-        log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-        log_reranking_results(reranking_results_logger, reranked_results, prompt)
-        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
         # Displaying the Analysis Metadata in an expander
         with st.expander("**Analysis Metadata**"):
@@ -204,6 +191,20 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                         st.markdown("Full text not found.")
                         highlight_success_dict[match_key] = False  # Indicate failure as text not found
+
+
+                # Log the data
+                search_results = results["search_results"]
+                semantic_matches = results["semantic_matches"]
+                reranked_results = results["reranked_results"]
+                model_weighted_keywords = results["model_weighted_keywords"]
+                model_year_keywords = results["model_year_keywords"]
+                model_text_keywords = results["model_text_keywords"]
+
+                log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+                log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+                log_reranking_results(reranking_results_logger, reranked_results, prompt)
+                log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

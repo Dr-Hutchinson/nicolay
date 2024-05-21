@@ -1,4 +1,4 @@
-mport streamlit as st
+import streamlit as st
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
 import json

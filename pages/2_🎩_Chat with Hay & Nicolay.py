@@ -69,14 +69,18 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]
-        final_answer = response_json.get("FinalAnswer", {}).get("Text", "Final answer not available.")
+        final_answer_text = response_json.get("FinalAnswer", {}).get("Text", "Final answer not available.")
+        references = response_json.get("FinalAnswer", {}).get("References", [])
+
+        # Combine final answer text with references
+        final_answer = f"{final_answer_text}\n\n**References:**\n" + "\n".join([f"- {ref}" for ref in references])
 
         # Display initial answer
         with st.chat_message("assistant"):
             st.markdown(f"Initial Answer: {initial_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
-        # Display final answer
+        # Display final answer with references
         with st.chat_message("assistant"):
             st.markdown(f"Final Answer: {final_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
@@ -93,6 +97,40 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
         log_reranking_results(reranking_results_logger, reranked_results, prompt)
         log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
+
+        # Displaying the Analysis Metadata in an expander
+        with st.expander("**Analysis Metadata**"):
+            # Displaying User Query Analysis
+            if "User Query Analysis" in response_json:
+                st.markdown("**User Query Analysis:**")
+                for key, value in response_json["User Query Analysis"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Initial Answer Review
+            if "Initial Answer Review" in response_json:
+                st.markdown("**Initial Answer Review:**")
+                for key, value in response_json["Initial Answer Review"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Match Analysis
+            if "Match Analysis" in response_json:
+                st.markdown("**Match Analysis:**")
+                for match_key, match_info in response_json["Match Analysis"].items():
+                    st.markdown(f"- **{match_key}:**")
+                    for key, value in match_info.items():
+                        st.markdown(f"  - {key}: {value}")
+
+            # Displaying Meta Analysis
+            if "Meta Analysis" in response_json:
+                st.markdown("**Meta Analysis:**")
+                for key, value in response_json["Meta Analysis"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Model Feedback
+            if "Model Feedback" in response_json:
+                st.markdown("**Model Feedback:**")
+                for key, value in response_json["Model Feedback"].items():
+                    st.markdown(f"- **{key}:** {value}")
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

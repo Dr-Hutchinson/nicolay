@@ -23,7 +23,7 @@ from modules.data_logging import DataLogger, log_keyword_search_results, log_sem
 
 # Access secrets
 try:
-    openai_api_key = st.secrets["openai_key"]
+    openai_api_key = st.secrets["openai_api_key"]
     cohere_api_key = st.secrets["cohere_api_key"]
     gcp_service_account = st.secrets["gcp_service_account"]
 except KeyError as e:

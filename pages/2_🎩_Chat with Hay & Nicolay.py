@@ -8,6 +8,15 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 
+# chatbot development - 0.1 - basic UI for RAG search and data logging
+
+
+st.set_page_config(
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
+    layout='wide',
+    page_icon='🎩'
+)
+
 # Set environment variables and initialize API clients
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()
@@ -40,6 +49,10 @@ st.title("Chat with Hays and Nicolay - in development")
 
 user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
 
+st.title("Chat with Hays and Nicolay - in development")
+
+user_query = st.text_input("Ask me anything about Abraham Lincoln's speeches:")
+
 if st.button("Submit"):
     if user_query:
         try:
@@ -63,8 +76,6 @@ if st.button("Submit"):
             log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
             log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
             log_reranking_results(reranking_results_logger, reranked_results, user_query)
-
-            # Ensure response is in the correct format for logging
             log_nicolay_model_output(nicolay_data_logger, json.loads(response), user_query, initial_answer, {})
 
         except Exception as e:

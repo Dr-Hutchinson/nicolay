@@ -3,13 +3,23 @@ import openai
 import cohere
 import pygsheets
 from google.oauth2 import service_account
-from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
-from llama_index.llms.openai import OpenAI as LlamaOpenAI
-from modules.rag_process import RAGProcess
-from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
 
 # Set page config first
 st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
+
+# Conditional import for LlamaIndex components
+try:
+    from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    st.write("Imported from llama_index")
+except ImportError:
+    from llama_index.indices import VectorStoreIndex
+    from llama_index.services import ServiceContext
+    from llama_index.readers import SimpleDirectoryReader, Document
+    st.write("Imported from llama_index.indices, llama_index.services, and llama_index.readers")
+
+from llama_index.llms.openai import OpenAI as LlamaOpenAI
+from modules.rag_process import RAGProcess
+from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
 
 # Access secrets
 try:

@@ -37,6 +37,11 @@ semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
+# Load Lincoln speeches data
+lincoln_data_file_path = 'data/lincoln_speech_corpus.json''
+with open(lincoln_data_file_path, 'r') as file:
+    lincoln_data = json.load(file)
+
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
@@ -188,9 +193,4 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         # Update highlight_success_dict for the current match
                         highlight_success_dict[match_key] = highlight_success
                 else:
-                    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                        st.markdown("Full text not found.")
-                        highlight_success_dict[match_key] = False  # Indicate failure as text not found
-
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+                    with st.expander(f"**Match {doc_match_counter}**:

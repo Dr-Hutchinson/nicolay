@@ -7,12 +7,13 @@ from google.oauth2 import service_account
 # Set page config first
 st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)", layout='wide', page_icon='🎩')
 
-# Conditional import for LlamaIndex components
+# Import LlamaIndex components
 try:
     from llama_index import GPTVectorStoreIndex, ServiceContext, SimpleDirectoryReader
     st.write("Imported from llama_index")
-except ImportError:
-    st.write("Error: Could not import from llama_index")
+except ImportError as e:
+    st.error(f"Error: Could not import from llama_index. {e}")
+    st.stop()
 
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from modules.rag_process import RAGProcess

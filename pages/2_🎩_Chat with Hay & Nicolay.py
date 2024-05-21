@@ -77,12 +77,12 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         # Display initial answer
         with st.chat_message("assistant"):
-            st.markdown(f"Hays' Response: {initial_answer}")
+            st.markdown(f"Initial Answer: {initial_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
         # Display final answer with references
         with st.chat_message("assistant"):
-            st.markdown(f"Nicolay's Response: {final_answer}")
+            st.markdown(f"Final Answer: {final_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
 
         # Log the data
@@ -131,6 +131,66 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 st.markdown("**Model Feedback:**")
                 for key, value in response_json["Model Feedback"].items():
                     st.markdown(f"- **{key}:** {value}")
+
+        # Displaying the Search Results
+        doc_match_counter = 0
+        highlight_success_dict = {}
+        highlight_style = """
+        <style>
+        mark {
+            background-color: #90ee90;
+            color: black;
+        }
+        </style>
+        """
+
+        if "Match Analysis" in response_json:
+            st.markdown(highlight_style, unsafe_allow_html=True)
+            for match_key, match_info in response_json["Match Analysis"].items():
+                text_id = match_info.get("Text ID")
+                formatted_text_id = f"Text #: {text_id}"
+                key_quote = match_info.get("Key Quote", "")
+
+                speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+
+                # Increment the counter for each match
+                doc_match_counter += 1
+
+                # Initialize highlight_success for each iteration
+                highlight_success = False  # Flag to track highlighting success
+
+                if speech:
+                    # Use the doc_match_counter in the expander label
+                    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
+                    with st.expander(expander_label, expanded=False):
+                        st.markdown(f"**Source:** {speech['source']}")
+                        st.markdown(f"**Text ID:** {speech['text_id']}")
+                        st.markdown(f"**Summary:**\n{speech['summary']}")
+
+                        # Replace line breaks for HTML display
+                        formatted_full_text = speech['full_text'].replace("\\n", "<br>")
+
+                        # Attempt direct highlighting
+                        if key_quote in speech['full_text']:
+                            formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
+                            highlight_success = True
+                        else:
+                            # If direct highlighting fails, use regex-based approach
+                            formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
+                            formatted_full_text = formatted_full_text.replace("\\n", "<br>")
+                            # Check if highlighting was successful with regex approach
+                            highlight_success = key_quote in formatted_full_text
+
+                        st.markdown(f"**Key Quote:**\n{key_quote}")
+                        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                        st.markdown(formatted_full_text, unsafe_allow_html=True)
+
+                        # Update highlight_success_dict for the current match
+                        highlight_success_dict[match_key] = highlight_success
+                else:
+                    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
+                        st.markdown("Full text not found.")
+                        highlight_success_dict[match_key] = False  # Indicate failure as text not found
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

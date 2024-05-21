@@ -1,7 +1,7 @@
-cohere==4.40
-numpy==1.26.3
-openai==1.6.1
-pandas==2.0.3
-pygsheets==2.0.6
-streamlit==1.29.0
-llama-index==0.10.37
+cohere
+numpy
+openai
+pandas
+pygsheets
+streamlit
+llama-index

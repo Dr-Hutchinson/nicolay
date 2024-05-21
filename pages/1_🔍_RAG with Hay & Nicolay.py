@@ -814,7 +814,7 @@ with st.form("Search Interface"):
                                             st.markdown(f"**Key Quote:**\n{key_quote}")
                                             st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
                                             st.markdown(formatted_full_text, unsafe_allow_html=True)
-	@@ -959,7 +964,6 @@ def record_api_outputs():
+	                                        record_api_outputs():
                                     else:
                                         with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                                             st.markdown("Full text not found.")

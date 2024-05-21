@@ -8,7 +8,7 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 import llama_index
-from langchain.chat_models import ChatOpenAI
+#from langchain.chat_models import ChatOpenAI
 import pkgutil
 #import llama_index
 

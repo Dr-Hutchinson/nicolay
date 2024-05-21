@@ -9,13 +9,37 @@ import pygsheets
 from google.oauth2 import service_account
 
 # Adjusted imports based on the module listing
-from llama_index.readers import SimpleDirectoryReader
-from llama_index.indices.vector_store import GPTVectorStoreIndex
-from llama_index.llms import LLMPredictor
-from llama_index.service_context import ServiceContext
-from llama_index.storage import StorageContext, load_index_from_storage
-from langchain.chat_models import ChatOpenAI
+import pkgutil
+import llama_index
 
+st.set_page_config(
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
+    layout='wide',
+    page_icon='🎩'
+)
+
+def list_submodules(package):
+    for importer, modname, ispkg in pkgutil.walk_packages(package.__path__):
+        st.write(f"Module: {modname}, Is a package: {ispkg}")
+
+# List contents of 'llama_index'
+list_submodules(llama_index)
+
+# If needed, list specific sub-packages
+import llama_index.readers
+list_submodules(llama_index.readers)
+
+import llama_index.indices
+list_submodules(llama_index.indices)
+
+import llama_index.llms
+list_submodules(llama_index.llms)
+
+import llama_index.service_context
+list_submodules(llama_index.service_context)
+
+import llama_index.storage
+list_submodules(llama_index.storage)
 # chatbot development - 0.0 - basic UI for RAG search and data logging
 
 st.set_page_config(

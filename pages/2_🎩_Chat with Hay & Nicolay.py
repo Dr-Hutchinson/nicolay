@@ -9,13 +9,10 @@ st.set_page_config(page_title="Nicolay: Exploring the Speeches of Abraham Lincol
 
 # Conditional import for LlamaIndex components
 try:
-    from llama_index import VectorStoreIndex, ServiceContext, Document, SimpleDirectoryReader
+    from llama_index import GPTVectorStoreIndex, ServiceContext, SimpleDirectoryReader
     st.write("Imported from llama_index")
 except ImportError:
-    from llama_index.indices import VectorStoreIndex
-    from llama_index.services import ServiceContext
-    from llama_index.readers import SimpleDirectoryReader, Document
-    st.write("Imported from llama_index.indices, llama_index.services, and llama_index.readers")
+    st.write("Error: Could not import from llama_index")
 
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from modules.rag_process import RAGProcess
@@ -58,7 +55,7 @@ def load_data():
         llm = LlamaOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo", temperature=0.5)
         service_context = ServiceContext.from_defaults(llm=llm)
 
-        index = VectorStoreIndex.from_documents(docs, service_context=service_context)
+        index = GPTVectorStoreIndex.from_documents(docs, service_context=service_context)
         st.write("VectorStoreIndex successfully created")
         return index
 

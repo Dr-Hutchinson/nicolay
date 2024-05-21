@@ -38,7 +38,7 @@ reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
 # Load Lincoln speeches data
-lincoln_data_file_path = 'data/lincoln_speech_corpus.json''
+lincoln_data_file_path = 'data/lincoln_speech_corpus.json'
 with open(lincoln_data_file_path, 'r') as file:
     lincoln_data = json.load(file)
 

@@ -59,9 +59,6 @@ lincoln_data = load_lincoln_speech_corpus()
 voyant_data = load_voyant_word_counts()
 lincoln_index_df = load_lincoln_index_embedded()
 
-
-
-
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
@@ -101,9 +98,9 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         final_answer = f"{final_answer_text}\n\n**References:**\n" + "\n".join([f"- {ref}" for ref in references])
 
         # Display initial answer
-        with st.chat_message("assistant"):
-            st.markdown(f"Hays' Response: {initial_answer}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
+        #with st.chat_message("assistant"):
+        #    st.markdown(f"Hays' Response: {initial_answer}")
+        #st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
         # Display final answer with references
         with st.chat_message("assistant"):

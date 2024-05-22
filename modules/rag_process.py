@@ -235,6 +235,10 @@ class RAGProcess:
 
     def run_rag_process(self, user_query, df, keyword_data, lincoln_data):  # Pass data as arguments
         try:
+
+            # Start timer for data loading
+            start_time = time.time()
+
             # Use data from session state
             lincoln_data = st.session_state.lincoln_data
             keyword_data = st.session_state.keyword_data
@@ -247,7 +251,10 @@ class RAGProcess:
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            st.write("Loaded and prepared data successfully.")
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            st.write(f"Loaded and prepared data successfully in {elapsed_time:.2f} seconds.")
+            #st.write("Loaded and prepared data successfully.")
 
             response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",

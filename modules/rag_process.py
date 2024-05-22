@@ -357,16 +357,16 @@ def load_prompts():
         st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
     if 'response_model_system_prompt' not in st.session_state:
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
-    if 'app_intro' not in st.session_state:
-        st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
-    if 'keyword_search_explainer' not in st.session_state:
-        st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
-    if 'semantic_search_explainer' not in st.session_state:
-        st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
-    if 'relevance_ranking_explainer' not in st.session_state:
-        st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
-    if 'nicolay_model_explainer' not in st.session_state:
-        st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
+    #if 'app_intro' not in st.session_state:
+    #    st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
+    #if 'keyword_search_explainer' not in st.session_state:
+    #    st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
+    #if 'semantic_search_explainer' not in st.session_state:
+    #    st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
+    #if 'relevance_ranking_explainer' not in st.session_state:
+    #    st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
+    #if 'nicolay_model_explainer' not in st.session_state:
+    #    st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -374,8 +374,8 @@ load_prompts()
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
-app_intro = st.session_state['app_intro']
-keyword_search_explainer = st.session_state['keyword_search_explainer']
-semantic_search_explainer = st.session_state['semantic_search_explainer']
-relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
-nicolay_model_explainer = st.session_state['nicolay_model_explainer']
+#app_intro = st.session_state['app_intro']
+#keyword_search_explainer = st.session_state['keyword_search_explainer']
+#semantic_search_explainer = st.session_state['semantic_search_explainer']
+#relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
+#nicolay_model_explainer = st.session_state['nicolay_model_explainer']

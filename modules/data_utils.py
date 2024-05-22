@@ -2,7 +2,7 @@
 # Convert JSON to MessagePack (one-time conversion)
 import msgpack
 import json
-import streamit as st
+import streamlit as st
 
 with open('data/lincoln_speech_corpus.json', 'r') as file:
     lincoln_data = json.load(file)

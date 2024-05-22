@@ -6,22 +6,6 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-# Convert JSON to MessagePack (one-time conversion)
-def convert_json_to_msgpack(json_file, msgpack_file):
-    with open(json_file, 'r') as file:
-        data = json.load(file)
-    with open(msgpack_file, 'wb') as file:
-        file.write(msgpack.packb(data))
-
-# Convert CSV to Parquet (one-time conversion)
-def convert_csv_to_parquet(csv_file, parquet_file):
-    df = pd.read_csv(csv_file)
-    df.to_parquet(parquet_file)
-
-# One-time conversions (uncomment if needed)
-# convert_json_to_msgpack('data/lincoln_speech_corpus.json', 'data/lincoln_speech_corpus.msgpack')
-# convert_json_to_msgpack('data/voyant_word_counts.json', 'data/voyant_word_counts.msgpack')
-# convert_csv_to_parquet('data/lincoln_index_embedded.csv', 'data/lincoln_index_embedded.parquet')
 
 # Load data functions with caching
 @st.cache_data(persist="disk")
@@ -36,7 +20,11 @@ def load_voyant_word_counts():
 
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded():
-    return pd.read_parquet('data/lincoln_index_embedded.parquet')
+    df = pd.read_parquet('data/lincoln_index_embedded.parquet')
+    # Ensure the index is correctly set
+    df.reset_index(inplace=True)
+    df.rename(columns={'index': 'text_id'}, inplace=True)
+    return df
 
 @st.cache_data(persist="disk")
 def load_all_data():

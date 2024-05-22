@@ -245,9 +245,14 @@ class RAGProcess:
             start_time = time.time()
 
             # Use data from session state
-            lincoln_data = st.session_state.lincoln_data
-            keyword_data = st.session_state.keyword_data
-            df = st.session_state.df
+            #lincoln_data = st.session_state.lincoln_data
+            #keyword_data = st.session_state.keyword_data
+            #df = st.session_state.df
+
+            lincoln_data = self.lincoln_data
+            keyword_data = self.keyword_data
+            df = self.df
+
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict

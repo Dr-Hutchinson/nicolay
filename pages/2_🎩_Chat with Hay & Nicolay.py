@@ -105,7 +105,8 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
     try:
         # Process the user query
         st.write("Processing your query...")
-        results = rag.run_rag_process(prompt)
+        #results = rag.run_rag_process(prompt)
+        results = rag.run_rag_process(prompt, df, keyword_data, lincoln_data)
 
         response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]

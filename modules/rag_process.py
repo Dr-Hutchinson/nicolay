@@ -209,9 +209,10 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
-            lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
-            keyword_data = self.load_json('data/voyant_word_counts.json')
-            df = pd.read_csv("lincoln_index_embedded.csv")
+            # Use data from session state
+            lincoln_data = st.session_state.lincoln_data
+            keyword_data = st.session_state.keyword_data
+            df = st.session_state.df
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
@@ -314,6 +315,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 # Helper Functions

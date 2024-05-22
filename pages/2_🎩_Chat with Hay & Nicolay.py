@@ -71,8 +71,10 @@ def load_and_prepare_data():
             st.session_state.keyword_data = json.load(file)
     if 'df' not in st.session_state:
         st.session_state.df = pd.read_csv("lincoln_index_embedded.csv")
-    return lincoln_data, keyword_data, df
+    # Return the variables from session state
+    return st.session_state.lincoln_data, st.session_state.keyword_data, st.session_state.df
 
+# Load data using the cached function
 lincoln_data, keyword_data, df = load_and_prepare_data()
 
 # Call this function at the beginning of the Streamlit script

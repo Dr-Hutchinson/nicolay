@@ -216,9 +216,9 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
-            lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
-            keyword_data = self.load_json('data/voyant_word_counts.json')
-            df = pd.read_csv("lincoln_index_embedded.csv")
+            #lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
+            #keyword_data = self.load_json('data/voyant_word_counts.json')
+            #df = pd.read_csv("lincoln_index_embedded.csv")
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict

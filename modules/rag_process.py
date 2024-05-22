@@ -13,6 +13,23 @@ import time
 
 # rag process 0.0
 
+@st.cache_data(persist="disk")
+def load_and_prepare_data():
+    if 'lincoln_data' not in st.session_state:
+        with open('data/lincoln_speech_corpus.json', 'r') as file:
+            st.session_state.lincoln_data = json.load(file)
+    if 'keyword_data' not in st.session_state:
+        with open('data/voyant_word_counts.json', 'r') as file:
+            st.session_state.keyword_data = json.load(file)
+    if 'df' not in st.session_state:
+        st.session_state.df = pd.read_csv("lincoln_index_embedded.csv")
+        # Calculate embeddings and store them in the DataFrame
+        st.session_state.df['embedding'] = st.session_state.df['full_text'].apply(lambda x: get_embedding(x) if x else np.zeros(1536))
+    return st.session_state.lincoln_data, st.session_state.keyword_data, st.session_state.df
+
+# Load data using the cached function
+lincoln_data, keyword_data, df = load_and_prepare_data()
+
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
         # Initialize OpenAI and Cohere clients
@@ -208,13 +225,9 @@ class RAGProcess:
         )
         return response.choices[0].message.content
 
-    def run_rag_process(self, user_query):
+    def run_rag_process(self, user_query, df, keyword_data, lincoln_data):  # Pass data as arguments
         try:
             # Use data from session state
-
-            # Start timer for data loading
-            start_time = time.time()
-
             lincoln_data = st.session_state.lincoln_data
             keyword_data = st.session_state.keyword_data
             df = st.session_state.df
@@ -225,11 +238,6 @@ class RAGProcess:
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
-
-             # End timer and display time elapsed
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            st.write(f"Loaded and prepared data successfully in {elapsed_time:.2f} seconds.")
 
             st.write("Loaded and prepared data successfully.")
 
@@ -248,12 +256,6 @@ class RAGProcess:
 
             api_response_data = json.loads(response.choices[0].message.content)
             initial_answer = api_response_data['initial_answer']
-
-            # Display Hays response in the chat immediately
-            with st.chat_message("assistant"):
-                st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Hays' Response: {initial_answer}"})
-
             model_weighted_keywords = api_response_data['weighted_keywords']
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
@@ -269,7 +271,12 @@ class RAGProcess:
 
             self.hays_data_logger.record_api_outputs(hays_data)
 
-            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+            st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+
+            # Display Hays response in the chat immediately
+            with st.chat_message("assistant"):
+                st.markdown(f"Hays' Response: {initial_answer}")
+            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,

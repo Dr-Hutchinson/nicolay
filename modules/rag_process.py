@@ -257,8 +257,11 @@ class RAGProcess:
             step_time = time.time()
 
             api_response_data = json.loads(response.choices[0].message.content)
+            st.write("Raw response content:", response.choices[0].message.content)
+
             initial_answer = api_response_data['initial_answer']
             model_weighted_keywords = api_response_data['weighted_keywords']
+
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 

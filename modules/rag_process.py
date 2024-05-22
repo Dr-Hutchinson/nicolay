@@ -9,6 +9,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
+from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
+
 
 # rag process 0.0
 

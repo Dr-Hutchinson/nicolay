@@ -229,7 +229,7 @@ class RAGProcess:
 
             st.write("Loaded and prepared data successfully.")
 
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.chat.completions.create()
             api_response_data = json.loads(response.choices[0].message.content)
             initial_answer = api_response_data['initial_answer']
 

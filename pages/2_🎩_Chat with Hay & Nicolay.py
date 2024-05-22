@@ -46,21 +46,6 @@ semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
-# Load Lincoln speeches data
-#lincoln_data_file_path = 'data/lincoln_speech_corpus.json'
-#with open(lincoln_data_file_path, 'r') as file:
-#    lincoln_data = json.load(file)
-
-#def load_data_into_session_state():
-#    if 'lincoln_data' not in st.session_state:
-#        with open('data/lincoln_speech_corpus.json', 'r') as file:
-#            st.session_state.lincoln_data = json.load(file)
-#    if 'keyword_data' not in st.session_state:
-#        with open('data/voyant_word_counts.json', 'r') as file:
-#            st.session_state.keyword_data = json.load(file)
-#    if 'df' not in st.session_state:
-#        st.session_state.df = pd.read_csv("lincoln_index_embedded.csv")
-
 @st.cache_data(persist="disk")
 def load_and_prepare_data():
     if 'lincoln_data' not in st.session_state:
@@ -76,10 +61,6 @@ def load_and_prepare_data():
 
 # Load data using the cached function
 lincoln_data, keyword_data, df = load_and_prepare_data()
-
-# Call this function at the beginning of the Streamlit script
-#load_data_into_session_state()
-
 
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)

@@ -98,9 +98,9 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         final_answer = f"{final_answer_text}\n\n**References:**\n" + "\n".join([f"- {ref}" for ref in references])
 
-        with st.chat_message("assistant"):
-            st.markdown(f"Hays' Response: {initial_answer}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
+        #with st.chat_message("assistant"):
+        #    st.markdown(f"Hays' Response: {initial_answer}")
+        #st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
         with st.chat_message("assistant"):
             st.markdown(f"Nicolay's Response: {final_answer}")

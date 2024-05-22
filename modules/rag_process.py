@@ -9,7 +9,6 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
-import time
 
 # rag process 0.0
 
@@ -210,41 +209,50 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
-            # Use data from session state
+            lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
+            keyword_data = self.load_json('data/voyant_word_counts.json')
+            df = pd.read_csv("lincoln_index_embedded.csv")
 
-            # Start timer for data loading
-            start_time = time.time()
+            lincoln_dict = {item['text_id']: item for item in lincoln_data}
+            self.lincoln_dict = lincoln_dict
 
-            lincoln_data = st.session_state.lincoln_data
-            keyword_data = st.session_state.keyword_data
-            df = st.session_state.df
-
+            df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-             # End timer and display time elapsed
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            st.write(f"Loaded and prepared data successfully in {elapsed_time:.2f} seconds.")
-
             st.write("Loaded and prepared data successfully.")
 
-            response = self.openai_client.chat.completions.create()
+            response = self.openai_client.chat.completions.create(
+                model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
+                messages=[
+                    {"role": "system", "content": keyword_prompt},
+                    {"role": "user", "content": user_query}
+                ],
+                temperature=0,
+                max_tokens=500,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0
+            )
+
             api_response_data = json.loads(response.choices[0].message.content)
             initial_answer = api_response_data['initial_answer']
-
-            # Display Hays response in the chat immediately
-            with st.chat_message("assistant"):
-                st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
-
             model_weighted_keywords = api_response_data['weighted_keywords']
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 
+            hays_data = {
+                'query': user_query,
+                'initial_answer': initial_answer,
+                'weighted_keywords': model_weighted_keywords,
+                'year_keywords': model_year_keywords,
+                'text_keywords': model_text_keywords,
+                'full_output': response.choices[0].message.content
+            }
+
             self.hays_data_logger.record_api_outputs(hays_data)
 
-            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+            st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
@@ -306,7 +314,6 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
-
 
 
 # Helper Functions

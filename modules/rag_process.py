@@ -9,7 +9,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
-from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
+import msgpack
+from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded, load_all_data
 import time
 
 
@@ -30,9 +31,14 @@ class RAGProcess:
         self.hays_data_logger = hays_data_logger
 
          # Load data using cached functions
-        self.lincoln_data = load_lincoln_speech_corpus()
-        self.voyant_data = load_voyant_word_counts()
-        self.lincoln_index_df = load_lincoln_index_embedded()
+        #self.lincoln_data = load_lincoln_speech_corpus()
+        #self.voyant_data = load_voyant_word_counts()
+        #self.lincoln_index_df = load_lincoln_index_embedded()
+
+        # Load data using cached functions
+        self.lincoln_data, self.voyant_data, self.lincoln_index_df = load_all_data()
+
+
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:

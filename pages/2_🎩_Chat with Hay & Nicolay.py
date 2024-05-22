@@ -197,5 +197,5 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
             log_reranking_results(reranking_results_logger, reranked_results, prompt)
             log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")

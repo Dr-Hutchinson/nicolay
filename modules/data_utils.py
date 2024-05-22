@@ -15,4 +15,4 @@ def load_voyant_word_counts():
 
 @st.cache_data(persist="disk", ttl=3600)
 def load_lincoln_index_embedded():
-    return pd.read_csv('data/lincoln_index_embedded.csv')
+    return pd.read_csv('lincoln_index_embedded.csv')

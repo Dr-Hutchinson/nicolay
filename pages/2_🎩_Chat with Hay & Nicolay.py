@@ -161,7 +161,9 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 formatted_text_id = f"Text #: {text_id}"
                 key_quote = match_info.get("Key Quote", "")
 
-                speech = next((item for item in st.session_state.lincoln_data if item['text_id'] == formatted_text_id), None)
+                #speech = next((item for item in st.session_state.lincoln_data if item['text_id'] == formatted_text_id), None)
+                speech = next((item for item in self.lincoln_data if item['text_id'] == formatted_text_id), None) # Use self.lincoln_data
+
 
                 doc_match_counter += 1
                 highlight_success = False

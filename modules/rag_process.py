@@ -213,6 +213,8 @@ class RAGProcess:
             frequency_penalty=0,
             presence_penalty=0
         )
+
+        st.write("Raw final response content:", response.choices[0].message.content)
         return response.choices[0].message.content
 
     def run_rag_process(self, user_query):

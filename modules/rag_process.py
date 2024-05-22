@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
 from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
+import time
 
 
 # rag process 0.0
@@ -216,9 +217,17 @@ class RAGProcess:
 
     def run_rag_process(self, user_query):
         try:
+            start_time = time.time()
+
             #lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
             #keyword_data = self.load_json('data/voyant_word_counts.json')
             #df = pd.read_csv("lincoln_index_embedded.csv")
+
+             # Ensure data is loaded and prepared
+            lincoln_data = self.lincoln_data
+            keyword_data = self.voyant_data
+            df = self.lincoln_index_df
+
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
@@ -227,7 +236,8 @@ class RAGProcess:
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            st.write("Loaded and prepared data successfully.")
+            #st.write("Loaded and prepared data successfully.")
+            st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
 
             response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",

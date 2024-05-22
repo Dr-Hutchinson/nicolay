@@ -1,6 +1,7 @@
 # data_utils.py
 # Convert JSON to MessagePack (one-time conversion)
 import msgpack
+import json
 
 with open('data/lincoln_speech_corpus.json', 'r') as file:
     lincoln_data = json.load(file)

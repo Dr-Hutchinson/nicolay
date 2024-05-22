@@ -26,6 +26,11 @@ class RAGProcess:
         # Store the hays_data_logger
         self.hays_data_logger = hays_data_logger
 
+         # Load data using cached functions
+        self.lincoln_data = load_lincoln_speech_corpus()
+        self.voyant_data = load_voyant_word_counts()
+        self.lincoln_index_df = load_lincoln_index_embedded()
+
     def load_json(self, file_path):
         with open(file_path, 'r') as file:
             data = json.load(file)
@@ -252,7 +257,12 @@ class RAGProcess:
 
             self.hays_data_logger.record_api_outputs(hays_data)
 
-            st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
+
+            # Display initial answer
+            with st.chat_message("assistant"):
+                st.markdown(f"Hays' Response: {initial_answer}")
+            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,

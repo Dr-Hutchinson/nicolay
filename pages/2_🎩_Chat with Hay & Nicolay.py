@@ -1,6 +1,7 @@
 import streamlit as st
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
+from data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
 import json
 import os
 from openai import OpenAI
@@ -47,10 +48,19 @@ semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
-# Load Lincoln speeches data
-lincoln_data_file_path = 'data/lincoln_speech_corpus.json'
-with open(lincoln_data_file_path, 'r') as file:
-    lincoln_data = json.load(file)
+if 'lincoln_data' not in st.session_state:
+    st.session_state.lincoln_data = load_lincoln_speech_corpus()
+if 'voyant_data' not in st.session_state:
+    st.session_state.voyant_data = load_voyant_word_counts()
+if 'lincoln_index_df' not in st.session_state:
+    st.session_state.lincoln_index_df = load_lincoln_index_embedded()
+
+lincoln_data = load_lincoln_speech_corpus()
+voyant_data = load_voyant_word_counts()
+lincoln_index_df = load_lincoln_index_embedded()
+
+
+
 
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
@@ -99,53 +109,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         with st.chat_message("assistant"):
             st.markdown(f"Nicolay's Response: {final_answer}")
         st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
-
-        # Log the data
-        search_results = results["search_results"]
-        semantic_matches = results["semantic_matches"]
-        reranked_results = results["reranked_results"]
-        model_weighted_keywords = results["model_weighted_keywords"]
-        model_year_keywords = results["model_year_keywords"]
-        model_text_keywords = results["model_text_keywords"]
-
-        log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-        log_reranking_results(reranking_results_logger, reranked_results, prompt)
-        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
-
-        # Displaying the Analysis Metadata in an expander
-        with st.expander("**Analysis Metadata**"):
-            # Displaying User Query Analysis
-            if "User Query Analysis" in response_json:
-                st.markdown("**User Query Analysis:**")
-                for key, value in response_json["User Query Analysis"].items():
-                    st.markdown(f"- **{key}:** {value}")
-
-            # Displaying Initial Answer Review
-            if "Initial Answer Review" in response_json:
-                st.markdown("**Initial Answer Review:**")
-                for key, value in response_json["Initial Answer Review"].items():
-                    st.markdown(f"- **{key}:** {value}")
-
-            # Displaying Match Analysis
-            if "Match Analysis" in response_json:
-                st.markdown("**Match Analysis:**")
-                for match_key, match_info in response_json["Match Analysis"].items():
-                    st.markdown(f"- **{match_key}:**")
-                    for key, value in match_info.items():
-                        st.markdown(f"  - {key}: {value}")
-
-            # Displaying Meta Analysis
-            if "Meta Analysis" in response_json:
-                st.markdown("**Meta Analysis:**")
-                for key, value in response_json["Meta Analysis"].items():
-                    st.markdown(f"- **{key}:** {value}")
-
-            # Displaying Model Feedback
-            if "Model Feedback" in response_json:
-                st.markdown("**Model Feedback:**")
-                for key, value in response_json["Model Feedback"].items():
-                    st.markdown(f"- **{key}:** {value}")
 
         # Displaying the Search Results
         doc_match_counter = 0
@@ -206,6 +169,55 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                         st.markdown("Full text not found.")
                         highlight_success_dict[match_key] = False  # Indicate failure as text not found
+
+
+        # Log the data
+        search_results = results["search_results"]
+        semantic_matches = results["semantic_matches"]
+        reranked_results = results["reranked_results"]
+        model_weighted_keywords = results["model_weighted_keywords"]
+        model_year_keywords = results["model_year_keywords"]
+        model_text_keywords = results["model_text_keywords"]
+
+        log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+        log_reranking_results(reranking_results_logger, reranked_results, prompt)
+        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
+
+        # Displaying the Analysis Metadata in an expander
+        with st.expander("**Analysis Metadata**"):
+            # Displaying User Query Analysis
+            if "User Query Analysis" in response_json:
+                st.markdown("**User Query Analysis:**")
+                for key, value in response_json["User Query Analysis"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Initial Answer Review
+            if "Initial Answer Review" in response_json:
+                st.markdown("**Initial Answer Review:**")
+                for key, value in response_json["Initial Answer Review"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Match Analysis
+            if "Match Analysis" in response_json:
+                st.markdown("**Match Analysis:**")
+                for match_key, match_info in response_json["Match Analysis"].items():
+                    st.markdown(f"- **{match_key}:**")
+                    for key, value in match_info.items():
+                        st.markdown(f"  - {key}: {value}")
+
+            # Displaying Meta Analysis
+            if "Meta Analysis" in response_json:
+                st.markdown("**Meta Analysis:**")
+                for key, value in response_json["Meta Analysis"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
+            # Displaying Model Feedback
+            if "Model Feedback" in response_json:
+                st.markdown("**Model Feedback:**")
+                for key, value in response_json["Model Feedback"].items():
+                    st.markdown(f"- **{key}:** {value}")
+
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

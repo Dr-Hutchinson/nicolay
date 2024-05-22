@@ -13,6 +13,14 @@ import time
 
 # rag process 0.0
 
+# Streamlit app setup
+st.set_page_config(
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
+    layout='wide',
+    page_icon='🎩'
+)
+
+
 @st.cache_data(persist="disk")
 def load_and_prepare_data():
     if 'lincoln_data' not in st.session_state:

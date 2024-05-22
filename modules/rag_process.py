@@ -32,12 +32,12 @@ class RAGProcess:
         self.hays_data_logger = hays_data_logger
 
          # Load data using cached functions
-        #self.lincoln_data = load_lincoln_speech_corpus()
-        #self.voyant_data = load_voyant_word_counts()
-        #self.lincoln_index_df = load_lincoln_index_embedded()
+        self.lincoln_data = load_lincoln_speech_corpus()
+        self.voyant_data = load_voyant_word_counts()
+        self.lincoln_index_df = load_lincoln_index_embedded()
 
         # Load data using cached functions
-        self.lincoln_data, self.voyant_data, self.lincoln_index_df = load_all_data()
+        #self.lincoln_data, self.voyant_data, self.lincoln_index_df = load_all_data()
 
 
 

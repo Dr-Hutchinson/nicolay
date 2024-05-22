@@ -1,3 +1,4 @@
+
 import streamlit as st
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
@@ -46,8 +47,12 @@ semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
-@st.cache_data(persist="disk")
-def load_and_prepare_data():
+# Load Lincoln speeches data
+#lincoln_data_file_path = 'data/lincoln_speech_corpus.json'
+#with open(lincoln_data_file_path, 'r') as file:
+#    lincoln_data = json.load(file)
+
+def load_data_into_session_state():
     if 'lincoln_data' not in st.session_state:
         with open('data/lincoln_speech_corpus.json', 'r') as file:
             st.session_state.lincoln_data = json.load(file)
@@ -56,25 +61,13 @@ def load_and_prepare_data():
             st.session_state.keyword_data = json.load(file)
     if 'df' not in st.session_state:
         st.session_state.df = pd.read_csv("lincoln_index_embedded.csv")
-    # Return the variables from session state
-    return st.session_state.lincoln_data, st.session_state.keyword_data, st.session_state.df
 
-# Load data using the cached function
-lincoln_data, keyword_data, df = load_and_prepare_data()
+# Call this function at the beginning of the Streamlit script
+load_data_into_session_state()
+
 
 # Initialize the RAG Process
-#rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
-
-# Initialize the RAG Process, PASSING the loaded data
-rag = RAGProcess(
-    openai_api_key,
-    cohere_api_key,
-    gcp_service_account,
-    hays_data_logger,
-    lincoln_data, # Pass lincoln_data
-    keyword_data, # Pass keyword_data
-    df           # Pass df
-)
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
 
 # Streamlit Chatbot Interface
 st.title("Chat with Hays and Nicolay - in development")
@@ -97,8 +90,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
     try:
         # Process the user query
         st.write("Processing your query...")
-        #results = rag.run_rag_process(prompt)
-        results = rag.run_rag_process(prompt, df, keyword_data, lincoln_data)
+        results = rag.run_rag_process(prompt)
 
         response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]
@@ -113,7 +105,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         with st.chat_message("assistant"):
             st.markdown(f"Nicolay's Response: {final_answer}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Nicolay's response: {final_answer}"})
+        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
 
         with st.expander("**Analysis Metadata**"):
             if "User Query Analysis" in response_json:
@@ -161,9 +153,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 formatted_text_id = f"Text #: {text_id}"
                 key_quote = match_info.get("Key Quote", "")
 
-                #speech = next((item for item in st.session_state.lincoln_data if item['text_id'] == formatted_text_id), None)
-                speech = next((item for item in self.lincoln_data if item['text_id'] == formatted_text_id), None) # Use self.lincoln_data
-
+                speech = next((item for item in st.session_state.lincoln_data if item['text_id'] == formatted_text_id), None)
 
                 doc_match_counter += 1
                 highlight_success = False

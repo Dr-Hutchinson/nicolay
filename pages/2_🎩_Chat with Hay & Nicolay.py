@@ -180,7 +180,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     with st.expander(expander_label, expanded=False):
                         st.markdown(f"**Source:** {speech['source']}")
                         st.markdown(f"**Text ID:** {speech['text_id']}")
-                        st.mparkdown(f"**Summary:**\n{speech['summary']}")
+                        st.markdown(f"**Summary:**\n{speech['summary']}")
 
                         # Replace line breaks for HTML display
                         formatted_full_text = speech['full_text'].replace("\n", "<br>")

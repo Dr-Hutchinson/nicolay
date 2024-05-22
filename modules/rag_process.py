@@ -252,7 +252,7 @@ class RAGProcess:
             # Display Hays response in the chat immediately
             with st.chat_message("assistant"):
                 st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
+            st.session_state.messages.append({"role": "assistant", "content": f"Hays' Response: {initial_answer}"})
 
             model_weighted_keywords = api_response_data['weighted_keywords']
             model_year_keywords = api_response_data['year_keywords']

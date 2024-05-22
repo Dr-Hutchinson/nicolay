@@ -104,7 +104,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         with st.chat_message("assistant"):
             st.markdown(f"Nicolay's Response: {final_answer}")
-        st.session_state.messages.append({"role": "assistant", "content": f"Final Answer: {final_answer}"})
+        st.session_state.messages.append({"role": "assistant", "content": f"Nicolay's response: {final_answer}"})
 
         with st.expander("**Analysis Metadata**"):
             if "User Query Analysis" in response_json:

@@ -63,7 +63,18 @@ def load_and_prepare_data():
 lincoln_data, keyword_data, df = load_and_prepare_data()
 
 # Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
+#rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
+
+# Initialize the RAG Process, PASSING the loaded data
+rag = RAGProcess(
+    openai_api_key,
+    cohere_api_key,
+    gcp_service_account,
+    hays_data_logger,
+    lincoln_data, # Pass lincoln_data
+    keyword_data, # Pass keyword_data
+    df           # Pass df
+)
 
 # Streamlit Chatbot Interface
 st.title("Chat with Hays and Nicolay - in development")

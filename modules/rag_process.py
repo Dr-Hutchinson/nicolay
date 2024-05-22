@@ -39,7 +39,7 @@ def load_and_prepare_data():
 lincoln_data, keyword_data, df = load_and_prepare_data()
 
 class RAGProcess:
-    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
+    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger, lincoln_data, keyword_data, df):
         # Initialize OpenAI and Cohere clients
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.cohere_client = cohere.Client(api_key=cohere_api_key)
@@ -51,6 +51,11 @@ class RAGProcess:
 
         # Store the hays_data_logger
         self.hays_data_logger = hays_data_logger
+
+        # Store the data locally
+        self.lincoln_data = lincoln_data
+        self.keyword_data = keyword_data
+        self.df = df
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:

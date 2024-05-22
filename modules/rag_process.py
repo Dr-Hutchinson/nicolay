@@ -238,6 +238,7 @@ class RAGProcess:
 
             #st.write("Loaded and prepared data successfully.")
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
+            step_time = time.time()
 
             response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
@@ -251,6 +252,9 @@ class RAGProcess:
                 frequency_penalty=0,
                 presence_penalty=0
             )
+
+            st.write(f"Query processed with OpenAI model in {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             api_response_data = json.loads(response.choices[0].message.content)
             initial_answer = api_response_data['initial_answer']
@@ -268,6 +272,8 @@ class RAGProcess:
             }
 
             self.hays_data_logger.record_api_outputs(hays_data)
+            st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
@@ -301,7 +307,8 @@ class RAGProcess:
                 top_segments.append(top_segment[0])
             semantic_matches["TopSegment"] = top_segments
 
-            st.write("Performed semantic search successfully.")
+            st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
@@ -311,15 +318,21 @@ class RAGProcess:
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
 
-            st.write("Combined search results successfully.")
+            #st.write("Combined search results successfully.")
+            st.write(f"Duplicate removal and result combination took {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)
 
-            st.write("Reranked results successfully.")
+            st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             formatted_input_for_model = format_reranked_results_for_model_input(reranked_results)
             final_model_response = self.get_final_model_response(user_query, initial_answer, formatted_input_for_model)
+
+            st.write(f"Final model response generated in {time.time() - step_time:.2f} seconds.")
+            step_time = time.time()
 
             st.write("Generated final model response successfully.")
 

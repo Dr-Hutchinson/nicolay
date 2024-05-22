@@ -3,6 +3,10 @@
 import msgpack
 import json
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 with open('data/lincoln_speech_corpus.json', 'r') as file:
     lincoln_data = json.load(file)
@@ -28,7 +32,16 @@ def load_voyant_word_counts():
     with open('data/voyant_word_counts.msgpack', 'rb') as file:
         return msgpack.unpackb(file.read())
 
-from concurrent.futures import ThreadPoolExecutor
+# Read the CSV file
+df = pd.read_csv('lincoln_index_embedded.csv')
+
+# Convert the DataFrame to Parquet format
+df.to_parquet('lincoln_index_embedded.parquet')
+
+@st.cache_data(persist="disk")
+def load_lincoln_index_embedded():
+    return pd.read_parquet('data/lincoln_index_embedded.parquet')
+
 
 @st.cache_data(persist="disk")
 def load_all_data():

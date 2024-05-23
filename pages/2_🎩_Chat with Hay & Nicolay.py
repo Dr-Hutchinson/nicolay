@@ -86,7 +86,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         results = rag.run_rag_process(prompt)
 
         # Print the raw response for debugging
-        st.write("Raw response content:", results["response"])
+        #st.write("Raw response content:", results["response"])
 
         # Try to parse the JSON response
         try:

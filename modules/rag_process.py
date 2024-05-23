@@ -336,10 +336,13 @@ class RAGProcess:
             step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
-            st.write("Deduplicated results: ", deduplicated_results)  # Debugging statement
+
+            # Debugging: Display the deduplicated results
+            st.write("Deduplicated Results Head:")
+            st.write(deduplicated_results.head())
 
             all_combined_data = [
-                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
+                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row.get('quote', '')}" for idx, row in deduplicated_results.iterrows()
             ] + [
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]

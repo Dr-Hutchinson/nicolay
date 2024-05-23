@@ -124,7 +124,7 @@ class RAGProcess:
                                 keyword_positions[keyword_index] = (keyword, original_weight)
                                 st.write(f"Found keyword '{keyword}' at position {keyword_index} with weight {original_weight}")
 
-                    # Added check for empty keyword_positions
+                    # Check for empty keyword_positions
                     if not keyword_positions:
                         st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
                         continue  # Skip to the next entry if no keyword positions found

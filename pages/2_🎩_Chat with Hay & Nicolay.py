@@ -112,50 +112,57 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         if "Match Analysis" in response_json:
             st.markdown(highlight_style, unsafe_allow_html=True)
             for match_key, match_info in response_json["Match Analysis"].items():
-                text_id = match_info.get("Text ID")
-                formatted_text_id = f"Text #: {text_id}"
-                key_quote = match_info.get("Key Quote", "")
+                # Debugging: Check the type and content of match_info
+                st.write(f"Type of match_info for {match_key}: {type(match_info)}")
+                st.write(f"Content of match_info for {match_key}: {match_info}")
 
-                speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+                if isinstance(match_info, dict):
+                    text_id = match_info.get("Text ID")
+                    formatted_text_id = f"Text #: {text_id}"
+                    key_quote = match_info.get("Key Quote", "")
 
-                # Increment the counter for each match
-                doc_match_counter += 1
+                    speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
 
-                # Initialize highlight_success for each iteration
-                highlight_success = False  # Flag to track highlighting success
+                    # Increment the counter for each match
+                    doc_match_counter += 1
 
-                if speech:
-                    # Use the doc_match_counter in the expander label
-                    expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                    with st.expander(expander_label, expanded=False):
-                        st.markdown(f"**Source:** {speech['source']}")
-                        st.markdown(f"**Text ID:** {speech['text_id']}")
-                        st.markdown(f"**Summary:**\n{speech.get('summary', '')}")
+                    # Initialize highlight_success for each iteration
+                    highlight_success = False  # Flag to track highlighting success
 
-                        # Replace line breaks for HTML display
-                        formatted_full_text = speech['full_text'].replace("\n", "<br>")
+                    if speech:
+                        # Use the doc_match_counter in the expander label
+                        expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
+                        with st.expander(expander_label, expanded=False):
+                            st.markdown(f"**Source:** {speech['source']}")
+                            st.markdown(f"**Text ID:** {speech['text_id']}")
+                            st.markdown(f"**Summary:**\n{speech.get('summary', '')}")
 
-                        # Attempt direct highlighting
-                        if key_quote in speech['full_text']:
-                            formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
-                            highlight_success = True
-                        else:
-                            # If direct highlighting fails, use regex-based approach
-                            formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
-                            formatted_full_text = formatted_full_text.replace("\n", "<br>")
-                            # Check if highlighting was successful with regex approach
-                            highlight_success = key_quote in formatted_full_text
+                            # Replace line breaks for HTML display
+                            formatted_full_text = speech['full_text'].replace("\n", "<br>")
 
-                        st.markdown(f"**Key Quote:**\n{key_quote}")
-                        st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                        st.markdown(formatted_full_text, unsafe_allow_html=True)
+                            # Attempt direct highlighting
+                            if key_quote in speech['full_text']:
+                                formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
+                                highlight_success = True
+                            else:
+                                # If direct highlighting fails, use regex-based approach
+                                formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
+                                formatted_full_text = formatted_full_text.replace("\n", "<br>")
+                                # Check if highlighting was successful with regex approach
+                                highlight_success = key_quote in formatted_full_text
 
-                        # Update highlight_success_dict for the current match
-                        highlight_success_dict[match_key] = highlight_success
+                            st.markdown(f"**Key Quote:**\n{key_quote}")
+                            st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                            st.markdown(formatted_full_text, unsafe_allow_html=True)
+
+                            # Update highlight_success_dict for the current match
+                            highlight_success_dict[match_key] = highlight_success
+                    else:
+                        with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
+                            st.markdown("Full text not found.")
+                            highlight_success_dict[match_key] = False  # Indicate failure as text not found
                 else:
-                    with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                        st.markdown("Full text not found.")
-                        highlight_success_dict[match_key] = False  # Indicate failure as text not found
+                    st.write(f"Unexpected type for match_info: {type(match_info)}")
 
         # Log the data
         search_results = results["search_results"]
@@ -184,13 +191,14 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Initial Answer Review"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-            # Displaying Match Analysis
+                        # Displaying Match Analysis
             if "Match Analysis" in response_json:
                 st.markdown("**Match Analysis:**")
                 for match_key, match_info in response_json["Match Analysis"].items():
                     st.markdown(f"- **{match_key}:**")
-                    for key, value in match_info.items():
-                        st.markdown(f"  - {key}: {value}")
+                    if isinstance(match_info, dict):
+                        for key, value in match_info.items():
+                            st.markdown(f"  - {key}: {value}")
 
             # Displaying Meta Analysis
             if "Meta Analysis" in response_json:

@@ -86,7 +86,7 @@ class RAGProcess:
         for entry in data:
             if 'full_text' in entry and 'source' in entry:
                 entry_text_lower = entry['full_text'].lower()
-                source_lower = entry['source'].lower()
+                source_lower = entry['source'].lower().replace('\r\n', ' ')
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
 
@@ -127,14 +127,15 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
                     else:
-                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+                        print(f"No keyword positions found for entry with text_id: {entry['text_id']}")
                 else:
-                    st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
+                    print(f"No match for source year/text for entry with text_id: {entry['text_id']}")
             else:
-                st.write(f"Entry missing 'full_text' or 'source': {entry}")
+                print(f"Entry missing 'full_text' or 'source': {entry}")
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
     def search_text(self, df, user_query, n=5):

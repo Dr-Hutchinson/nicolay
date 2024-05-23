@@ -84,7 +84,17 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         st.write("Processing your query...")
         results = rag.run_rag_process(prompt)
 
-        response_json = json.loads(results["response"])  # Parse the response as JSON
+        # Print the raw response for debugging
+        st.write("Raw response content:", results["response"])
+
+        # Try to parse the JSON response
+        try:
+            response_json = json.loads(results["response"])  # Parse the response as JSON
+        except json.JSONDecodeError as e:
+            st.error(f"JSON decoding error: {e}")
+            st.error(f"Raw JSON response: {results['response']}")
+            raise e
+
         initial_answer = results["initial_answer"]
         final_answer_text = response_json.get("FinalAnswer", {}).get("Text", "Final answer not available.")
         references = response_json.get("FinalAnswer", {}).get("References", [])
@@ -192,7 +202,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Initial Answer Review"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-                        # Displaying Match Analysis
+            # Displaying Match Analysis
             if "Match Analysis" in response_json:
                 st.markdown("**Match Analysis:**")
                 for match_key, match_info in response_json["Match Analysis"].items():

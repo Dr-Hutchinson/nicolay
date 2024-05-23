@@ -11,32 +11,20 @@ import pyarrow.parquet as pq
 @st.cache_data(persist="disk")
 def load_lincoln_speech_corpus():
     with open('data/lincoln_speech_corpus.msgpack', 'rb') as file:
-        data = msgpack.unpackb(file.read())
-    # Verify data structure
-    if not all('full_text' in item and 'source' in item and 'text_id' in item for item in data):
-        raise ValueError("Data loaded from msgpack does not have the expected structure.")
-    return data
-
+        return msgpack.unpackb(file.read())
 
 @st.cache_data(persist="disk")
 def load_voyant_word_counts():
     with open('data/voyant_word_counts.msgpack', 'rb') as file:
-        data = msgpack.unpackb(file.read())
-    # Verify data structure
-    if 'corpusTerms' not in data or 'terms' not in data['corpusTerms']:
-        raise ValueError("Data loaded from msgpack does not have the expected structure.")
-    return data
+        return msgpack.unpackb(file.read())
 
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded():
     df = pd.read_parquet('data/lincoln_index_embedded.parquet')
-    # Print columns for debugging
-    st.write("Columns in loaded dataframe:", df.columns)
     # Ensure the index is correctly set
     df.reset_index(inplace=True)
     df.rename(columns={'index': 'text_id'}, inplace=True)
     return df
-
 
 @st.cache_data(persist="disk")
 def load_all_data():

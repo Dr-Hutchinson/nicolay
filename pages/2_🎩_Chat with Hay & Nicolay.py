@@ -139,6 +139,17 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         formatted_text_id = f"Text #: {text_id}"
                         key_quote = match_info.get("Key Quote", "")
 
+                        # Debugging: Check the structure of lincoln_data
+                        if not isinstance(lincoln_data, list):
+                            st.write(f"lincoln_data is not a list: {type(lincoln_data)}")
+                        else:
+                            for item in lincoln_data:
+                                if not isinstance(item, dict):
+                                    st.write(f"Item in lincoln_data is not a dict: {type(item)}")
+                                    continue
+                                if 'text_id' not in item:
+                                    st.write(f"Item in lincoln_data missing 'text_id': {item}")
+
                         # Ensure 'text_id' is found in lincoln_data
                         st.write(f"Looking for text_id: {formatted_text_id}")
                         speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
@@ -186,6 +197,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         st.write(f"Unexpected type for match_info: {type(match_info)}")
                 except Exception as e:
                     st.write(f"Error processing match {match_key}: {e}")
+
 
 
 

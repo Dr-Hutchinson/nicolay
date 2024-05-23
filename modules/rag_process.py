@@ -380,17 +380,24 @@ class RAGProcess:
 
 
 
+
 # Helper Functions
 
-def extract_full_text(record):
+def extract_full_text(combined_text):
     marker = "Full Text:\n"
-    if isinstance(record, str):
-        marker_index = record.find(marker)
+    if isinstance(combined_text, str):
+        marker_index = combined_text.find(marker)
         if marker_index != -1:
-            return record[marker_index + len(marker):].strip()
+            full_text = combined_text[marker_index + len(marker):].strip()
+            # Debugging: Display the extracted full_text
+            st.write(f"Extracted full_text: {full_text[:100]}...")  # Display the first 100 characters for brevity
+            return full_text
         else:
+            st.write(f"Marker '{marker}' not found in combined text")
+            st.write(f"Combined text: {combined_text[:100]}...")  # Display the first 100 characters for context
             return ""
     else:
+        st.write("Combined text is not a string")
         return ""
 
 def get_source_and_summary(text_id, lincoln_dict):

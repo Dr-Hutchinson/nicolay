@@ -128,12 +128,20 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     st.write(f"Content of match_info for {match_key}: {match_info}")
 
                     if isinstance(match_info, dict):
+                        # Ensure all necessary keys are present
+                        required_keys = ["Text ID", "Key Quote"]
+                        for key in required_keys:
+                            if key not in match_info:
+                                st.write(f"Missing key {key} in match_info")
+                                continue  # Skip to the next match if a required key is missing
+
                         text_id = match_info.get("Text ID")
                         formatted_text_id = f"Text #: {text_id}"
                         key_quote = match_info.get("Key Quote", "")
 
                         # Ensure 'text_id' is found in lincoln_data
                         speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+                        st.write(f"Speech found: {speech}")  # Debugging statement
 
                         # Increment the counter for each match
                         doc_match_counter += 1
@@ -176,7 +184,8 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     else:
                         st.write(f"Unexpected type for match_info: {type(match_info)}")
                 except Exception as e:
-                    st.error(f"Error processing match {match_key}: {e}")
+                    st.write(f"Error processing match {match_key}: {e}")
+
 
         # Log the data
         search_results = results["search_results"]

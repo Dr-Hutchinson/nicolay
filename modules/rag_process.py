@@ -112,7 +112,11 @@ class RAGProcess:
                                 keyword_positions[keyword_index] = (keyword, original_weight)
                                 st.write(f"Found keyword '{keyword}' at position {keyword_index} with weight {original_weight}")
 
-                    if keyword_positions:
+                    if not keyword_positions:
+                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+                        continue  # Skip to the next entry if no keyword positions found
+
+                    try:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
                         start_quote = max(0, highest_original_weighted_position - context_length)
@@ -126,10 +130,10 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                    else:
-                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
-                        # Skip this entry if no keyword positions are found
-                        continue
+                    except ValueError as e:
+                        st.write(f"Error processing entry with text_id: {entry['text_id']}, keyword_positions: {keyword_positions}")
+                        continue  # Skip to the next entry if there's an error processing
+
                 else:
                     st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
             else:

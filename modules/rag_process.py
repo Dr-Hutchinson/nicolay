@@ -257,7 +257,7 @@ class RAGProcess:
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
 
-            # Check if text_id column exists
+            # Ensure text_id column exists
             if 'text_id' not in df.columns:
                 raise ValueError("text_id column not found in dataframe")
 
@@ -323,7 +323,7 @@ class RAGProcess:
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-            semantic_matches.rename(columns={'text_id': 'text_id'}, inplace=True)
+            semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
 
             top_segments = []
             for idx, row in semantic_matches.iterrows():

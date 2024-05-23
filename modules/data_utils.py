@@ -21,9 +21,9 @@ def load_voyant_word_counts():
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded():
     df = pd.read_parquet('data/lincoln_index_embedded.parquet')
-    # Ensure the index is correctly set
-    df.reset_index(inplace=True)
-    df.rename(columns={'index': 'text_id'}, inplace=True)
+    # Extract text_id from combined
+    df['text_id'] = df['combined'].str.extract(r'Text #: (\d+)')
+    df['text_id'] = df['text_id'].astype(str)
     return df
 
 @st.cache_data(persist="disk")

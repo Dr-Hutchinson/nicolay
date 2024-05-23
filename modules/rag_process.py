@@ -241,6 +241,11 @@ class RAGProcess:
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
             df['full_text'] = df['combined'].apply(extract_full_text)
+
+            # Debugging: Display the first few rows of 'full_text' to ensure it's populated
+            st.write("Full Text Extraction - First Few Rows:")
+            st.write(df[['text_id', 'full_text']].head(10))
+
             df['source'], df['summary'] = zip(*df['text_id'].map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
@@ -364,6 +369,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

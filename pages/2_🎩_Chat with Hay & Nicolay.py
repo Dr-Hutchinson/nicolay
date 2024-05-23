@@ -9,6 +9,7 @@ import cohere
 import pygsheets
 from google.oauth2 import service_account
 import re
+import pandas as pd
 
 # Function to highlight key quotes using regex
 def highlight_key_quote(text, quote):

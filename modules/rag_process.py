@@ -96,6 +96,7 @@ class RAGProcess:
                 st.write(f"Text Keywords: {text_keywords_list}")
                 st.write(f"Year Keywords: {year_keywords}")
 
+                # Improved year matching logic
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
 
@@ -153,6 +154,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

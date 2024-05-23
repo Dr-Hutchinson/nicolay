@@ -140,6 +140,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         key_quote = match_info.get("Key Quote", "")
 
                         # Ensure 'text_id' is found in lincoln_data
+                        st.write(f"Looking for text_id: {formatted_text_id}")
                         speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
                         st.write(f"Speech found: {speech}")  # Debugging statement
 
@@ -161,10 +162,10 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                                 formatted_full_text = speech['full_text'].replace("\n", "<br>")
 
                                 # Attempt direct highlighting
-                                if key_quote in speech['full_text']:
+                                if key_quote and key_quote in speech['full_text']:
                                     formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
                                     highlight_success = True
-                                else:
+                                elif key_quote:
                                     # If direct highlighting fails, use regex-based approach
                                     formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
                                     formatted_full_text = formatted_full_text.replace("\n", "<br>")
@@ -185,6 +186,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         st.write(f"Unexpected type for match_info: {type(match_info)}")
                 except Exception as e:
                     st.write(f"Error processing match {match_key}: {e}")
+
 
 
         # Log the data

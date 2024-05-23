@@ -192,7 +192,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Initial Answer Review"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-            # Displaying Match Analysis
+                        # Displaying Match Analysis
             if "Match Analysis" in response_json:
                 st.markdown("**Match Analysis:**")
                 for match_key, match_info in response_json["Match Analysis"].items():
@@ -207,7 +207,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Meta Analysis"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-                        # Displaying Model Feedback
+            # Displaying Model Feedback
             if "Model Feedback" in response_json:
                 st.markdown("**Model Feedback:**")
                 for key, value in response_json["Model Feedback"].items():

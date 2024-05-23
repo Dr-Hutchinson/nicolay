@@ -240,6 +240,11 @@ class RAGProcess:
             self.lincoln_dict = lincoln_dict
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
+
+            # Debugging: Display the first few rows of 'combined' to understand its structure
+            st.write("Combined Column - First Few Rows:")
+            st.write(df['combined'].head(10))
+
             df['full_text'] = df['combined'].apply(extract_full_text)
 
             # Debugging: Display the first few rows of 'full_text' to ensure it's populated

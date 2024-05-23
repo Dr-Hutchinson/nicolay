@@ -1,15 +1,3 @@
-import streamlit as st
-from modules.rag_process import RAGProcess
-from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
-from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
-import json
-import os
-from openai import OpenAI
-import cohere
-import pygsheets
-from google.oauth2 import service_account
-import re
-
 # Function to highlight key quotes using regex
 def highlight_key_quote(text, quote):
     escaped_quote = re.escape(quote)
@@ -121,6 +109,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     formatted_text_id = f"Text #: {text_id}"
                     key_quote = match_info.get("Key Quote", "")
 
+                    # Ensure 'text_id' is found in lincoln_data
                     speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
 
                     # Increment the counter for each match
@@ -191,7 +180,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Initial Answer Review"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-                        # Displaying Match Analysis
+            # Displaying Match Analysis
             if "Match Analysis" in response_json:
                 st.markdown("**Match Analysis:**")
                 for match_key, match_info in response_json["Match Analysis"].items():
@@ -206,7 +195,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 for key, value in response_json["Meta Analysis"].items():
                     st.markdown(f"- **{key}:** {value}")
 
-            # Displaying Model Feedback
+                        # Displaying Model Feedback
             if "Model Feedback" in response_json:
                 st.markdown("**Model Feedback:**")
                 for key, value in response_json["Model Feedback"].items():

@@ -128,6 +128,8 @@ class RAGProcess:
                         })
                     else:
                         st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+                        # Skip this entry if no keyword positions are found
+                        continue
                 else:
                     st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
             else:
@@ -135,6 +137,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

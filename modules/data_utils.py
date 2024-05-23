@@ -4,10 +4,12 @@ import streamlit as st
 
 @st.cache_data(persist="disk")
 def load_lincoln_speech_corpus():
-    with open('data/lincoln_speech_corpus.msgpack', 'rb') as f:
+    with open('/mnt/data/lincoln_speech_corpus.msgpack', 'rb') as f:
         unpacker = msgpack.Unpacker(f, raw=False)
         data = [unpacked for unpacked in unpacker]
         if not data or not isinstance(data[0], dict):
+            st.write(f"Data: {data}")
+            st.write(f"First item: {data[0] if data else 'None'}")
             raise ValueError("The data structure is not as expected. Ensure the msgpack file is formatted correctly.")
         # Debugging: Print the type and keys of the first item in the data
         st.write(f"Data type: {type(data)}")
@@ -20,11 +22,11 @@ def load_lincoln_speech_corpus():
 
 @st.cache_data(persist="disk")
 def load_voyant_word_counts():
-    with open('data/voyant_word_counts.msgpack', 'rb') as f:
+    with open('/mnt/data/voyant_word_counts.msgpack', 'rb') as f:
         unpacker = msgpack.Unpacker(f, raw=False)
         data = [unpacked for unpacked in unpacker]
         return data[0]
 
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded():
-    return pd.read_parquet('data/lincoln_index_embedded.parquet')
+    return pd.read_parquet('/mnt/data/lincoln_index_embedded.parquet')

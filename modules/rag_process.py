@@ -97,8 +97,10 @@ class RAGProcess:
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
                     st.write(f"Processing entry with text_id: {entry['text_id']}")
+                    st.write(f"Combined text for matching: {combined_text[:500]}...")  # Display first 500 characters of combined text
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
+                        st.write(f"Matching keyword: {keyword_lower}")
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
                             count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
                             dynamic_weight = dynamic_weights.get(keyword, 0)
@@ -133,6 +135,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

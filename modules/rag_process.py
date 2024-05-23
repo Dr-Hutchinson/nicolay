@@ -127,7 +127,7 @@ class RAGProcess:
                             "text_id": entry['text_id'],
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
-                            "quote": snippet.replace('\n', ' '),
+                            "quote": snippet.replace("\n", " "),
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
@@ -286,7 +286,9 @@ class RAGProcess:
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
+            st.write("Semantic matches before rename: ", semantic_matches)  # Debugging statement
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
+            st.write("Semantic matches after rename: ", semantic_matches)  # Debugging statement
 
             top_segments = []
             for idx, row in semantic_matches.iterrows():
@@ -303,6 +305,7 @@ class RAGProcess:
             step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+            st.write("Deduplicated results: ", deduplicated_results)  # Debugging statement
 
             all_combined_data = [
                 f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()

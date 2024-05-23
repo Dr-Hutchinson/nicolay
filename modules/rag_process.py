@@ -292,8 +292,11 @@ class RAGProcess:
             for idx, row in semantic_matches.iterrows():
                 segments = segment_text(row['full_text'])
                 segment_scores = self.compare_segments_with_query_parallel(segments, user_query_embedding)
-                top_segment = max(segment_scores, key=lambda x: x[1])
-                top_segments.append(top_segment[0])
+                if segment_scores:  # Ensure segment_scores is not empty before calling max()
+                    top_segment = max(segment_scores, key=lambda x: x[1])
+                    top_segments.append(top_segment[0])
+                else:
+                    st.write(f"No segments found for row: {row['text_id']}")  # Debugging statement
             semantic_matches["TopSegment"] = top_segments
 
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")

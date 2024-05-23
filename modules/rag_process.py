@@ -107,6 +107,7 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
+
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -121,8 +122,14 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
+                    else:
+                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+            else:
+                st.write(f"Entry missing 'full_text' or 'source': {entry}")
+
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)

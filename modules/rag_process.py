@@ -335,6 +335,10 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Note: Add missing fields with default values
+            if 'quote' not in dedup_df.columns:
+                dedup_df['quote'] = ''
+
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Debugging: Display the deduplicated results
@@ -377,6 +381,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

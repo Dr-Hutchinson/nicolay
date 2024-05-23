@@ -96,6 +96,7 @@ class RAGProcess:
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+                    st.write(f"Processing entry with text_id: {entry['text_id']}")
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -107,6 +108,7 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
+                                st.write(f"Found keyword '{keyword}' at position {keyword_index} with weight {original_weight}")
 
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
@@ -131,6 +133,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

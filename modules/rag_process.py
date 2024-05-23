@@ -299,9 +299,14 @@ class RAGProcess:
             st.write("Keyword Data 'corpusTerms' Structure:")
             st.write(keyword_data['corpusTerms'])
 
-            # Parse the JSON string in 'corpusTerms'
-            corpus_terms_json = keyword_data['corpusTerms'][0]
-            corpus_terms = json.loads(corpus_terms_json)['terms']
+            # Handle the corpusTerms based on its structure
+            corpus_terms_json = keyword_data.at[0, 'corpusTerms']
+            if isinstance(corpus_terms_json, str):
+                corpus_terms = json.loads(corpus_terms_json)['terms']
+            elif isinstance(corpus_terms_json, dict):
+                corpus_terms = corpus_terms_json['terms']
+            else:
+                raise ValueError("Unexpected format for 'corpusTerms'")
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
@@ -387,6 +392,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

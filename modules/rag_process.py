@@ -388,6 +388,7 @@ def extract_full_text(combined_text):
     if isinstance(combined_text, str):
         marker_index = combined_text.find(marker)
         if marker_index != -1:
+            # Extract the full text starting from the marker
             full_text = combined_text[marker_index + len(marker):].strip()
             # Debugging: Display the extracted full_text
             st.write(f"Extracted full_text: {full_text[:100]}...")  # Display the first 100 characters for brevity
@@ -399,6 +400,7 @@ def extract_full_text(combined_text):
     else:
         st.write("Combined text is not a string")
         return ""
+
 
 def get_source_and_summary(text_id, lincoln_dict):
     return lincoln_dict.get(text_id, {}).get('source'), lincoln_dict.get(text_id, {}).get('summary')

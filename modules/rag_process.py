@@ -51,15 +51,18 @@ class RAGProcess:
         st.write(f"User keywords: {user_keywords}")
         st.write(f"Voyant data terms: {json_data['corpusTerms']['terms'][:5]}")  # Display first 5 terms for debugging
 
+        # Calculate the total number of words for normalization
         total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
         relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
 
         st.write(f"Relative frequencies (first 5): {list(relative_frequencies.items())[:5]}")  # Display first 5 relative frequencies for debugging
 
+        # Calculate inverse weights based on the relative frequencies
         inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
 
         st.write(f"Inverse weights: {inverse_weights}")
 
+        # Normalize weights for dynamic weighting
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
@@ -73,6 +76,7 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
+
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -344,6 +348,7 @@ class RAGProcess:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
 
+
 # Helper Functions
 
 def extract_full_text(record):
@@ -359,7 +364,7 @@ def extract_full_text(record):
 
 def get_source_and_summary(text_id, lincoln_dict):
     return lincoln_dict.get(text_id, {}).get('source'), lincoln_dict.get(text_id, {}).get('summary')
-    
+
 def format_reranked_results_for_model_input(reranked_results):
     formatted_results = []
     top_three_results = reranked_results[:3]

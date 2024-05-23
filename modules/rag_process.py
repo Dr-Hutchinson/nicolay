@@ -9,13 +9,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
-import msgpack
-#from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded, load_all_data
 from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
 import time
 
 
-# rag process 0.4
+# rag process 0.0
 
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
@@ -35,11 +33,6 @@ class RAGProcess:
         self.lincoln_data = load_lincoln_speech_corpus()
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
-
-        # Load data using cached functions
-        #self.lincoln_data, self.voyant_data, self.lincoln_index_df = load_all_data()
-
-
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:
@@ -89,17 +82,13 @@ class RAGProcess:
                 source_lower = entry['source'].lower()
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
-
-                # Matching conditions
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
-
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
-
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -111,7 +100,6 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
-
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -126,16 +114,8 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                    else:
-                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
-                else:
-                    st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
-            else:
-                st.write(f"Entry missing 'full_text' or 'source': {entry}")
-
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
-
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)

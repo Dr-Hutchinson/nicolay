@@ -243,7 +243,7 @@ class RAGProcess:
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['source'], df['summary'] = zip(*df['text_id'].map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            st.write("Data loading and preparation took {time.time() - start_time:.2f} seconds.")
+            st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
             response = self.openai_client.chat.completions.create(
@@ -284,9 +284,12 @@ class RAGProcess:
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Ensure 'corpusTerms' is correctly accessed
+            corpus_terms = keyword_data['corpusTerms'][0]['terms']
+
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
-                json_data=keyword_data['corpusTerms'],
+                json_data={'corpusTerms': {'terms': corpus_terms}},
                 year_keywords=model_year_keywords,
                 text_keywords=model_text_keywords,
                 top_n_results=5,
@@ -356,6 +359,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

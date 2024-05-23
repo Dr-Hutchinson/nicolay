@@ -1,6 +1,7 @@
 import pandas as pd
 import msgpack
 import streamlit as st
+import json
 
 @st.cache_data(persist="disk")
 def load_lincoln_speech_corpus():
@@ -12,7 +13,6 @@ def load_lincoln_speech_corpus():
         st.write(df.head())
         st.write("Lincoln Speech Corpus DataFrame Info:")
         st.write(df.info())
-        # No 'combined' column, work with existing columns
         return df
 
 @st.cache_data(persist="disk")
@@ -25,8 +25,8 @@ def load_voyant_word_counts():
         st.write(df.head())
         st.write("Voyant Word Counts DataFrame Info:")
         st.write(df.info())
-        # Extract terms from the 'corpusTerms' column
-        df['corpusTerms'] = df['corpusTerms'].apply(lambda x: eval(x) if isinstance(x, str) else x)
+        # Correctly parse 'corpusTerms' JSON string
+        df['corpusTerms'] = df['corpusTerms'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
         return df
 
 @st.cache_data(persist="disk")

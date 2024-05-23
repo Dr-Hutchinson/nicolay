@@ -294,6 +294,10 @@ class RAGProcess:
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Debugging: Check the structure of keyword_data['corpusTerms']
+            st.write("Keyword Data 'corpusTerms' Structure:")
+            st.write(keyword_data['corpusTerms'])
+
             # Ensure 'corpusTerms' is correctly accessed
             corpus_terms = keyword_data['corpusTerms']['terms']
 
@@ -381,6 +385,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

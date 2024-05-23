@@ -96,6 +96,7 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
+                    # Ensure keyword_positions is not empty before calling max()
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -110,6 +111,9 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
+                    else:
+                        # Debugging statement to track empty keyword_positions
+                        st.write(f"No keyword positions found for entry: {entry['text_id']}")
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
 

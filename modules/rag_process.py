@@ -124,11 +124,14 @@ class RAGProcess:
                         })
                     else:
                         st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+                else:
+                    st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
             else:
                 st.write(f"Entry missing 'full_text' or 'source': {entry}")
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
     def search_text(self, df, user_query, n=5):
@@ -244,6 +247,8 @@ class RAGProcess:
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
+            # Fill NaN values
+            df.fillna('', inplace=True)
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
@@ -280,6 +285,11 @@ class RAGProcess:
 
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
+
+            # Log the keywords for debugging
+            st.write("Weighted Keywords:", model_weighted_keywords)
+            st.write("Year Keywords:", model_year_keywords)
+            st.write("Text Keywords:", model_text_keywords)
 
             hays_data = {
                 'query': user_query,

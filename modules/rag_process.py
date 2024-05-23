@@ -204,7 +204,7 @@ class RAGProcess:
 
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
-            df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
+            df['source'], df['summary'] = zip(*df.index.map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
@@ -262,7 +262,7 @@ class RAGProcess:
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-            semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+            semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
 
             top_segments = []
             for idx, row in semantic_matches.iterrows():

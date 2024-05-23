@@ -15,7 +15,7 @@ from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_coun
 import time
 
 
-# rag process 0.0
+# rag process 0.4
 
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
@@ -75,19 +75,6 @@ class RAGProcess:
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
-
-        # Debugging: Print the type and first few elements of the data
-        st.write("Data type:", type(data))
-        if isinstance(data, list):
-            st.write("First element type:", type(data[0]))
-            if len(data) > 0:
-                st.write("First element keys:", data[0].keys())
-
-        # Check if data is a list of dictionaries
-        if not isinstance(data, list) or not all(isinstance(entry, dict) for entry in data):
-            st.write("Data structure is not compatible with this function.")
-            return instances
-
         if text_keywords:
             if isinstance(text_keywords, list):
                 text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
@@ -102,13 +89,17 @@ class RAGProcess:
                 source_lower = entry['source'].lower()
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+
+                # Matching conditions
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -120,6 +111,7 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
+
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -134,9 +126,15 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
+                    else:
+                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
+                else:
+                    st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
+            else:
+                st.write(f"Entry missing 'full_text' or 'source': {entry}")
+
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
-
 
 
     def search_text(self, df, user_query, n=5):
@@ -243,30 +241,28 @@ class RAGProcess:
         try:
             start_time = time.time()
 
-            # Ensure data is loaded and prepared
+            #lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
+            #keyword_data = self.load_json('data/voyant_word_counts.json')
+            #df = pd.read_csv("lincoln_index_embedded.csv")
+
+             # Ensure data is loaded and prepared
             lincoln_data = self.lincoln_data
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            # Fill NaN values
-            df.fillna('', inplace=True)
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
+            df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            # Ensure text_id column exists
-            if 'text_id' not in df.columns:
-                raise ValueError("text_id column not found in dataframe")
-
-            df['source'], df['summary'] = zip(*df['text_id'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
-
+            #st.write("Loaded and prepared data successfully.")
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
-            response = self.openai_client.chat_completions.create(
+            response = self.openai_client.chat.completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                 messages=[
                     {"role": "system", "content": keyword_prompt},
@@ -287,6 +283,7 @@ class RAGProcess:
 
             initial_answer = api_response_data['initial_answer']
             model_weighted_keywords = api_response_data['weighted_keywords']
+
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
 
@@ -302,6 +299,8 @@ class RAGProcess:
             self.hays_data_logger.record_api_outputs(hays_data)
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
+
+            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
             # Display initial answer
             with st.chat_message("assistant"):
@@ -344,6 +343,7 @@ class RAGProcess:
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
 
+            #st.write("Combined search results successfully.")
             st.write(f"Duplicate removal and result combination took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
@@ -374,8 +374,6 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
-
-
 
 
 # Helper Functions

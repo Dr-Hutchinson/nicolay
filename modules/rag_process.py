@@ -90,29 +90,18 @@ class RAGProcess:
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
 
-                # Debugging: Display entry details and matching conditions
-                st.write(f"Processing entry with text_id: {entry['text_id']}")
-                st.write(f"Source: {source_lower}")
-                st.write(f"Text Keywords: {text_keywords_list}")
-                st.write(f"Year Keywords: {year_keywords}")
-
-                # Improved year matching logic
+                # Matching conditions
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
-
-                # Debugging: Display match results
-                st.write(f"Match Source Year: {match_source_year}")
-                st.write(f"Match Source Text: {match_source_text}")
 
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
-                    st.write(f"Combined text for matching: {combined_text[:500]}...")  # Display first 500 characters of combined text
+
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
-                        st.write(f"Matching keyword: {keyword_lower}")
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
                             count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
                             dynamic_weight = dynamic_weights.get(keyword, 0)
@@ -122,14 +111,8 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
-                                st.write(f"Found keyword '{keyword}' at position {keyword_index} with weight {original_weight}")
 
-                    # Check for empty keyword_positions
-                    if not keyword_positions:
-                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
-                        continue  # Skip to the next entry if no keyword positions found
-
-                    try:
+                    if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
                         start_quote = max(0, highest_original_weighted_position - context_length)
@@ -143,10 +126,8 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                    except ValueError as e:
-                        st.write(f"Error processing entry with text_id: {entry['text_id']}, keyword_positions: {keyword_positions}, error: {str(e)}")
-                        continue  # Skip to the next entry if there's an error processing
-
+                    else:
+                        st.write(f"No keyword positions found for entry with text_id: {entry['text_id']}")
                 else:
                     st.write(f"No match for source year/text for entry with text_id: {entry['text_id']}")
             else:
@@ -154,16 +135,6 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
-
-
-
-
-
-
-
-
-
-
 
 
     def search_text(self, df, user_query, n=5):

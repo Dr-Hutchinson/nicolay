@@ -12,9 +12,6 @@ import streamlit as st
 from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
 import time
 
-
-# rag process 0.0
-
 class RAGProcess:
     def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
         # Initialize OpenAI and Cohere clients
@@ -29,7 +26,7 @@ class RAGProcess:
         # Store the hays_data_logger
         self.hays_data_logger = hays_data_logger
 
-         # Load data using cached functions
+        # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
@@ -64,7 +61,6 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
-
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -137,12 +133,7 @@ class RAGProcess:
 
     def rerank_results(self, user_query, combined_data):
         try:
-            # Debugging statement to ensure combined_data is a list of strings
-            #st.write("Reranking input combined_data:", combined_data)
-
-            # Ensure combined_data is a list of strings
             combined_data_strs = [cd if isinstance(cd, str) else cd['text'] for cd in combined_data]
-
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
                 query=user_query,
@@ -151,36 +142,20 @@ class RAGProcess:
             )
 
             full_reranked_results = []
-            for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
-                #st.write(f"Reranked result {idx}: {result}")
-                combined_data_text = result.document['text'] if isinstance(result.document, dict) and 'text' in result.document else result.document  # Access the document attribute directly
-                #st.write(f"Combined data {idx}: {combined_data_text}")
+            for idx, result in enumerate(reranked_response.results):
+                combined_data_text = result.document['text'] if isinstance(result.document, dict) and 'text' in result.document else result.document
                 data_parts = combined_data_text.split("|")
-                #st.write(f"Data parts {idx}: {data_parts}")
                 if len(data_parts) >= 4:
                     search_type = data_parts[0].strip()
                     text_id_part = data_parts[1].strip()
                     summary = data_parts[2].strip()
                     quote = data_parts[3].strip()
 
-                    # Debugging to ensure each part is correct
-                    #st.write(f"Processed parts: search_type={search_type}, text_id_part={text_id_part}, summary={summary}, quote={quote}")
-
-                    # Extract and clean text_id
                     text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
-                    #st.write(f"Extracted text_id: {text_id}")
-
-                    # Extract and clean summary
                     summary = summary.replace("Summary:", "").strip()
-                    #st.write(f"Cleaned summary: {summary}")
-
-                    # Clean quote
                     quote = quote.strip()
-                    #st.write(f"Cleaned quote: {quote}")
 
-                    # Retrieve source information
                     source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
-                    #st.write(f"Source: {source}")
 
                     full_reranked_results.append({
                         'Rank': idx + 1,
@@ -198,14 +173,13 @@ class RAGProcess:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
 
-
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
             {"role": "system", "content": response_prompt},
             {"role": "user", "content": f"User Query: {user_query}\n\nInitial Answer: {initial_answer}\n\n{formatted_input_for_model}"}
         ]
         response = self.openai_client.chat.completions.create(
-            model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Replace with your fine-tuned model
+            model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",
             messages=messages_for_second_model,
             temperature=0,
             max_tokens=2000,
@@ -221,15 +195,9 @@ class RAGProcess:
         try:
             start_time = time.time()
 
-            #lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
-            #keyword_data = self.load_json('data/voyant_word_counts.json')
-            #df = pd.read_csv("lincoln_index_embedded.csv")
-
-             # Ensure data is loaded and prepared
             lincoln_data = self.lincoln_data
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
-
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
@@ -238,7 +206,6 @@ class RAGProcess:
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
             df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            #st.write("Loaded and prepared data successfully.")
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
@@ -280,13 +247,6 @@ class RAGProcess:
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
-
-            # Display initial answer
-            with st.chat_message("assistant"):
-                st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
-
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
                 json_data=keyword_data,
@@ -323,7 +283,6 @@ class RAGProcess:
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
 
-            #st.write("Combined search results successfully.")
             st.write(f"Duplicate removal and result combination took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
@@ -354,7 +313,6 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
-
 
 # Helper Functions
 
@@ -397,16 +355,6 @@ def load_prompts():
         st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
     if 'response_model_system_prompt' not in st.session_state:
         st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
-    #if 'app_intro' not in st.session_state:
-    #    st.session_state['app_intro'] = load_prompt('prompts/app_intro.txt')
-    #if 'keyword_search_explainer' not in st.session_state:
-    #    st.session_state['keyword_search_explainer'] = load_prompt('prompts/keyword_search_explainer.txt')
-    #if 'semantic_search_explainer' not in st.session_state:
-    #    st.session_state['semantic_search_explainer'] = load_prompt('prompts/semantic_search_explainer.txt')
-    #if 'relevance_ranking_explainer' not in st.session_state:
-    #    st.session_state['relevance_ranking_explainer'] = load_prompt('prompts/relevance_ranking_explainer.txt')
-    #if 'nicolay_model_explainer' not in st.session_state:
-    #    st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
 
 # Ensure prompts are loaded
 load_prompts()
@@ -414,8 +362,3 @@ load_prompts()
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
-#app_intro = st.session_state['app_intro']
-#keyword_search_explainer = st.session_state['keyword_search_explainer']
-#semantic_search_explainer = st.session_state['semantic_search_explainer']
-#relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
-#nicolay_model_explainer = st.session_state['nicolay_model_explainer']

@@ -10,8 +10,6 @@ import pygsheets
 from google.oauth2 import service_account
 import re
 
-# chatbot implementation - 0.1
-
 # Function to highlight key quotes using regex
 def highlight_key_quote(text, quote):
     escaped_quote = re.escape(quote)
@@ -55,9 +53,9 @@ if 'voyant_data' not in st.session_state:
 if 'lincoln_index_df' not in st.session_state:
     st.session_state.lincoln_index_df = load_lincoln_index_embedded()
 
-lincoln_data = load_lincoln_speech_corpus()
-voyant_data = load_voyant_word_counts()
-lincoln_index_df = load_lincoln_index_embedded()
+lincoln_data = st.session_state.lincoln_data
+voyant_data = st.session_state.voyant_data
+lincoln_index_df = st.session_state.lincoln_index_df
 
 # Initialize the RAG Process
 rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
@@ -86,9 +84,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         st.write("Processing your query...")
         results = rag.run_rag_process(prompt)
 
-        # Debug: Print RAG process results to check JSON structure
-        #st.write("RAG process results:", results)
-
         response_json = json.loads(results["response"])  # Parse the response as JSON
         initial_answer = results["initial_answer"]
         final_answer_text = response_json.get("FinalAnswer", {}).get("Text", "Final answer not available.")
@@ -96,11 +91,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
 
         # Combine final answer text with references
         final_answer = f"{final_answer_text}\n\n**References:**\n" + "\n".join([f"- {ref}" for ref in references])
-
-        # Display initial answer
-        #with st.chat_message("assistant"):
-        #    st.markdown(f"Hays' Response: {initial_answer}")
-        #st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
         # Display final answer with references
         with st.chat_message("assistant"):
@@ -140,7 +130,7 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     with st.expander(expander_label, expanded=False):
                         st.markdown(f"**Source:** {speech['source']}")
                         st.markdown(f"**Text ID:** {speech['text_id']}")
-                        st.markdown(f"**Summary:**\n{speech['summary']}")
+                        st.markdown(f"**Summary:**\n{speech.get('summary', '')}")
 
                         # Replace line breaks for HTML display
                         formatted_full_text = speech['full_text'].replace("\n", "<br>")
@@ -166,7 +156,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                     with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
                         st.markdown("Full text not found.")
                         highlight_success_dict[match_key] = False  # Indicate failure as text not found
-
 
         # Log the data
         search_results = results["search_results"]
@@ -214,7 +203,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                 st.markdown("**Model Feedback:**")
                 for key, value in response_json["Model Feedback"].items():
                     st.markdown(f"- **{key}:** {value}")
-
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

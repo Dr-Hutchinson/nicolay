@@ -324,7 +324,7 @@ def extract_full_text(record):
     marker = "Full Text:\n"
     if isinstance(record, str):
         marker_index = record.find(marker)
-        if marker_index != -1:
+        if (marker_index != -1):
             return record[marker_index + len(marker):].strip()
         else:
             return ""

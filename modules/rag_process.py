@@ -73,8 +73,21 @@ class RAGProcess:
         )
 
 
-    def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+    def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
+
+        # Debugging: st.write the type and first few elements of the data
+        st.write("Data type:", type(data))
+        if isinstance(data, list):
+            st.write("First element type:", type(data[0]))
+            if len(data) > 0:
+                st.write("First element keys:", data[0].keys())
+
+        # Check if data is a list of dictionaries
+        if not isinstance(data, list) or not all(isinstance(entry, dict) for entry in data):
+            st.write("Data structure is not compatible with this function.")
+            return instances
+
         if text_keywords:
             if isinstance(text_keywords, list):
                 text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
@@ -86,20 +99,16 @@ class RAGProcess:
         for entry in data:
             if 'full_text' in entry and 'source' in entry:
                 entry_text_lower = entry['full_text'].lower()
-                source_lower = entry['source'].lower().replace('\r\n', ' ')
+                source_lower = entry['source'].lower()
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
-
-                # Matching conditions
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
-
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
-
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -111,7 +120,6 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
-
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -126,13 +134,6 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                    else:
-                        print(f"No keyword positions found for entry with text_id: {entry['text_id']}")
-                else:
-                    print(f"No match for source year/text for entry with text_id: {entry['text_id']}")
-            else:
-                print(f"Entry missing 'full_text' or 'source': {entry}")
-
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
 
@@ -253,10 +254,10 @@ class RAGProcess:
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
-            # Debugging print statements
-            st.write("Sample lincoln_data:", lincoln_data[:3])
-            st.write("Sample keyword_data:", keyword_data['corpusTerms']['terms'][:3])
-            st.write("Sample lincoln_index_df:", df.head(3))
+            # Debugging st.write statements
+            #st.write("Sample lincoln_data:", lincoln_data[:3])
+            #st.write("Sample keyword_data:", keyword_data['corpusTerms']['terms'][:3])
+            #st.write("Sample lincoln_index_df:", df.head(3))
 
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))

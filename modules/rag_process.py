@@ -227,6 +227,15 @@ class RAGProcess:
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
+            st.write("Lincoln Data Head:")
+            st.write(lincoln_data.head())
+
+            st.write("Keyword Data Head:")
+            st.write(keyword_data.head())
+
+            st.write("Embedded Index DataFrame Head:")
+            st.write(df.head())
+
             lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
             self.lincoln_dict = lincoln_dict
 
@@ -234,7 +243,7 @@ class RAGProcess:
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['source'], df['summary'] = zip(*df['text_id'].map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
+            st.write("Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
             response = self.openai_client.chat.completions.create(
@@ -277,7 +286,7 @@ class RAGProcess:
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
-                json_data=keyword_data,
+                json_data=keyword_data['corpusTerms'],
                 year_keywords=model_year_keywords,
                 text_keywords=model_text_keywords,
                 top_n_results=5,
@@ -347,6 +356,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 # Helper Functions

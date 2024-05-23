@@ -295,7 +295,7 @@ class RAGProcess:
             step_time = time.time()
 
             # Ensure 'corpusTerms' is correctly accessed
-            corpus_terms = keyword_data['corpusTerms'][0]['terms']
+            corpus_terms = keyword_data['corpusTerms']['terms']
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,
@@ -335,18 +335,18 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            # Note: Add missing fields with default values
-            if 'quote' not in dedup_df.columns:
-                dedup_df['quote'] = ''
-
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Debugging: Display the deduplicated results
             st.write("Deduplicated Results Head:")
             st.write(deduplicated_results.head())
 
+            # Ensure any missing columns like 'quote' are added with default values
+            if 'quote' not in deduplicated_results.columns:
+                deduplicated_results['quote'] = ''
+
             all_combined_data = [
-                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row.get('quote', '')}" for idx, row in deduplicated_results.iterrows()
+                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
             ] + [
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]

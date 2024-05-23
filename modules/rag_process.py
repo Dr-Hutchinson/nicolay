@@ -131,7 +131,7 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
                     except ValueError as e:
-                        st.write(f"Error processing entry with text_id: {entry['text_id']}, keyword_positions: {keyword_positions}")
+                        st.write(f"Error processing entry with text_id: {entry['text_id']}, keyword_positions: {keyword_positions}, error: {str(e)}")
                         continue  # Skip to the next entry if there's an error processing
 
                 else:
@@ -141,6 +141,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

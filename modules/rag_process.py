@@ -223,12 +223,12 @@ class RAGProcess:
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            lincoln_dict = {item['text_id']: item for item in lincoln_data}
+            lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
             self.lincoln_dict = lincoln_dict
 
+            df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
             df['full_text'] = df['combined'].apply(extract_full_text)
-            df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
-            df['source'], df['summary'] = zip(*df.index.map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
+            df['source'], df['summary'] = zip(*df['text_id'].map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
@@ -358,9 +358,8 @@ def extract_full_text(record):
         return ""
 
 def get_source_and_summary(text_id, lincoln_dict):
-    text_id_str = f"Text #: {text_id}"
-    return lincoln_dict.get(text_id_str, {}).get('source'), lincoln_dict.get(text_id_str, {}).get('summary')
-
+    return lincoln_dict.get(text_id, {}).get('source'), lincoln_dict.get(text_id, {}).get('summary')
+    
 def format_reranked_results_for_model_input(reranked_results):
     formatted_results = []
     top_three_results = reranked_results[:3]

@@ -238,11 +238,7 @@ class RAGProcess:
         try:
             start_time = time.time()
 
-            #lincoln_data = self.load_json('data/lincoln_speech_corpus.json')
-            #keyword_data = self.load_json('data/voyant_word_counts.json')
-            #df = pd.read_csv("lincoln_index_embedded.csv")
-
-             # Ensure data is loaded and prepared
+            # Ensure data is loaded and prepared
             lincoln_data = self.lincoln_data
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
@@ -255,9 +251,8 @@ class RAGProcess:
 
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
-            df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
+            df['source'], df['summary'] = zip(*df['text_id'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
-            #st.write("Loaded and prepared data successfully.")
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
@@ -282,14 +277,8 @@ class RAGProcess:
 
             initial_answer = api_response_data['initial_answer']
             model_weighted_keywords = api_response_data['weighted_keywords']
-
             model_year_keywords = api_response_data['year_keywords']
             model_text_keywords = api_response_data['text_keywords']
-
-            # Log the keywords for debugging
-            st.write("Weighted Keywords:", model_weighted_keywords)
-            st.write("Year Keywords:", model_year_keywords)
-            st.write("Text Keywords:", model_text_keywords)
 
             hays_data = {
                 'query': user_query,
@@ -303,8 +292,6 @@ class RAGProcess:
             self.hays_data_logger.record_api_outputs(hays_data)
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
-
-            #st.write(f"Received initial API response successfully. Initial answer: {initial_answer}")
 
             # Display initial answer
             with st.chat_message("assistant"):
@@ -326,7 +313,7 @@ class RAGProcess:
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-            semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+            semantic_matches.rename(columns={'text_id': 'text_id'}, inplace=True)
 
             top_segments = []
             for idx, row in semantic_matches.iterrows():
@@ -347,7 +334,6 @@ class RAGProcess:
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
 
-            #st.write("Combined search results successfully.")
             st.write(f"Duplicate removal and result combination took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
@@ -378,6 +364,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 # Helper Functions

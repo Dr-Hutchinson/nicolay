@@ -30,33 +30,23 @@ def load_voyant_word_counts():
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded():
     df = pd.read_parquet('data/lincoln_index_embedded.parquet')
-    # Verify data structure
-    if 'combined' not in df.columns or 'Unnamed: 0' not in df.columns:
-        raise ValueError("Data loaded from parquet does not have the expected structure.")
+    # Print columns for debugging
+    st.write("Columns in loaded dataframe:", df.columns)
+    # Ensure the index is correctly set
     df.reset_index(inplace=True)
     df.rename(columns={'index': 'text_id'}, inplace=True)
     return df
 
 
-lincoln_data = load_lincoln_speech_corpus()
-voyant_data = load_voyant_word_counts()
-lincoln_index_df = load_lincoln_index_embedded()
+@st.cache_data(persist="disk")
+def load_all_data():
+    with ThreadPoolExecutor() as executor:
+        lincoln_future = executor.submit(load_lincoln_speech_corpus)
+        voyant_future = executor.submit(load_voyant_word_counts)
+        index_future = executor.submit(load_lincoln_index_embedded)
 
-# Inspect a few samples
-st.write("Sample from lincoln_data:", lincoln_data[:3])
-st.write("Sample from voyant_data:", voyant_data['corpusTerms']['terms'][:3])
-st.write("Sample from lincoln_index_df:", lincoln_index_df.head(3))
+        lincoln_data = lincoln_future.result()
+        voyant_data = voyant_future.result()
+        index_data = index_future.result()
 
-
-#@st.cache_data(persist="disk")
-#def load_all_data():
-#    with ThreadPoolExecutor() as executor:
-#        lincoln_future = executor.submit(load_lincoln_speech_corpus)
-#        voyant_future = executor.submit(load_voyant_word_counts)
-#        index_future = executor.submit(load_lincoln_index_embedded)
-
-#        lincoln_data = lincoln_future.result()
-#        voyant_data = voyant_future.result()
-#        index_data = index_future.result()
-
-#    return lincoln_data, voyant_data, index_data
+    return lincoln_data, voyant_data, index_data

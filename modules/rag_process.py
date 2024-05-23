@@ -48,25 +48,16 @@ class RAGProcess:
         return dot_product / (norm_vec1 * norm_vec2)
 
     def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
-        st.write(f"User keywords: {user_keywords}")
-        st.write(f"Voyant data terms: {json_data['corpusTerms']['terms'][:5]}")  # Display first 5 terms for debugging
-
         # Calculate the total number of words for normalization
         total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
         relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
 
-        st.write(f"Relative frequencies (first 5): {list(relative_frequencies.items())[:5]}")  # Display first 5 relative frequencies for debugging
-
         # Calculate inverse weights based on the relative frequencies
         inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
-
-        st.write(f"Inverse weights: {inverse_weights}")
 
         # Normalize weights for dynamic weighting
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
-
-        st.write(f"Normalized weights: {normalized_weights}")
 
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
@@ -77,10 +68,8 @@ class RAGProcess:
             top_n=top_n_results
         )
 
-
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
-        st.write(f"Dynamic weights: {dynamic_weights}")
 
         if text_keywords:
             if isinstance(text_keywords, list):
@@ -118,8 +107,6 @@ class RAGProcess:
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
 
-                    st.write(f"Keyword positions for entry {entry['text_id']}: {keyword_positions}")  # Debugging statement
-
                     # Ensure keyword_positions is not empty before calling max()
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
@@ -135,10 +122,7 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                    else:
-                        st.write(f"No keyword positions found for entry: {entry['text_id']}")  # Debugging statement
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-        st.write(f"Instances found: {instances}")  # Debugging statement
         return instances[:top_n]
 
     def search_text(self, df, user_query, n=5):
@@ -194,8 +178,6 @@ class RAGProcess:
                         'Key Quote': quote,
                         'Relevance Score': result.relevance_score
                     })
-                else:
-                    st.write(f"Invalid data_parts length: {len(data_parts)}")
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")
@@ -219,7 +201,6 @@ class RAGProcess:
         st.write("Raw final response content:", response.choices[0].message.content)
         return response.choices[0].message.content
 
-
     def run_rag_process(self, user_query):
         try:
             start_time = time.time()
@@ -228,29 +209,12 @@ class RAGProcess:
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            st.write("Lincoln Data Head:")
-            st.write(lincoln_data.head())
-
-            st.write("Keyword Data Head:")
-            st.write(keyword_data.head())
-
-            st.write("Embedded Index DataFrame Head:")
-            st.write(df.head())
-
             lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
             self.lincoln_dict = lincoln_dict
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
 
-            # Debugging: Display the first few rows of 'combined' to understand its structure
-            st.write("Combined Column - First Few Rows:")
-            st.write(df['combined'].head(10))
-
             df['full_text'] = df['combined'].apply(extract_full_text)
-
-            # Debugging: Display the first few rows of 'full_text' to ensure it's populated
-            st.write("Full Text Extraction - First Few Rows:")
-            st.write(df[['text_id', 'full_text']].head(10))
 
             df['source'], df['summary'] = zip(*df['text_id'].map(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
@@ -274,7 +238,6 @@ class RAGProcess:
             step_time = time.time()
 
             api_response_data = json.loads(response.choices[0].message.content)
-            st.write("Raw response content:", response.choices[0].message.content)
 
             initial_answer = api_response_data['initial_answer']
             model_weighted_keywords = api_response_data['weighted_keywords']
@@ -298,11 +261,7 @@ class RAGProcess:
             # Display initial answer
             with st.chat_message("assistant"):
                 st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Hays' Response: {initial_answer}"})
-
-            # Debugging: Check the structure of keyword_data['corpusTerms']
-            st.write("Keyword Data 'corpusTerms' Structure:")
-            st.write(keyword_data['corpusTerms'])
+            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
             # Handle the corpusTerms based on its structure
             corpus_terms_json = keyword_data.at[0, 'corpusTerms']
@@ -324,13 +283,9 @@ class RAGProcess:
 
             search_results_df = pd.DataFrame(search_results)
 
-            st.write("Performed keyword search successfully.")
-
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
-            st.write("Semantic matches before rename: ", semantic_matches)  # Debugging statement
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
-            st.write("Semantic matches after rename: ", semantic_matches)  # Debugging statement
 
             top_segments = []
             for idx, row in semantic_matches.iterrows():
@@ -341,10 +296,9 @@ class RAGProcess:
                         top_segment = max(segment_scores, key=lambda x: x[1])
                         top_segments.append(top_segment[0])
                     else:
-                        st.write(f"No segments found for row: {row['text_id']}")  # Debugging statement
+                        top_segments.append("")  # Add empty string for rows with empty 'full_text'
                 else:
                     top_segments.append("")  # Add empty string for rows with empty 'full_text'
-                    st.write(f"Empty 'full_text' for row: {row['text_id']}")  # Debugging statement
 
             semantic_matches["TopSegment"] = top_segments
 
@@ -352,10 +306,6 @@ class RAGProcess:
             step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
-
-            # Debugging: Display the deduplicated results
-            st.write("Deduplicated Results Head:")
-            st.write(deduplicated_results.head())
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -398,16 +348,6 @@ class RAGProcess:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
 
-
-
-
-
-
-
-
-
-
-
 # Helper Functions
 
 def extract_full_text(combined_text):
@@ -418,18 +358,11 @@ def extract_full_text(combined_text):
             if marker_index != -1:
                 # Extract the full text starting from the marker
                 full_text = combined_text[marker_index + len(marker):].strip()
-                # Debugging: Display the extracted full_text
-                st.write(f"Extracted full_text: {full_text[:100]}...")  # Display the first 100 characters for brevity
                 return full_text
         # If none of the markers are found
-        st.write(f"Markers not found in combined text")
-        st.write(f"Combined text: {combined_text[:100]}...")  # Display the first 100 characters for context
         return ""
     else:
-        st.write("Combined text is not a string")
         return ""
-
-
 
 def get_source_and_summary(text_id, lincoln_dict):
     return lincoln_dict.get(text_id, {}).get('source'), lincoln_dict.get(text_id, {}).get('summary')

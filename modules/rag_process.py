@@ -165,6 +165,7 @@ class RAGProcess:
 
 
 
+
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
         df["similarities"] = df['embedding'].apply(lambda x: self.cosine_similarity(x, user_query_embedding))

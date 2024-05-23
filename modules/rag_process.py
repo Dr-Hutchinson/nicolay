@@ -89,14 +89,25 @@ class RAGProcess:
                 source_lower = entry['source'].lower()
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+
+                # Debugging: Display entry details and matching conditions
+                st.write(f"Processing entry with text_id: {entry['text_id']}")
+                st.write(f"Source: {source_lower}")
+                st.write(f"Text Keywords: {text_keywords_list}")
+                st.write(f"Year Keywords: {year_keywords}")
+
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+
+                # Debugging: Display match results
+                st.write(f"Match Source Year: {match_source_year}")
+                st.write(f"Match Source Text: {match_source_text}")
+
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
-                    st.write(f"Processing entry with text_id: {entry['text_id']}")
                     st.write(f"Combined text for matching: {combined_text[:500]}...")  # Display first 500 characters of combined text
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
@@ -142,6 +153,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 

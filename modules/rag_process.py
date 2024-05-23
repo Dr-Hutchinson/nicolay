@@ -249,8 +249,18 @@ class RAGProcess:
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
+            # Debugging print statements
+            st.write("Sample lincoln_data:", lincoln_data[:3])
+            st.write("Sample keyword_data:", keyword_data['corpusTerms']['terms'][:3])
+            st.write("Sample lincoln_index_df:", df.head(3))
+
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
+
+            # Check if text_id column exists
+            if 'text_id' not in df.columns:
+                raise ValueError("text_id column not found in dataframe")
+
             df['source'], df['summary'] = zip(*df['text_id'].apply(lambda text_id: get_source_and_summary(text_id, lincoln_dict)))
 
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")

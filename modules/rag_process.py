@@ -73,10 +73,10 @@ class RAGProcess:
         )
 
 
-    def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+    def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
 
-        # Debugging: st.write the type and first few elements of the data
+        # Debugging: Print the type and first few elements of the data
         st.write("Data type:", type(data))
         if isinstance(data, list):
             st.write("First element type:", type(data[0]))
@@ -254,11 +254,6 @@ class RAGProcess:
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
-            # Debugging st.write statements
-            #st.write("Sample lincoln_data:", lincoln_data[:3])
-            #st.write("Sample keyword_data:", keyword_data['corpusTerms']['terms'][:3])
-            #st.write("Sample lincoln_index_df:", df.head(3))
-
             df['full_text'] = df['combined'].apply(extract_full_text)
             df['embedding'] = df['full_text'].apply(lambda x: self.get_embedding(x) if x else np.zeros(1536))
 
@@ -271,7 +266,7 @@ class RAGProcess:
             st.write(f"Data loading and preparation took {time.time() - start_time:.2f} seconds.")
             step_time = time.time()
 
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.chat_completions.create(
                 model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",
                 messages=[
                     {"role": "system", "content": keyword_prompt},
@@ -379,6 +374,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 

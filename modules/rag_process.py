@@ -295,6 +295,11 @@ class RAGProcess:
             st.write(f"Data logged in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Display initial answer
+            with st.chat_message("assistant"):
+                st.markdown(f"Hays' Response: {initial_answer}")
+            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
+
             # Debugging: Check the structure of keyword_data['corpusTerms']
             st.write("Keyword Data 'corpusTerms' Structure:")
             st.write(keyword_data['corpusTerms'])

@@ -119,6 +119,12 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         </style>
         """
 
+        # Ensure lincoln_data is converted to a list of dictionaries if it's a DataFrame
+        if isinstance(lincoln_data, pd.DataFrame):
+            lincoln_data_list = lincoln_data.to_dict('records')
+        else:
+            lincoln_data_list = lincoln_data
+
         if "Match Analysis" in response_json:
             st.markdown(highlight_style, unsafe_allow_html=True)
             for match_key, match_info in response_json["Match Analysis"].items():
@@ -139,20 +145,20 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         formatted_text_id = f"Text #: {text_id}"
                         key_quote = match_info.get("Key Quote", "")
 
-                        # Debugging: Check the structure of lincoln_data
-                        if not isinstance(lincoln_data, list):
-                            st.write(f"lincoln_data is not a list: {type(lincoln_data)}")
+                        # Debugging: Check the structure of lincoln_data_list
+                        if not isinstance(lincoln_data_list, list):
+                            st.write(f"lincoln_data_list is not a list: {type(lincoln_data_list)}")
                         else:
-                            for item in lincoln_data:
+                            for item in lincoln_data_list:
                                 if not isinstance(item, dict):
-                                    st.write(f"Item in lincoln_data is not a dict: {type(item)}")
+                                    st.write(f"Item in lincoln_data_list is not a dict: {type(item)}")
                                     continue
                                 if 'text_id' not in item:
-                                    st.write(f"Item in lincoln_data missing 'text_id': {item}")
+                                    st.write(f"Item in lincoln_data_list missing 'text_id': {item}")
 
-                        # Ensure 'text_id' is found in lincoln_data
+                        # Ensure 'text_id' is found in lincoln_data_list
                         st.write(f"Looking for text_id: {formatted_text_id}")
-                        speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+                        speech = next((item for item in lincoln_data_list if item['text_id'] == formatted_text_id), None)
                         st.write(f"Speech found: {speech}")  # Debugging statement
 
                         # Increment the counter for each match
@@ -197,7 +203,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
                         st.write(f"Unexpected type for match_info: {type(match_info)}")
                 except Exception as e:
                     st.write(f"Error processing match {match_key}: {e}")
-
 
 
 

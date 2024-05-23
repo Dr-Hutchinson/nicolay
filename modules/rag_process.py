@@ -219,6 +219,7 @@ class RAGProcess:
         st.write("Raw final response content:", response.choices[0].message.content)
         return response.choices[0].message.content
 
+
     def run_rag_process(self, user_query):
         try:
             start_time = time.time()
@@ -298,8 +299,9 @@ class RAGProcess:
             st.write("Keyword Data 'corpusTerms' Structure:")
             st.write(keyword_data['corpusTerms'])
 
-            # Ensure 'corpusTerms' is correctly accessed
-            corpus_terms = keyword_data['corpusTerms']['terms']
+            # Parse the JSON string in 'corpusTerms'
+            corpus_terms_json = keyword_data['corpusTerms'][0]
+            corpus_terms = json.loads(corpus_terms_json)['terms']
 
             search_results = self.search_with_dynamic_weights_expanded(
                 user_keywords=model_weighted_keywords,

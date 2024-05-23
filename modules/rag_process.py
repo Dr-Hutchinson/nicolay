@@ -48,11 +48,23 @@ class RAGProcess:
         return dot_product / (norm_vec1 * norm_vec2)
 
     def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
+        st.write(f"User keywords: {user_keywords}")
+        st.write(f"Voyant data terms: {json_data['corpusTerms']['terms'][:5]}")  # Display first 5 terms for debugging
+
         total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
         relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
+
+        st.write(f"Relative frequencies (first 5): {list(relative_frequencies.items())[:5]}")  # Display first 5 relative frequencies for debugging
+
         inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
+
+        st.write(f"Inverse weights: {inverse_weights}")
+
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
+
+        st.write(f"Normalized weights: {normalized_weights}")
+
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
@@ -64,6 +76,8 @@ class RAGProcess:
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
+        st.write(f"Dynamic weights: {dynamic_weights}")
+
         if text_keywords:
             if isinstance(text_keywords, list):
                 text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
@@ -78,13 +92,16 @@ class RAGProcess:
                 source_lower = entry['source'].lower()
                 summary_lower = entry.get('summary', '').lower()
                 keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+
                 match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                 match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+
                 if match_source_year and match_source_text:
                     total_dynamic_weighted_score = 0
                     keyword_counts = {}
                     keyword_positions = {}
                     combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+
                     for keyword in original_weights.keys():
                         keyword_lower = keyword.lower()
                         for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -96,6 +113,9 @@ class RAGProcess:
                                 keyword_index = match.start()
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
+
+                    st.write(f"Keyword positions for entry {entry['text_id']}: {keyword_positions}")  # Debugging statement
+
                     # Ensure keyword_positions is not empty before calling max()
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
@@ -112,9 +132,9 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
                     else:
-                        # Debugging statement to track empty keyword_positions
-                        st.write(f"No keyword positions found for entry: {entry['text_id']}")
+                        st.write(f"No keyword positions found for entry: {entry['text_id']}")  # Debugging statement
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+        st.write(f"Instances found: {instances}")  # Debugging statement
         return instances[:top_n]
 
     def search_text(self, df, user_query, n=5):
@@ -324,7 +344,7 @@ def extract_full_text(record):
     marker = "Full Text:\n"
     if isinstance(record, str):
         marker_index = record.find(marker)
-        if (marker_index != -1):
+        if marker_index != -1:
             return record[marker_index + len(marker):].strip()
         else:
             return ""

@@ -168,7 +168,7 @@ class RAGProcess:
                     summary = summary.replace("Summary:", "").strip()
                     quote = quote.strip()
 
-                    source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
+                                        source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
 
                     full_reranked_results.append({
                         'Rank': idx + 1,
@@ -288,6 +288,9 @@ class RAGProcess:
             if not isinstance(search_results, pd.DataFrame):
                 raise ValueError("search_results should be a DataFrame")
 
+            # Log keyword search results
+            log_keyword_search_results(self.hays_data_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
@@ -328,6 +331,9 @@ class RAGProcess:
             reranked_results = self.rerank_results(user_query, all_combined_data)
             reranked_results_df = pd.DataFrame(reranked_results)
 
+            # Log reranking results
+            log_reranking_results(self.hays_data_logger, reranked_results_df, user_query)
+
             st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
@@ -360,7 +366,7 @@ def extract_full_text(combined_text):
     if isinstance(combined_text, str):
         for marker in markers:
             marker_index = combined_text.find(marker)
-            if marker_index != -1:
+            if (marker_index != -1):
                 # Extract the full text starting from the marker
                 full_text = combined_text[marker_index + len(marker):].strip()
                 return full_text
@@ -403,3 +409,95 @@ load_prompts()
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
+
+# Data logging functions
+
+
+def log_reranking_results(reranking_results_logger, reranked_df, user_query):
+    if isinstance(reranked_df, pd.DataFrame):
+        now = dt.now()  # Current timestamp
+
+        for idx, row in reranked_df.iterrows():
+            record = {
+                'Timestamp': now,
+                'UserQuery': user_query,
+                'Rank': row['Rank'],
+                'SearchType': row['Search Type'],
+                'TextID': row['Text ID'],
+                'KeyQuote': row['Key Quote'],
+                'Relevance_Score': row['Relevance Score']
+            }
+            reranking_results_logger.record_api_outputs(record)
+    else:
+        raise ValueError("reranked_df should be a DataFrame")
+
+def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict):
+    """
+    Logs the final model output from Nicolay to Google Sheets.
+    """
+    try:
+        # If model_output is a string, we should handle it correctly
+        if isinstance(model_output, str):
+            model_output = json.loads(model_output)
+
+        # Extract key information from model output
+        final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
+        references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
+
+        # User query analysis
+        query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
+        historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
+
+        # Initial answer review
+        answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
+        quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
+
+        # Response effectiveness and suggestions
+        response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
+        suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
+
+        # Match analysis - concatenating details of each match into single strings
+        match_analysis = model_output.get("Match Analysis", {})
+        match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
+        match_data = {}
+
+        for match_key, match_details in match_analysis.items():
+            match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
+            match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
+
+            if 'speech' in match_details:
+                highlight_success_dict[match_key] = match_details['speech']
+            else:
+                highlight_success_dict[match_key] = False
+
+        # Meta analysis
+        meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
+        meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
+
+        # Construct a record for logging
+        record = {
+            'Timestamp': dt.now(),
+            'UserQuery': user_query,
+            'initial_Answer': initial_answer,
+            'FinalAnswer': final_answer_text,
+            'References': references,
+            'QueryIntent': query_intent,
+            'HistoricalContext': historical_context,
+            'AnswerEvaluation': answer_evaluation,
+            'QuoteIntegration': quote_integration,
+            **match_data,  # Unpack match data into the record
+            'MetaStrategy': str(meta_strategy),  # Convert dictionary to string if needed
+            'MetaSynthesis': meta_synthesis,
+            'ResponseEffectiveness': response_effectiveness,
+            'Suggestions': suggestions_for_improvement
+        }
+
+        # Add highlight success information for each match
+        for match_key, success in highlight_success_dict.items():
+            record[f'{match_key}_HighlightSuccess'] = success
+
+        # Log the record
+        nicolay_data_logger.record_api_outputs(record)
+
+    except Exception as e:
+        st.error(f"Error in logging Nicolay model output: {e}")

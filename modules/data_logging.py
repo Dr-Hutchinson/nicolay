@@ -27,7 +27,6 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
         now = dt.now()  # Current timestamp
 
         for idx, result in search_results.iterrows():
-            st.write(f"Logging result for text_id: {result['text_id']}")  # Debugging statement
             record = {
                 'Timestamp': now,
                 'UserQuery': user_query,
@@ -67,14 +66,13 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
         now = dt.now()  # Current timestamp
 
         for idx, row in reranked_df.iterrows():
-            key_quote = row.get('Key Quote', '')  # Ensure 'key_quote' is fetched correctly
             record = {
                 'Timestamp': now,
                 'UserQuery': user_query,
                 'Rank': row['Rank'],
                 'SearchType': row['Search Type'],
                 'TextID': row['Text ID'],
-                'KeyQuote': key_quote,
+                'KeyQuote': row['Key Quote'],
                 'Relevance_Score': row['Relevance Score']
             }
             reranking_results_logger.record_api_outputs(record)

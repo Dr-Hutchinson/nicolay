@@ -3,6 +3,7 @@
 import json
 import pandas as pd
 from datetime import datetime as dt
+import streamlit as st
 
 class DataLogger:
     def __init__(self, gc, sheet_name):

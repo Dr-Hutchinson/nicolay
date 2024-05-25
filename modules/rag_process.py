@@ -402,4 +402,4 @@ load_prompts()
 
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
-response_prompt = st.session_state['response_model_system_prompt
+response_prompt = st.session_state['response_model_system_prompt']

@@ -61,6 +61,10 @@ class RAGProcess:
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
+        st.write(f"User keywords: {user_keywords}")  # Debugging statement
+        st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
+        st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
+
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
@@ -69,6 +73,7 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
+
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -82,57 +87,66 @@ class RAGProcess:
             text_keywords_list = []
 
         for entry in data:
-            if 'full_text' in entry and 'source' in entry:
-                entry_text_lower = entry['full_text'].lower()
-                source_lower = entry['source'].lower()
-                summary_lower = entry.get('summary', '').lower()
-                keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+            if 'full_text' not in entry or not entry['full_text']:
+                st.write(f"Skipping entry without full_text: {entry.get('text_id', 'unknown')}")
+                st.write(f"Missing data - Entry: {entry}")
+                continue
+            if 'source' not in entry or not entry['source']:
+                st.write(f"Skipping entry without source: {entry.get('text_id', 'unknown')}")
+                st.write(f"Missing data - Entry: {entry}")
+                continue
 
-                match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-                match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+            entry_text_lower = entry['full_text'].lower()
+            source_lower = entry['source'].lower()
+            summary_lower = entry.get('summary', '').lower()
+            keywords_lower = ' '.join(entry.get('keywords', [])).lower()
 
-                if match_source_year and match_source_text:
-                    total_dynamic_weighted_score = 0
-                    keyword_counts = {}
-                    keyword_positions = {}
-                    combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+            match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
+            match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
 
-                    for keyword in original_weights.keys():
-                        keyword_lower = keyword.lower()
-                        for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-                            count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-                            dynamic_weight = dynamic_weights.get(keyword, 0)
-                            if count > 0:
-                                keyword_counts[keyword] = count
-                                total_dynamic_weighted_score += count * dynamic_weight
-                                keyword_index = match.start()
-                                original_weight = original_weights[keyword]
-                                keyword_positions[keyword_index] = (keyword, original_weight)
+            if match_source_year and match_source_text:
+                total_dynamic_weighted_score = 0
+                keyword_counts = {}
+                keyword_positions = {}
+                combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
 
-                    # Ensure keyword_positions is not empty before calling max()
-                    if keyword_positions:
-                        highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                        context_length = 300
-                        start_quote = max(0, highest_original_weighted_position - context_length)
-                        end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
-                        snippet = entry['full_text'][start_quote:end_quote].replace("\n", " ")
-                        instances.append({
-                            "text_id": entry['text_id'],
-                            "source": entry['source'],
-                            "summary": entry.get('summary', ''),
-                            "quote": snippet,
-                            "weighted_score": total_dynamic_weighted_score,
-                            "keyword_counts": keyword_counts
-                        })
-                        st.write(f"Extracted key_quote: {snippet}")  # Debugging statement
-                    else:
-                        st.write(f"No keywords found for entry {entry['text_id']}")
+                for keyword in original_weights.keys():
+                    keyword_lower = keyword.lower()
+                    for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
+                        count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
+                        dynamic_weight = dynamic_weights.get(keyword, 0)
+                        if count > 0:
+                            keyword_counts[keyword] = count
+                            total_dynamic_weighted_score += count * dynamic_weight
+                            keyword_index = match.start()
+                            original_weight = original_weights[keyword]
+                            keyword_positions[keyword_index] = (keyword, original_weight)
+
+                # Ensure keyword_positions is not empty before calling max()
+                if keyword_positions:
+                    highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
+                    context_length = 300
+                    start_quote = max(0, highest_original_weighted_position - context_length)
+                    end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
+                    snippet = entry['full_text'][start_quote:end_quote].replace("\n", " ")
+                    instances.append({
+                        "text_id": entry['text_id'],
+                        "source": entry['source'],
+                        "summary": entry.get('summary', ''),
+                        "quote": snippet,
+                        "weighted_score": total_dynamic_weighted_score,
+                        "keyword_counts": keyword_counts
+                    })
+                    st.write(f"Extracted key_quote: {snippet}")  # Debugging statement
+                else:
+                    st.write(f"No keywords found for entry {entry['text_id']}")
             else:
-                st.write(f"Skipping entry without full_text or source: {entry}")
-                st.write(f"Missing data - Entry: {entry}")  # Debugging statement
+                st.write(f"No match for year or text keywords for entry {entry['text_id']}")
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+        st.write(f"Found {len(instances)} instances after search")
         return instances[:top_n]
+
 
 
 

@@ -168,7 +168,7 @@ class RAGProcess:
                     summary = summary.replace("Summary:", "").strip()
                     quote = quote.strip()
 
-                                        source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
+                    source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
 
                     full_reranked_results.append({
                         'Rank': idx + 1,

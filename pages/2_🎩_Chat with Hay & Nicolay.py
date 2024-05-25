@@ -203,18 +203,23 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         #log_reranking_results(reranking_results_logger, reranked_results, prompt)
         #log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
-        # Log keyword search results
-        log_keyword_search_results(keyword_results_logger, results['search_results'], prompt, results['initial_answer'], results['model_weighted_keywords'], results['model_year_keywords'], results['model_text_keywords'])
+        # Inside the try block, after processing the search results
+        try:
 
-        # Log semantic search results
-        log_semantic_search_results(semantic_results_logger, results['semantic_matches'], results['initial_answer'])
+            # After ensuring the search results are processed
+            st.write("Logging keyword search results...")
+            log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+            st.write("Keyword search results logged.")
 
-        # Log reranking results
-        log_reranking_results(reranking_results_logger, results['reranked_results'], prompt)
+            ...
+            # After ensuring the reranked results are processed
+            st.write("Logging reranking results...")
+            log_reranking_results(reranking_results_logger, reranked_results_df, user_query)
+            st.write("Reranking results logged.")
 
-        # Log final model output
-        highlight_success_dict = {}  # Initialize with appropriate data if available
-        log_nicolay_model_output(nicolay_data_logger, results['response'], prompt, results['initial_answer'], highlight_success_dict)
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
         # Displaying the Analysis Metadata in an expander
         with st.expander("**Analysis Metadata**"):

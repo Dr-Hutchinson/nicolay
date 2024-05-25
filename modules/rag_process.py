@@ -28,8 +28,8 @@ class RAGProcess:
 
         # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()
-        if isinstance(self.lincoln_data, pd.DataFrame):
-            self.lincoln_data = self.lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
+        #if isinstance(self.lincoln_data, pd.DataFrame):
+        #    self.lincoln_data = self.lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
 
@@ -63,6 +63,10 @@ class RAGProcess:
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
+        if not isinstance(lincoln_data, list) or not all(isinstance(entry, dict) for entry in lincoln_data):
+            st.write(f"Invalid lincoln_data format: {lincoln_data}")  # Debugging statement
+            raise ValueError("lincoln_data should be a list of dictionaries")
+
         results = self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
@@ -74,6 +78,7 @@ class RAGProcess:
 
         st.write(f"Keyword search results: {results}")  # Debugging statement
         return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
+
 
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
@@ -92,9 +97,14 @@ class RAGProcess:
         st.write(f"Year keywords: {year_keywords}")  # Debugging statement
         st.write(f"Text keywords: {text_keywords_list}")  # Debugging statement
 
+        # Check if data is a list of dictionaries
+        if not isinstance(data, list) or not all(isinstance(entry, dict) for entry in data):
+            st.write(f"Invalid data format: {data}")  # Debugging statement
+            raise ValueError("Data should be a list of dictionaries")
+
         for entry in data:
-            st.write(f"Processing entry: {entry}")  # Debugging statement
-            if isinstance(entry, dict):  # Ensure that entry is a dictionary
+            try:
+                st.write(f"Processing entry: {entry}")  # Debugging statement
                 if 'full_text' in entry and 'source' in entry:
                     entry_text_lower = entry['full_text'].lower()
                     source_lower = entry['source'].lower()
@@ -137,11 +147,13 @@ class RAGProcess:
                                 "weighted_score": total_dynamic_weighted_score,
                                 "keyword_counts": keyword_counts
                             })
-            else:
-                st.write(f"Invalid entry format: {entry}")  # Debugging statement
+            except Exception as e:
+                st.write(f"Error processing entry: {e}")  # Debugging statement
+
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         st.write(f"Found instances: {instances}")  # Debugging statement
         return instances  # Ensure this returns a list of dictionaries
+
 
 
 
@@ -232,10 +244,13 @@ class RAGProcess:
             start_time = time.time()
 
             lincoln_data = self.lincoln_data
+            if isinstance(lincoln_data, pd.DataFrame):
+                lincoln_data = lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
+
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
+            lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
@@ -307,15 +322,14 @@ class RAGProcess:
                 lincoln_data=lincoln_data
             )
 
-            # Debugging statement to check the type of search_results
-            st.write(f"Type of search_results: {type(search_results)}")
+            st.write(f"Type of search_results: {type(search_results)}")  # Debugging statement
             st.write(f"Search results: {search_results}")  # Debugging statement
 
+            # Ensure search_results is a DataFrame
             if not isinstance(search_results, pd.DataFrame):
                 raise ValueError("search_results should be a DataFrame")
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
-            st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
 
@@ -337,7 +351,9 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Combine search results
             deduplicated_results = self.remove_duplicates(search_results, semantic_matches)
+
             st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
             # Ensure any missing columns like 'quote' are added with default values
@@ -354,7 +370,6 @@ class RAGProcess:
             step_time = time.time()
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
-            st.write(f"Reranked results: {reranked_results}")  # Debugging statement
             reranked_results_df = pd.DataFrame(reranked_results)
 
             st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")
@@ -368,6 +383,7 @@ class RAGProcess:
 
             st.write("Generated final model response successfully.")
 
+            # Return the results for further processing
             return {
                 "initial_answer": initial_answer,
                 "response": final_model_response,
@@ -381,6 +397,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 
 # Helper Functions

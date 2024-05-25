@@ -121,15 +121,16 @@ class RAGProcess:
                         start_quote = max(0, highest_original_weighted_position - context_length)
                         end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
                         snippet = entry['full_text'][start_quote:end_quote]
+                        formatted_snippet = snippet.replace("\n", " ") if snippet else 'N/A'
                         instances.append({
                             "text_id": entry['text_id'],
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
-                            "quote": snippet.replace("\n", " ") if snippet else 'N/A',
+                            "quote": formatted_snippet,
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                        st.write(f"Extracted key_quote: {snippet.replace('\n', ' ')}")  # Debugging statement
+                        st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
             else:
@@ -137,6 +138,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
     def search_text(self, df, user_query, n=5):

@@ -86,6 +86,9 @@ class RAGProcess:
         else:
             text_keywords_list = []
 
+        st.write(f"Data type: {type(data)}")  # Debugging statement
+        st.write(f"Data sample: {data[:1]}")  # Debugging statement for the first entry
+
         for entry in data:
             if 'full_text' not in entry or not entry['full_text']:
                 st.write(f"Skipping entry without full_text: {entry.get('text_id', 'unknown')}")
@@ -146,11 +149,6 @@ class RAGProcess:
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         st.write(f"Found {len(instances)} instances after search")
         return instances[:top_n]
-
-
-
-
-
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -240,6 +238,9 @@ class RAGProcess:
             lincoln_data = self.lincoln_data
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
+
+            st.write(f"Type of lincoln_data: {type(lincoln_data)}")  # Debugging statement
+            st.write(f"Sample lincoln_data: {lincoln_data[:1]}")  # Debugging statement
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
             self.lincoln_dict = lincoln_dict
@@ -387,6 +388,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 # Helper Functions
 

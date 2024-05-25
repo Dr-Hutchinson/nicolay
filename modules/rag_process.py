@@ -65,6 +65,11 @@ class RAGProcess:
         st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
         st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
 
+        st.write(f"Year Keywords: {year_keywords}")  # Debugging statement
+        st.write(f"Text Keywords: {text_keywords}")  # Debugging statement
+        st.write(f"Lincoln Data: {lincoln_data}")  # Debugging statement
+
+        # Ensure correct call to find_instances_expanded_search with explicit argument naming
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
@@ -73,6 +78,7 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
+
 
 
     def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):

@@ -68,6 +68,9 @@ class RAGProcess:
             top_n=top_n_results
         )
 
+        return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
+
+
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
 
@@ -123,7 +126,7 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-        return instances[:top_n]
+        return instances  # Ensure this returns a list of dictionaries
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -287,7 +290,8 @@ class RAGProcess:
                 lincoln_data=lincoln_data
             )
 
-            search_results_df = pd.DataFrame(search_results)
+            # Debugging statement to check the type of search_results
+            st.write(f"Type of search_results: {type(search_results)}")
 
             if not isinstance(search_results, pd.DataFrame):
                 raise ValueError("search_results should be a DataFrame")

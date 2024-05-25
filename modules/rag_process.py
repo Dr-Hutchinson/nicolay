@@ -52,28 +52,28 @@ class RAGProcess:
         return dot_product / (norm_vec1 * norm_vec2)
 
     def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
-    # Calculate the total number of words for normalization
-    total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
-    relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
+        # Calculate the total number of words for normalization
+        total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
+        relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
 
-    # Calculate inverse weights based on the relative frequencies
-    inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
+        # Calculate inverse weights based on the relative frequencies
+        inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
 
-    # Normalize weights for dynamic weighting
-    max_weight = max(inverse_weights.values())
-    normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
+        # Normalize weights for dynamic weighting
+        max_weight = max(inverse_weights.values())
+        normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-    results = self.find_instances_expanded_search(
-        dynamic_weights=normalized_weights,
-        original_weights=user_keywords,
-        data=lincoln_data,  # Ensure this is a list of dictionaries
-        year_keywords=year_keywords,
-        text_keywords=text_keywords,
-        top_n=top_n_results
-    )
+        results = self.find_instances_expanded_search(
+            dynamic_weights=normalized_weights,
+            original_weights=user_keywords,
+            data=lincoln_data,  # Ensure this is a list of dictionaries
+            year_keywords=year_keywords,
+            text_keywords=text_keywords,
+            top_n=top_n_results
+        )
 
-    st.write(f"Keyword search results: {results}")  # Debugging statement
-    return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
+        st.write(f"Keyword search results: {results}")  # Debugging statement
+        return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
 
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):

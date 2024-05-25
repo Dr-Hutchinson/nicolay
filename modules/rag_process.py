@@ -127,9 +127,11 @@ class RAGProcess:
                         st.write(f"No keywords found for entry {entry['text_id']}")
             else:
                 st.write(f"Skipping entry without full_text or source: {entry}")
+                st.write(f"Missing data - Entry: {entry}")  # Debugging statement
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 
@@ -297,6 +299,9 @@ class RAGProcess:
 
             search_results_df = pd.DataFrame(search_results)
             st.write(f"Search results: {search_results_df}")  # Debugging statement
+
+            # Log keyword search results
+            log_keyword_search_results(self.keyword_results_logger, search_results_df, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
             st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement

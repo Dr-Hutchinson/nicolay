@@ -23,6 +23,7 @@ class DataLogger:
         self.sheet.set_dataframe(df, (end_row, 1), copy_head=False, extend=True)
 
 def log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords):
+    st.write("log_keyword_search_results called")  # Debugging statement
     if isinstance(search_results, pd.DataFrame):
         now = dt.now()  # Current timestamp
 
@@ -44,6 +45,7 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
     else:
         st.write(f"search_results is not a DataFrame: {search_results}")  # Debugging statement
         raise ValueError("search_results should be a DataFrame")
+
 
 
 

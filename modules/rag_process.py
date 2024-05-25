@@ -59,7 +59,7 @@ class RAGProcess:
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-        return self.find_instances_expanded_search(
+        results = self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
             data=lincoln_data,
@@ -67,9 +67,7 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
-
         return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
-
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -141,16 +139,10 @@ class RAGProcess:
             segment_embeddings = [future.result() for future in futures]
             return [(segments[i], self.cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
 
-    #def remove_duplicates(self, search_results, semantic_matches):
-    #    combined_results = pd.concat([search_results, semantic_matches])
-    #    deduplicated_results = combined_results.drop_duplicates(subset='text_id')
-    #    return deduplicated_results
-
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
         deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first')
         return deduplicated_results
-
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -296,7 +288,6 @@ class RAGProcess:
             if not isinstance(search_results, pd.DataFrame):
                 raise ValueError("search_results should be a DataFrame")
 
-
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
@@ -319,7 +310,7 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+            deduplicated_results = self.remove_duplicates(search_results, semantic_matches)
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -351,7 +342,7 @@ class RAGProcess:
             return {
                 "initial_answer": initial_answer,
                 "response": final_model_response,
-                "search_results": search_results_df,
+                "search_results": search_results,
                 "semantic_matches": semantic_matches,
                 "reranked_results": reranked_results_df,
                 "model_weighted_keywords": model_weighted_keywords,
@@ -411,4 +402,4 @@ load_prompts()
 
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
-response_prompt = st.session_state['response_model_system_prompt']
+response_prompt = st.session_state['response_model_system_prompt

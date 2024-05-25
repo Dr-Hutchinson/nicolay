@@ -138,10 +138,16 @@ class RAGProcess:
             segment_embeddings = [future.result() for future in futures]
             return [(segments[i], self.cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
 
+    #def remove_duplicates(self, search_results, semantic_matches):
+    #    combined_results = pd.concat([search_results, semantic_matches])
+    #    deduplicated_results = combined_results.drop_duplicates(subset='text_id')
+    #    return deduplicated_results
+
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
-        deduplicated_results = combined_results.drop_duplicates(subset='text_id')
+        deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first')
         return deduplicated_results
+
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -282,6 +288,10 @@ class RAGProcess:
             )
 
             search_results_df = pd.DataFrame(search_results)
+
+            if not isinstance(search_results, pd.DataFrame):
+                raise ValueError("search_results should be a DataFrame")
+
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 

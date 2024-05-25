@@ -27,6 +27,7 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
         now = dt.now()  # Current timestamp
 
         for idx, result in search_results.iterrows():
+            st.write(f"Logging result for text_id: {result['text_id']}")  # Debugging statement
             record = {
                 'Timestamp': now,
                 'UserQuery': user_query,
@@ -42,6 +43,7 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
             keyword_results_logger.record_api_outputs(record)
     else:
         raise ValueError("search_results should be a DataFrame")
+
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer):
     if isinstance(semantic_matches, pd.DataFrame):
@@ -65,18 +67,20 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
         now = dt.now()  # Current timestamp
 
         for idx, row in reranked_df.iterrows():
+            key_quote = row.get('Key Quote', '')  # Ensure 'key_quote' is fetched correctly
             record = {
                 'Timestamp': now,
                 'UserQuery': user_query,
                 'Rank': row['Rank'],
                 'SearchType': row['Search Type'],
                 'TextID': row['Text ID'],
-                'KeyQuote': row['Key Quote'],
+                'KeyQuote': key_quote,
                 'Relevance_Score': row['Relevance Score']
             }
             reranking_results_logger.record_api_outputs(record)
     else:
         raise ValueError("reranked_df should be a DataFrame")
+
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict):
     """

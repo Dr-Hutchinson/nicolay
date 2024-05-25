@@ -26,6 +26,7 @@ class RAGProcess:
 
         # Store the hays_data_logger
         self.hays_data_logger = hays_data_logger
+        self.keyword_results_logger = keyword_results_logger
 
         # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()

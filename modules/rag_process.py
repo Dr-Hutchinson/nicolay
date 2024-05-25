@@ -90,6 +90,7 @@ class RAGProcess:
         st.write(f"Text keywords: {text_keywords_list}")  # Debugging statement
 
         for entry in data:
+            st.write(f"Processing entry: {entry['text_id']}")  # Debugging statement
             if 'full_text' in entry and 'source' in entry:
                 entry_text_lower = entry['full_text'].lower()
                 source_lower = entry['source'].lower()
@@ -137,6 +138,7 @@ class RAGProcess:
         return instances  # Ensure this returns a list of dictionaries
 
 
+
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
         df["similarities"] = df['embedding'].apply(lambda x: self.cosine_similarity(x, user_query_embedding))
@@ -152,8 +154,11 @@ class RAGProcess:
 
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
+        st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
         deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first')
+        st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
         return deduplicated_results
+
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -190,10 +195,12 @@ class RAGProcess:
                         'Key Quote': quote,
                         'Relevance Score': result.relevance_score
                     })
+            st.write(f"Reranked results: {full_reranked_results}")  # Debugging statement
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [

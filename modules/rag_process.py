@@ -122,6 +122,7 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
+                        st.write(f"Extracted key_quote: {snippet.replace('\n', ' ')}")  # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
             else:
@@ -129,6 +130,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
     def search_text(self, df, user_query, n=5):

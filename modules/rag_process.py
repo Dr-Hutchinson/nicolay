@@ -67,6 +67,7 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
+        st.write(f"Keyword search results: {results}")  # Debugging statement
         return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
@@ -284,14 +285,13 @@ class RAGProcess:
 
             # Debugging statement to check the type of search_results
             st.write(f"Type of search_results: {type(search_results)}")
+            st.write(f"Search results: {search_results}")  # Debugging statement
 
             if not isinstance(search_results, pd.DataFrame):
                 raise ValueError("search_results should be a DataFrame")
 
-            # Log keyword search results
-            #log_keyword_search_results(self.hays_data_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
+            st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
 
@@ -314,6 +314,7 @@ class RAGProcess:
             step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results, semantic_matches)
+            st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -329,10 +330,8 @@ class RAGProcess:
             step_time = time.time()
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
+            st.write(f"Reranked results: {reranked_results}")  # Debugging statement
             reranked_results_df = pd.DataFrame(reranked_results)
-
-            # Log reranking results
-            log_reranking_results(self.hays_data_logger, reranked_results_df, user_query)
 
             st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
@@ -358,6 +357,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
 
 # Helper Functions
 

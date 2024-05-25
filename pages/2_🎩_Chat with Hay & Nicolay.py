@@ -85,6 +85,9 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         st.write("Processing your query...")
         results = rag.run_rag_process(prompt)
 
+        # Debugging statement to print the raw results
+        st.write(f"Raw results: {results}")
+
         # Print the raw response for debugging
         #st.write("Raw response content:", results["response"])
 
@@ -195,10 +198,23 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         model_year_keywords = results["model_year_keywords"]
         model_text_keywords = results["model_text_keywords"]
 
-        log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-        log_reranking_results(reranking_results_logger, reranked_results, prompt)
-        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
+        #log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+        #log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+        #log_reranking_results(reranking_results_logger, reranked_results, prompt)
+        #log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
+
+        # Log keyword search results
+        log_keyword_search_results(keyword_results_logger, results['search_results'], prompt, results['initial_answer'], results['model_weighted_keywords'], results['model_year_keywords'], results['model_text_keywords'])
+
+        # Log semantic search results
+        log_semantic_search_results(semantic_results_logger, results['semantic_matches'], results['initial_answer'])
+
+        # Log reranking results
+        log_reranking_results(reranking_results_logger, results['reranked_results'], prompt)
+
+        # Log final model output
+        highlight_success_dict = {}  # Initialize with appropriate data if available
+        log_nicolay_model_output(nicolay_data_logger, results['response'], prompt, results['initial_answer'], highlight_success_dict)
 
         # Displaying the Analysis Metadata in an expander
         with st.expander("**Analysis Metadata**"):

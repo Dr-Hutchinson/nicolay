@@ -69,15 +69,35 @@ class RAGProcess:
         st.write(f"Text Keywords: {text_keywords}")  # Debugging statement
         st.write(f"Lincoln Data: {lincoln_data}")  # Debugging statement
 
-        # Ensure correct call to find_instances_expanded_search with explicit argument naming
-        return self.find_instances_expanded_search(
-            dynamic_weights=normalized_weights,
-            original_weights=user_keywords,
-            data=lincoln_data,
-            year_keywords=year_keywords,
-            text_keywords=text_keywords,
-            top_n=top_n_results
-        )
+        # Split the function call and add debug statements
+        try:
+            dynamic_weights = normalized_weights
+            original_weights = user_keywords
+            data = lincoln_data
+            top_n = top_n_results
+
+            st.write(f"Dynamic weights: {dynamic_weights}")
+            st.write(f"Original weights: {original_weights}")
+            st.write(f"Data: {data}")
+            st.write(f"Year Keywords: {year_keywords}")
+            st.write(f"Text Keywords: {text_keywords}")
+            st.write(f"Top N Results: {top_n}")
+
+            results = self.find_instances_expanded_search(
+                dynamic_weights=dynamic_weights,
+                original_weights=original_weights,
+                data=data,
+                year_keywords=year_keywords,
+                text_keywords=text_keywords,
+                top_n=top_n
+            )
+
+            st.write(f"Search Results: {results}")
+            return results
+
+        except Exception as e:
+            st.error(f"Error in search_with_dynamic_weights_expanded: {e}")
+            raise e
 
 
 

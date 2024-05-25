@@ -381,6 +381,7 @@ class RAGProcess:
             raise Exception("An error occurred during the RAG process.")
 
 
+
 # Helper Functions
 
 def extract_full_text(combined_text):

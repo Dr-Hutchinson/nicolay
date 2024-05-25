@@ -75,7 +75,7 @@ class RAGProcess:
         )
 
 
-    def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+    def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
 
         if text_keywords:
@@ -114,7 +114,6 @@ class RAGProcess:
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
 
-                    # Ensure keyword_positions is not empty before calling max()
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -133,8 +132,16 @@ class RAGProcess:
                         st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
-            else:
-                st.write(f"Skipping entry without full_text or source: {entry}")
+                        instances.append({
+                            "text_id": entry['text_id'],
+                            "source": entry['source'],
+                            "summary": entry.get('summary', ''),
+                            "quote": 'NaN',  # Explicitly set as NaN if no quote found
+                            "weighted_score": total_dynamic_weighted_score,
+                            "keyword_counts": keyword_counts
+                        })
+                else:
+                    st.write(f"Skipping entry without full_text or source: {entry}")
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
@@ -154,9 +161,12 @@ class RAGProcess:
             segment_embeddings = [future.result() for future in futures]
             return [(segments[i], self.cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
 
-    def remove_duplicates(self, search_results, semantic_matches):
+    def remove_duplicates(search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
         st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
+
+        # Ensure text_id is stripped of any extra spaces or inconsistent formatting
+        combined_results['text_id'] = combined_results['text_id'].str.strip()
 
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement

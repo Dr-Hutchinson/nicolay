@@ -28,12 +28,8 @@ class RAGProcess:
 
         # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()
-        #if isinstance(self.lincoln_data, pd.DataFrame):
-        #    self.lincoln_data = self.lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
-
-        st.write(f"Lincoln data loaded: {self.lincoln_data}")  # Debugging statement
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:
@@ -63,23 +59,14 @@ class RAGProcess:
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-        if not isinstance(lincoln_data, list) or not all(isinstance(entry, dict) for entry in lincoln_data):
-            st.write(f"Invalid lincoln_data format: {lincoln_data}")  # Debugging statement
-            raise ValueError("lincoln_data should be a list of dictionaries")
-
-        results = self.find_instances_expanded_search(
+        return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
             original_weights=user_keywords,
-            data=lincoln_data,  # Ensure this is a list of dictionaries
+            data=lincoln_data,
             year_keywords=year_keywords,
             text_keywords=text_keywords,
             top_n=top_n_results
         )
-
-        st.write(f"Keyword search results: {results}")  # Debugging statement
-        return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
-
-
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -92,71 +79,51 @@ class RAGProcess:
         else:
             text_keywords_list = []
 
-        st.write(f"Dynamic weights: {dynamic_weights}")  # Debugging statement
-        st.write(f"Original weights: {original_weights}")  # Debugging statement
-        st.write(f"Year keywords: {year_keywords}")  # Debugging statement
-        st.write(f"Text keywords: {text_keywords_list}")  # Debugging statement
-
-        # Check if data is a list of dictionaries
-        if not isinstance(data, list) or not all(isinstance(entry, dict) for entry in data):
-            st.write(f"Invalid data format: {data}")  # Debugging statement
-            raise ValueError("Data should be a list of dictionaries")
-
         for entry in data:
-            try:
-                st.write(f"Processing entry: {entry}")  # Debugging statement
-                if 'full_text' in entry and 'source' in entry:
-                    entry_text_lower = entry['full_text'].lower()
-                    source_lower = entry['source'].lower()
-                    summary_lower = entry.get('summary', '').lower()
-                    keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+            if 'full_text' in entry and 'source' in entry:
+                entry_text_lower = entry['full_text'].lower()
+                source_lower = entry['source'].lower()
+                summary_lower = entry.get('summary', '').lower()
+                keywords_lower = ' '.join(entry.get('keywords', [])).lower()
 
-                    match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-                    match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+                match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
+                match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
 
-                    if match_source_year and match_source_text:
-                        total_dynamic_weighted_score = 0
-                        keyword_counts = {}
-                        keyword_positions = {}
-                        combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+                if match_source_year and match_source_text:
+                    total_dynamic_weighted_score = 0
+                    keyword_counts = {}
+                    keyword_positions = {}
+                    combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
 
-                        for keyword in original_weights.keys():
-                            keyword_lower = keyword.lower()
-                            for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-                                count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-                                dynamic_weight = dynamic_weights.get(keyword, 0)
-                                if count > 0:
-                                    keyword_counts[keyword] = count
-                                    total_dynamic_weighted_score += count * dynamic_weight
-                                    keyword_index = match.start()
-                                    original_weight = original_weights[keyword]
-                                    keyword_positions[keyword_index] = (keyword, original_weight)
+                    for keyword in original_weights.keys():
+                        keyword_lower = keyword.lower()
+                        for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
+                            count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
+                            dynamic_weight = dynamic_weights.get(keyword, 0)
+                            if count > 0:
+                                keyword_counts[keyword] = count
+                                total_dynamic_weighted_score += count * dynamic_weight
+                                keyword_index = match.start()
+                                original_weight = original_weights[keyword]
+                                keyword_positions[keyword_index] = (keyword, original_weight)
 
-                        # Ensure keyword_positions is not empty before calling max()
-                        if keyword_positions:
-                            highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                            context_length = 300
-                            start_quote = max(0, highest_original_weighted_position - context_length)
-                            end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
-                            snippet = entry['full_text'][start_quote:end_quote]
-                            instances.append({
-                                "text_id": entry['text_id'],
-                                "source": entry['source'],
-                                "summary": entry.get('summary', ''),
-                                "quote": snippet.replace("\n", " "),
-                                "weighted_score": total_dynamic_weighted_score,
-                                "keyword_counts": keyword_counts
-                            })
-            except Exception as e:
-                st.write(f"Error processing entry: {e}")  # Debugging statement
-
+                    # Ensure keyword_positions is not empty before calling max()
+                    if keyword_positions:
+                        highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
+                        context_length = 300
+                        start_quote = max(0, highest_original_weighted_position - context_length)
+                        end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
+                        snippet = entry['full_text'][start_quote:end_quote]
+                        instances.append({
+                            "text_id": entry['text_id'],
+                            "source": entry['source'],
+                            "summary": entry.get('summary', ''),
+                            "quote": snippet.replace("\n", " "),
+                            "weighted_score": total_dynamic_weighted_score,
+                            "keyword_counts": keyword_counts
+                        })
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-        st.write(f"Found instances: {instances}")  # Debugging statement
-        return instances  # Ensure this returns a list of dictionaries
-
-
-
-
+        return instances[:top_n]
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -173,11 +140,8 @@ class RAGProcess:
 
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
-        st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
-        deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first')
-        st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
+        deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         return deduplicated_results
-
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -214,12 +178,10 @@ class RAGProcess:
                         'Key Quote': quote,
                         'Relevance Score': result.relevance_score
                     })
-            st.write(f"Reranked results: {full_reranked_results}")  # Debugging statement
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
-
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [
@@ -236,7 +198,7 @@ class RAGProcess:
             presence_penalty=0
         )
 
-        #st.write("Raw final response content:", response.choices[0].message.content)
+        st.write("Raw final response content:", response.choices[0].message.content)
         return response.choices[0].message.content
 
     def run_rag_process(self, user_query):
@@ -244,13 +206,10 @@ class RAGProcess:
             start_time = time.time()
 
             lincoln_data = self.lincoln_data
-            if isinstance(lincoln_data, pd.DataFrame):
-                lincoln_data = lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
-
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            lincoln_dict = {item['text_id']: item for item in lincoln_data}
+            lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
             self.lincoln_dict = lincoln_dict
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
@@ -302,7 +261,7 @@ class RAGProcess:
             # Display initial answer
             with st.chat_message("assistant"):
                 st.markdown(f"Hays' Response: {initial_answer}")
-            st.session_state.messages.append({"role": "assistant", "content": f"Hays' Response: {initial_answer}"})
+            st.session_state.messages.append({"role": "assistant", "content": f"Initial Answer: {initial_answer}"})
 
             # Handle the corpusTerms based on its structure
             corpus_terms_json = keyword_data.at[0, 'corpusTerms']
@@ -322,12 +281,7 @@ class RAGProcess:
                 lincoln_data=lincoln_data
             )
 
-            st.write(f"Type of search_results: {type(search_results)}")  # Debugging statement
-            st.write(f"Search results: {search_results}")  # Debugging statement
-
-            # Ensure search_results is a DataFrame
-            if not isinstance(search_results, pd.DataFrame):
-                raise ValueError("search_results should be a DataFrame")
+            search_results_df = pd.DataFrame(search_results)
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 
@@ -351,10 +305,7 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            # Combine search results
-            deduplicated_results = self.remove_duplicates(search_results, semantic_matches)
-
-            st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
+            deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -383,11 +334,10 @@ class RAGProcess:
 
             st.write("Generated final model response successfully.")
 
-            # Return the results for further processing
             return {
                 "initial_answer": initial_answer,
                 "response": final_model_response,
-                "search_results": search_results,
+                "search_results": search_results_df,
                 "semantic_matches": semantic_matches,
                 "reranked_results": reranked_results_df,
                 "model_weighted_keywords": model_weighted_keywords,
@@ -398,8 +348,6 @@ class RAGProcess:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
 
-
-
 # Helper Functions
 
 def extract_full_text(combined_text):
@@ -407,7 +355,7 @@ def extract_full_text(combined_text):
     if isinstance(combined_text, str):
         for marker in markers:
             marker_index = combined_text.find(marker)
-            if (marker_index != -1):
+            if marker_index != -1:
                 # Extract the full text starting from the marker
                 full_text = combined_text[marker_index + len(marker):].strip()
                 return full_text
@@ -450,95 +398,3 @@ load_prompts()
 # Now you can use the prompts from session state
 keyword_prompt = st.session_state['keyword_model_system_prompt']
 response_prompt = st.session_state['response_model_system_prompt']
-
-# Data logging functions
-
-
-def log_reranking_results(reranking_results_logger, reranked_df, user_query):
-    if isinstance(reranked_df, pd.DataFrame):
-        now = dt.now()  # Current timestamp
-
-        for idx, row in reranked_df.iterrows():
-            record = {
-                'Timestamp': now,
-                'UserQuery': user_query,
-                'Rank': row['Rank'],
-                'SearchType': row['Search Type'],
-                'TextID': row['Text ID'],
-                'KeyQuote': row['Key Quote'],
-                'Relevance_Score': row['Relevance Score']
-            }
-            reranking_results_logger.record_api_outputs(record)
-    else:
-        raise ValueError("reranked_df should be a DataFrame")
-
-def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict):
-    """
-    Logs the final model output from Nicolay to Google Sheets.
-    """
-    try:
-        # If model_output is a string, we should handle it correctly
-        if isinstance(model_output, str):
-            model_output = json.loads(model_output)
-
-        # Extract key information from model output
-        final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
-        references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
-
-        # User query analysis
-        query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
-        historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
-
-        # Initial answer review
-        answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
-        quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
-
-        # Response effectiveness and suggestions
-        response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
-        suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
-
-        # Match analysis - concatenating details of each match into single strings
-        match_analysis = model_output.get("Match Analysis", {})
-        match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
-        match_data = {}
-
-        for match_key, match_details in match_analysis.items():
-            match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
-            match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
-
-            if 'speech' in match_details:
-                highlight_success_dict[match_key] = match_details['speech']
-            else:
-                highlight_success_dict[match_key] = False
-
-        # Meta analysis
-        meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
-        meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
-
-        # Construct a record for logging
-        record = {
-            'Timestamp': dt.now(),
-            'UserQuery': user_query,
-            'initial_Answer': initial_answer,
-            'FinalAnswer': final_answer_text,
-            'References': references,
-            'QueryIntent': query_intent,
-            'HistoricalContext': historical_context,
-            'AnswerEvaluation': answer_evaluation,
-            'QuoteIntegration': quote_integration,
-            **match_data,  # Unpack match data into the record
-            'MetaStrategy': str(meta_strategy),  # Convert dictionary to string if needed
-            'MetaSynthesis': meta_synthesis,
-            'ResponseEffectiveness': response_effectiveness,
-            'Suggestions': suggestions_for_improvement
-        }
-
-        # Add highlight success information for each match
-        for match_key, success in highlight_success_dict.items():
-            record[f'{match_key}_HighlightSuccess'] = success
-
-        # Log the record
-        nicolay_data_logger.record_api_outputs(record)
-
-    except Exception as e:
-        st.error(f"Error in logging Nicolay model output: {e}")

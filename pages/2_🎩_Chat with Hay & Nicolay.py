@@ -85,9 +85,6 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         st.write("Processing your query...")
         results = rag.run_rag_process(prompt)
 
-        # Debugging statement to print the raw results
-        st.write(f"Raw results: {results}")
-
         # Print the raw response for debugging
         #st.write("Raw response content:", results["response"])
 
@@ -198,28 +195,10 @@ if prompt := st.chat_input("Ask me anything about Abraham Lincoln's speeches:"):
         model_year_keywords = results["model_year_keywords"]
         model_text_keywords = results["model_text_keywords"]
 
-        #log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-        #log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-        #log_reranking_results(reranking_results_logger, reranked_results, prompt)
-        #log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
-
-        # Inside the try block, after processing the search results
-        try:
-
-            # After ensuring the search results are processed
-            st.write("Logging keyword search results...")
-            log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
-            st.write("Keyword search results logged.")
-
-            ...
-            # After ensuring the reranked results are processed
-            st.write("Logging reranking results...")
-            log_reranking_results(reranking_results_logger, reranked_results_df, user_query)
-            st.write("Reranking results logged.")
-
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+        log_keyword_search_results(keyword_results_logger, search_results, prompt, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+        log_reranking_results(reranking_results_logger, reranked_results, prompt)
+        log_nicolay_model_output(nicolay_data_logger, response_json, prompt, initial_answer, {})
 
         # Displaying the Analysis Metadata in an expander
         with st.expander("**Analysis Metadata**"):

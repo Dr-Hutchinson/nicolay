@@ -3,7 +3,6 @@
 import json
 import pandas as pd
 from datetime import datetime as dt
-import streamlit as st
 
 class DataLogger:
     def __init__(self, gc, sheet_name):
@@ -24,7 +23,6 @@ class DataLogger:
         self.sheet.set_dataframe(df, (end_row, 1), copy_head=False, extend=True)
 
 def log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords):
-    st.write("Logging keyword search results...")  # Debugging statement
     if isinstance(search_results, pd.DataFrame):
         now = dt.now()  # Current timestamp
 
@@ -42,10 +40,8 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
                 'KeywordCounts': json.dumps(result['keyword_counts'])  # Convert dict to JSON string
             }
             keyword_results_logger.record_api_outputs(record)
-            st.write(f"Logged keyword search result: {record}")  # Debugging statement
     else:
         raise ValueError("search_results should be a DataFrame")
-
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer):
     if isinstance(semantic_matches, pd.DataFrame):
@@ -65,7 +61,6 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches, initi
         raise ValueError("semantic_matches should be a DataFrame")
 
 def log_reranking_results(reranking_results_logger, reranked_df, user_query):
-    st.write("Logging reranking results...")  # Debugging statement
     if isinstance(reranked_df, pd.DataFrame):
         now = dt.now()  # Current timestamp
 
@@ -80,18 +75,14 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
                 'Relevance_Score': row['Relevance Score']
             }
             reranking_results_logger.record_api_outputs(record)
-            st.write(f"Logged reranking result: {record}")  # Debugging statement
     else:
         raise ValueError("reranked_df should be a DataFrame")
-
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, initial_answer, highlight_success_dict):
     """
     Logs the final model output from Nicolay to Google Sheets.
     """
     try:
-        st.write("Logging Nicolay model output...")  # Debugging statement
-
         # If model_output is a string, we should handle it correctly
         if isinstance(model_output, str):
             model_output = json.loads(model_output)
@@ -154,7 +145,6 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, init
 
         # Log the record
         nicolay_data_logger.record_api_outputs(record)
-        st.write(f"Logged Nicolay model output: {record}")  # Debugging statement
 
     except Exception as e:
         st.error(f"Error in logging Nicolay model output: {e}")

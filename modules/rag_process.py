@@ -289,7 +289,7 @@ class RAGProcess:
                 raise ValueError("search_results should be a DataFrame")
 
             # Log keyword search results
-            log_keyword_search_results(self.hays_data_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+            #log_keyword_search_results(self.hays_data_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
 

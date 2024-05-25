@@ -28,8 +28,12 @@ class RAGProcess:
 
         # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()
+        if isinstance(self.lincoln_data, pd.DataFrame):
+            self.lincoln_data = self.lincoln_data.to_dict('records')  # Convert DataFrame to list of dictionaries
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
+
+        st.write(f"Lincoln data loaded: {self.lincoln_data}")  # Debugging statement
 
     def load_json(self, file_path):
         with open(file_path, 'r') as file:
@@ -48,29 +52,28 @@ class RAGProcess:
         return dot_product / (norm_vec1 * norm_vec2)
 
     def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
-        # Calculate the total number of words for normalization
-        total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
-        relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
+    # Calculate the total number of words for normalization
+    total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
+    relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
 
-        # Calculate inverse weights based on the relative frequencies
-        inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
+    # Calculate inverse weights based on the relative frequencies
+    inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
 
-        # Normalize weights for dynamic weighting
-        max_weight = max(inverse_weights.values())
-        normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
+    # Normalize weights for dynamic weighting
+    max_weight = max(inverse_weights.values())
+    normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-        results = self.find_instances_expanded_search(
-            dynamic_weights=normalized_weights,
-            original_weights=user_keywords,
-            data=lincoln_data,
-            year_keywords=year_keywords,
-            text_keywords=text_keywords,
-            top_n=top_n_results
-        )
-        st.write(f"Keyword search user_keywords: {user_keywords}")  # Debugging statement
-        st.write(f"Keyword search normalized_weights: {normalized_weights}")  # Debugging statement
-        st.write(f"Keyword search results: {results}")  # Debugging statement
-        return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
+    results = self.find_instances_expanded_search(
+        dynamic_weights=normalized_weights,
+        original_weights=user_keywords,
+        data=lincoln_data,  # Ensure this is a list of dictionaries
+        year_keywords=year_keywords,
+        text_keywords=text_keywords,
+        top_n=top_n_results
+    )
+
+    st.write(f"Keyword search results: {results}")  # Debugging statement
+    return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
 
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
@@ -90,52 +93,56 @@ class RAGProcess:
         st.write(f"Text keywords: {text_keywords_list}")  # Debugging statement
 
         for entry in data:
-            st.write(f"Processing entry: {entry['text_id']}")  # Debugging statement
-            if 'full_text' in entry and 'source' in entry:
-                entry_text_lower = entry['full_text'].lower()
-                source_lower = entry['source'].lower()
-                summary_lower = entry.get('summary', '').lower()
-                keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+            st.write(f"Processing entry: {entry}")  # Debugging statement
+            if isinstance(entry, dict):  # Ensure that entry is a dictionary
+                if 'full_text' in entry and 'source' in entry:
+                    entry_text_lower = entry['full_text'].lower()
+                    source_lower = entry['source'].lower()
+                    summary_lower = entry.get('summary', '').lower()
+                    keywords_lower = ' '.join(entry.get('keywords', [])).lower()
 
-                match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-                match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+                    match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
+                    match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
 
-                if match_source_year and match_source_text:
-                    total_dynamic_weighted_score = 0
-                    keyword_counts = {}
-                    keyword_positions = {}
-                    combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+                    if match_source_year and match_source_text:
+                        total_dynamic_weighted_score = 0
+                        keyword_counts = {}
+                        keyword_positions = {}
+                        combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
 
-                    for keyword in original_weights.keys():
-                        keyword_lower = keyword.lower()
-                        for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-                            count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-                            dynamic_weight = dynamic_weights.get(keyword, 0)
-                            if count > 0:
-                                keyword_counts[keyword] = count
-                                total_dynamic_weighted_score += count * dynamic_weight
-                                keyword_index = match.start()
-                                original_weight = original_weights[keyword]
-                                keyword_positions[keyword_index] = (keyword, original_weight)
+                        for keyword in original_weights.keys():
+                            keyword_lower = keyword.lower()
+                            for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
+                                count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
+                                dynamic_weight = dynamic_weights.get(keyword, 0)
+                                if count > 0:
+                                    keyword_counts[keyword] = count
+                                    total_dynamic_weighted_score += count * dynamic_weight
+                                    keyword_index = match.start()
+                                    original_weight = original_weights[keyword]
+                                    keyword_positions[keyword_index] = (keyword, original_weight)
 
-                    # Ensure keyword_positions is not empty before calling max()
-                    if keyword_positions:
-                        highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                        context_length = 300
-                        start_quote = max(0, highest_original_weighted_position - context_length)
-                        end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
-                        snippet = entry['full_text'][start_quote:end_quote]
-                        instances.append({
-                            "text_id": entry['text_id'],
-                            "source": entry['source'],
-                            "summary": entry.get('summary', ''),
-                            "quote": snippet.replace("\n", " "),
-                            "weighted_score": total_dynamic_weighted_score,
-                            "keyword_counts": keyword_counts
-                        })
+                        # Ensure keyword_positions is not empty before calling max()
+                        if keyword_positions:
+                            highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
+                            context_length = 300
+                            start_quote = max(0, highest_original_weighted_position - context_length)
+                            end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
+                            snippet = entry['full_text'][start_quote:end_quote]
+                            instances.append({
+                                "text_id": entry['text_id'],
+                                "source": entry['source'],
+                                "summary": entry.get('summary', ''),
+                                "quote": snippet.replace("\n", " "),
+                                "weighted_score": total_dynamic_weighted_score,
+                                "keyword_counts": keyword_counts
+                            })
+            else:
+                st.write(f"Invalid entry format: {entry}")  # Debugging statement
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         st.write(f"Found instances: {instances}")  # Debugging statement
         return instances  # Ensure this returns a list of dictionaries
+
 
 
 

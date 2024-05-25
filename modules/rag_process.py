@@ -14,7 +14,7 @@ from modules.data_logging import DataLogger, log_keyword_search_results, log_sem
 import time
 
 class RAGProcess:
-    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
+    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger, keyword_results_logger):
         # Initialize OpenAI and Cohere clients
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.cohere_client = cohere.Client(api_key=cohere_api_key)

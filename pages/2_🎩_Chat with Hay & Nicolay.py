@@ -59,7 +59,7 @@ voyant_data = st.session_state.voyant_data
 lincoln_index_df = st.session_state.lincoln_index_df
 
 # Initialize the RAG Process
-rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger)
+rag = RAGProcess(openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger, keyword_results_logger)
 
 # Streamlit Chatbot Interface
 st.title("Chat with Hays and Nicolay - in development")

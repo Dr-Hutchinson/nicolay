@@ -123,8 +123,6 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
                         st.write(f"Extracted key_quote: {snippet.replace('\n', ' ')}")  # Debugging statement
-                        # Debugging statement
-                        # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
             else:

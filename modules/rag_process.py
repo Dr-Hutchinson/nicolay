@@ -67,8 +67,11 @@ class RAGProcess:
             text_keywords=text_keywords,
             top_n=top_n_results
         )
+        st.write(f"Keyword search user_keywords: {user_keywords}")  # Debugging statement
+        st.write(f"Keyword search normalized_weights: {normalized_weights}")  # Debugging statement
         st.write(f"Keyword search results: {results}")  # Debugging statement
         return pd.DataFrame(results)  # Ensure the results are returned as a DataFrame
+
 
     def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
@@ -80,6 +83,11 @@ class RAGProcess:
                 text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
         else:
             text_keywords_list = []
+
+        st.write(f"Dynamic weights: {dynamic_weights}")  # Debugging statement
+        st.write(f"Original weights: {original_weights}")  # Debugging statement
+        st.write(f"Year keywords: {year_keywords}")  # Debugging statement
+        st.write(f"Text keywords: {text_keywords_list}")  # Debugging statement
 
         for entry in data:
             if 'full_text' in entry and 'source' in entry:
@@ -125,7 +133,9 @@ class RAGProcess:
                             "keyword_counts": keyword_counts
                         })
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+        st.write(f"Found instances: {instances}")  # Debugging statement
         return instances  # Ensure this returns a list of dictionaries
+
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)

@@ -37,7 +37,7 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
                 'Year_Keywords': model_year_keywords,
                 'text_keywords': model_text_keywords,
                 'TextID': result['text_id'],
-                'KeyQuote': result.get('quote', 'NaN'),  # Add a default value if 'quote' is missing
+                'KeyQuote': result['quote'],
                 'WeightedScore': result['weighted_score'],
                 'KeywordCounts': json.dumps(result['keyword_counts'])  # Convert dict to JSON string
             }

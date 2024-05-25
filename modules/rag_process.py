@@ -50,70 +50,32 @@ class RAGProcess:
         return dot_product / (norm_vec1 * norm_vec2)
 
     def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
-        try:
-            # Calculate the total number of words for normalization
-            total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
-            relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
+        # Calculate the total number of words for normalization
+        total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
+        relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
 
-            # Calculate inverse weights based on the relative frequencies
-            inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
+        # Calculate inverse weights based on the relative frequencies
+        inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
 
-            # Normalize weights for dynamic weighting
-            max_weight = max(inverse_weights.values())
-            normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
+        # Normalize weights for dynamic weighting
+        max_weight = max(inverse_weights.values())
+        normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-            st.write(f"User keywords: {user_keywords}")  # Debugging statement
-            st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
-            st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
+        st.write(f"User keywords: {user_keywords}")  # Debugging statement
+        st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
+        st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
 
-            # Print each argument separately
-            st.write(f"Year Keywords: {year_keywords}")  # Debugging statement
-            st.write(f"Text Keywords: {text_keywords}")  # Debugging statement
-            st.write(f"Lincoln Data: {lincoln_data}")  # Debugging statement
-
-            # Extract arguments and print values
-            dynamic_weights = normalized_weights
-            original_weights = user_keywords
-            data = lincoln_data
-            top_n = top_n_results
-
-            st.write(f"Dynamic weights: {dynamic_weights}")
-            st.write(f"Original weights: {original_weights}")
-            st.write(f"Data sample: {data[:1]}")  # Print a sample of the data to avoid large output
-            st.write(f"Year Keywords: {year_keywords}")
-            st.write(f"Text Keywords: {text_keywords}")
-            st.write(f"Top N Results: {top_n}")
-
-            # Call the function with minimal arguments first
-            minimal_results = self.find_instances_expanded_search(
-                dynamic_weights=dynamic_weights,
-                original_weights=original_weights,
-                data=data,
-                top_n=top_n
-            )
-
-            st.write(f"Minimal Search Results: {minimal_results}")
-
-            # Gradually add more arguments if the above call is successful
-            complete_results = self.find_instances_expanded_search(
-                dynamic_weights=dynamic_weights,
-                original_weights=original_weights,
-                data=data,
-                year_keywords=year_keywords,
-                text_keywords=text_keywords,
-                top_n=top_n
-            )
-
-            st.write(f"Complete Search Results: {complete_results}")
-            return complete_results
-
-        except Exception as e:
-            st.error(f"Error in search_with_dynamic_weights_expanded: {e}")
-            raise e
+        return self.find_instances_expanded_search(
+            dynamic_weights=normalized_weights,
+            original_weights=user_keywords,
+            data=lincoln_data,
+            year_keywords=year_keywords,
+            text_keywords=text_keywords,
+            top_n=top_n_results
+        )
 
 
-
-    def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+    def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
         instances = []
 
         if text_keywords:
@@ -152,6 +114,7 @@ class RAGProcess:
                                 original_weight = original_weights[keyword]
                                 keyword_positions[keyword_index] = (keyword, original_weight)
 
+                    # Ensure keyword_positions is not empty before calling max()
                     if keyword_positions:
                         highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
                         context_length = 300
@@ -170,16 +133,8 @@ class RAGProcess:
                         st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
-                        instances.append({
-                            "text_id": entry['text_id'],
-                            "source": entry['source'],
-                            "summary": entry.get('summary', ''),
-                            "quote": 'NaN',  # Explicitly set as NaN if no quote found
-                            "weighted_score": total_dynamic_weighted_score,
-                            "keyword_counts": keyword_counts
-                        })
-                else:
-                    st.write(f"Skipping entry without full_text or source: {entry}")
+            else:
+                st.write(f"Skipping entry without full_text or source: {entry}")
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
@@ -199,12 +154,9 @@ class RAGProcess:
             segment_embeddings = [future.result() for future in futures]
             return [(segments[i], self.cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
 
-    def remove_duplicates(search_results, semantic_matches):
+    def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
         st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
-
-        # Ensure text_id is stripped of any extra spaces or inconsistent formatting
-        combined_results['text_id'] = combined_results['text_id'].str.strip()
 
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement

@@ -235,14 +235,14 @@ class RAGProcess:
         try:
             start_time = time.time()
 
-            lincoln_data = self.lincoln_data
+            lincoln_data = self.lincoln_data.to_dict('records')
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
             st.write(f"Type of lincoln_data: {type(lincoln_data)}")  # Debugging statement
             st.write(f"Sample lincoln_data: {lincoln_data[:1]}")  # Debugging statement
 
-            lincoln_dict = {item['text_id']: item for item in lincoln_data.to_dict('records')}
+            lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
 
             df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))

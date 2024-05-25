@@ -39,9 +39,12 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
                 'WeightedScore': result['weighted_score'],
                 'KeywordCounts': json.dumps(result['keyword_counts'])  # Convert dict to JSON string
             }
+            st.write(f"Logging record: {record}")  # Debugging statement
             keyword_results_logger.record_api_outputs(record)
     else:
+        st.write(f"search_results is not a DataFrame: {search_results}")  # Debugging statement
         raise ValueError("search_results should be a DataFrame")
+
 
 def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer):
     if isinstance(semantic_matches, pd.DataFrame):

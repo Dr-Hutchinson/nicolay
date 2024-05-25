@@ -122,8 +122,14 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
+                    else:
+                        st.write(f"No keywords found for entry {entry['text_id']}")
+            else:
+                st.write(f"Skipping entry without full_text or source: {entry}")
+
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
     def search_text(self, df, user_query, n=5):
         user_query_embedding = self.get_embedding(user_query)
@@ -140,8 +146,13 @@ class RAGProcess:
 
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
+        st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
+
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
+        st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
+
         return deduplicated_results
+
 
     def rerank_results(self, user_query, combined_data):
         try:
@@ -282,8 +293,10 @@ class RAGProcess:
             )
 
             search_results_df = pd.DataFrame(search_results)
+            st.write(f"Search results: {search_results_df}")  # Debugging statement
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
+            st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
 
@@ -306,6 +319,7 @@ class RAGProcess:
             step_time = time.time()
 
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+            st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -321,6 +335,8 @@ class RAGProcess:
             step_time = time.time()
 
             reranked_results = self.rerank_results(user_query, all_combined_data)
+            st.write(f"Reranked results: {reranked_results}")  # Debugging statement
+
             reranked_results_df = pd.DataFrame(reranked_results)
 
             st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")

@@ -126,7 +126,7 @@ class RAGProcess:
                             "text_id": entry['text_id'],
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
-                            "key_quote": formatted_snippet,
+                            "key_quote": formatted_snippet,  # Ensure correct key is used here
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
@@ -138,6 +138,7 @@ class RAGProcess:
 
         instances.sort(key=lambda x: x['weighted_score'], reverse=True)
         return instances[:top_n]
+
 
 
 
@@ -313,7 +314,7 @@ class RAGProcess:
                 search_results_df['key_quote'] = ''
 
             # Debugging: Verify key_quote values in keyword search results
-            st.write(f"Keyword search results: {search_results_df[['text_id', 'key_quote']]}")
+            st.write(f"Keyword search results after populating key_quote: {search_results_df[['text_id', 'key_quote']]}")
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
             st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
@@ -330,8 +331,6 @@ class RAGProcess:
                         top_segments.append(top_segment[0])
                     else:
                         top_segments.append("")  # Add empty string for rows with empty 'full_text'
-                else:
-                    top_segments.append("")  # Add empty string for rows with empty 'full_text'
 
             semantic_matches["TopSegment"] = top_segments
 
@@ -366,7 +365,7 @@ class RAGProcess:
                 deduplicated_results['quote'] = ''
 
             all_combined_data = [
-                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['quote']}" for idx, row in deduplicated_results.iterrows()
+                f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['key_quote']}" for idx, row in deduplicated_results.iterrows()
             ] + [
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             ]
@@ -403,6 +402,8 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
+
+
 
 
 # Helper Functions

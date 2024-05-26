@@ -167,14 +167,14 @@ class RAGProcess:
 
     def rerank_results(self, user_query, combined_data):
         try:
-            # Convert combined_data entries to strings if necessary
             combined_data_strs = [
-                f"{cd['search_type']}|Text ID: {cd['text_id']}|Summary: {cd['summary']}|{cd['key_quote']}"
+                f"{cd['search_type']}|Text ID: {cd['text_id']}|Summary: {cd['summary']}|Key Quote: {cd['key_quote']}" 
                 if isinstance(cd, dict) else cd
                 for cd in combined_data
             ]
 
-            # Perform reranking
+            st.write(f"Combined data strings for reranking: {combined_data_strs}")  # Debugging statement
+
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
                 query=user_query,
@@ -185,6 +185,7 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):
                 combined_data_text = result.document if isinstance(result.document, str) else result.document['text']
+                st.write(f"Reranked document text: {combined_data_text}")  # Debugging statement
                 data_parts = combined_data_text.split("|")
                 if len(data_parts) >= 4:
                     search_type = data_parts[0].strip()
@@ -194,7 +195,9 @@ class RAGProcess:
 
                     text_id = text_id_part.replace("Text ID:", "").replace("Text #:", "").strip()
                     summary = summary.replace("Summary:", "").strip()
-                    quote = quote.strip()
+                    quote = quote.replace("Key Quote:", "").strip()
+
+                    st.write(f"Extracted data - Search Type: {search_type}, Text ID: {text_id}, Summary: {summary}, Key Quote: {quote}")  # Debugging statement
 
                     source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
 
@@ -207,6 +210,10 @@ class RAGProcess:
                         'Key Quote': quote,
                         'Relevance Score': result.relevance_score
                     })
+                else:
+                    st.write(f"Data parts length is less than expected: {data_parts}")  # Debugging statement
+
+            st.write(f"Full reranked results: {full_reranked_results}")  # Debugging statement
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")

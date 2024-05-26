@@ -334,7 +334,12 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
+            # Combine results from keyword and semantic searches
+            combined_results = pd.concat([search_results_df, semantic_matches])
+
+            # Correct deduplication process to retain correct key_quote
+            deduplicated_results = combined_results.groupby('text_id').apply(lambda x: x.loc[x['key_quote'].first_valid_index()]).reset_index(drop=True)
+
             st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
             # Ensure any missing columns like 'quote' are added with default values
@@ -379,7 +384,6 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
-
 
 
 # Helper Functions

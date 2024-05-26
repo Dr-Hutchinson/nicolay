@@ -167,7 +167,14 @@ class RAGProcess:
 
     def rerank_results(self, user_query, combined_data):
         try:
-            combined_data_strs = [cd if isinstance(cd, str) else cd['text'] for cd in combined_data]
+            # Convert combined_data entries to strings if necessary
+            combined_data_strs = [
+                f"{cd['search_type']}|Text ID: {cd['text_id']}|Summary: {cd['summary']}|{cd['key_quote']}"
+                if isinstance(cd, dict) else cd
+                for cd in combined_data
+            ]
+
+            # Perform reranking
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
                 query=user_query,
@@ -177,7 +184,7 @@ class RAGProcess:
 
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):
-                combined_data_text = result.document['text'] if isinstance(result.document, dict) and 'text' in result.document else result.document
+                combined_data_text = result.document if isinstance(result.document, str) else result.document['text']
                 data_parts = combined_data_text.split("|")
                 if len(data_parts) >= 4:
                     search_type = data_parts[0].strip()
@@ -204,6 +211,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):
         messages_for_second_model = [

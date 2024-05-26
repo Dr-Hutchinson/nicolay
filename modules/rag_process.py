@@ -344,7 +344,7 @@ class RAGProcess:
             combined_results = pd.concat([search_results_df, semantic_matches])
 
             # Correct deduplication process to retain correct key_quote
-            deduplicated_results = combined_results.groupby('text_id').apply(lambda x: x.loc[x['key_quote'].first_valid_index()]).reset_index(drop=True)
+            deduplicated_results = combined_results.groupby('text_id').apply(lambda x: x.loc[x['key_quote'].first_valid_index() if pd.notna(x['key_quote']).any() else x.index[0]]).reset_index(drop=True)
 
             st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 

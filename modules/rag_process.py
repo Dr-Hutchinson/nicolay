@@ -311,6 +311,9 @@ class RAGProcess:
             # Log keyword search results
             log_keyword_search_results(self.keyword_results_logger, search_results_df, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 
+            # Debugging: Verify key_quote values in keyword search results
+            st.write(f"Keyword search results: {search_results_df[['text_id', 'key_quote']]}")
+
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
             st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
 
@@ -347,7 +350,14 @@ class RAGProcess:
             st.write(f"Combined results before deduplication: {combined_results}")
 
             # Correct deduplication process to retain correct key_quote
-            deduplicated_results = combined_results.groupby('text_id').apply(lambda x: x.loc[x['key_quote'].first_valid_index() if pd.notna(x['key_quote']).any() else x.index[0]]).reset_index(drop=True)
+            def deduplicate_with_key_quote(group):
+                # Prioritize non-NaN key_quotes
+                if group['key_quote'].notna().any():
+                    return group.loc[group['key_quote'].first_valid_index()]
+                # If all key_quotes are NaN, return the first entry
+                return group.iloc[0]
+
+            deduplicated_results = combined_results.groupby('text_id').apply(deduplicate_with_key_quote).reset_index(drop=True)
 
             # Debugging: Display deduplicated results
             st.write(f"Deduplicated results: {deduplicated_results}")
@@ -391,6 +401,7 @@ class RAGProcess:
                 "model_year_keywords": model_year_keywords,
                 "model_text_keywords": model_text_keywords
             }
+
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")

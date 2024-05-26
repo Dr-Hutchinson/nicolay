@@ -308,8 +308,9 @@ class RAGProcess:
             search_results_df = pd.DataFrame(search_results)
             st.write(f"Search results: {search_results_df}")  # Debugging statement
 
-            # Log keyword search results
-            log_keyword_search_results(self.keyword_results_logger, search_results_df, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+            # Ensure key_quote column exists in keyword search results
+            if 'key_quote' not in search_results_df.columns:
+                search_results_df['key_quote'] = ''
 
             # Debugging: Verify key_quote values in keyword search results
             st.write(f"Keyword search results: {search_results_df[['text_id', 'key_quote']]}")
@@ -337,9 +338,7 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
-            # Ensure key_quote column exists in both search results before combining
-            if 'key_quote' not in search_results_df.columns:
-                search_results_df['key_quote'] = ''
+            # Ensure key_quote column exists in semantic search results
             if 'key_quote' not in semantic_matches.columns:
                 semantic_matches['key_quote'] = ''
 
@@ -347,7 +346,7 @@ class RAGProcess:
             combined_results = pd.concat([search_results_df, semantic_matches])
 
             # Debugging: Display combined results before deduplication
-            st.write(f"Combined results before deduplication: {combined_results}")
+            st.write(f"Combined results before deduplication: {combined_results[['text_id', 'key_quote']]}")
 
             # Correct deduplication process to retain correct key_quote
             def deduplicate_with_key_quote(group):
@@ -360,7 +359,7 @@ class RAGProcess:
             deduplicated_results = combined_results.groupby('text_id').apply(deduplicate_with_key_quote).reset_index(drop=True)
 
             # Debugging: Display deduplicated results
-            st.write(f"Deduplicated results: {deduplicated_results}")
+            st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:
@@ -401,7 +400,6 @@ class RAGProcess:
                 "model_year_keywords": model_year_keywords,
                 "model_text_keywords": model_text_keywords
             }
-
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")

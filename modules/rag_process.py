@@ -334,6 +334,12 @@ class RAGProcess:
             st.write(f"Semantic search completed in {time.time() - step_time:.2f} seconds.")
             step_time = time.time()
 
+            # Ensure key_quote column exists in both search results before combining
+            if 'key_quote' not in search_results_df.columns:
+                search_results_df['key_quote'] = ''
+            if 'key_quote' not in semantic_matches.columns:
+                semantic_matches['key_quote'] = ''
+
             # Combine results from keyword and semantic searches
             combined_results = pd.concat([search_results_df, semantic_matches])
 

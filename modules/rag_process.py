@@ -331,6 +331,8 @@ class RAGProcess:
                         top_segments.append(top_segment[0])
                     else:
                         top_segments.append("")  # Add empty string for rows with empty 'full_text'
+                else:
+                    top_segments.append("")  # Add empty string for rows with empty 'full_text'
 
             semantic_matches["TopSegment"] = top_segments
 
@@ -338,6 +340,8 @@ class RAGProcess:
             step_time = time.time()
 
             # Ensure key_quote column exists in semantic search results
+
+                    # Ensure key_quote column exists in semantic search results
             if 'key_quote' not in semantic_matches.columns:
                 semantic_matches['key_quote'] = ''
 
@@ -402,7 +406,6 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Error in run_rag_process: {e}")
             raise Exception("An error occurred during the RAG process.")
-
 
 
 

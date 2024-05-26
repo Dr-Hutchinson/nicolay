@@ -167,8 +167,9 @@ class RAGProcess:
 
     def rerank_results(self, user_query, combined_data):
         try:
+            # Construct combined data strings ensuring key_quote is included
             combined_data_strs = [
-                f"{cd['search_type']}|Text ID: {cd['text_id']}|Summary: {cd['summary']}|Key Quote: {cd['key_quote']}" 
+                f"{cd['search_type']}|Text ID: {cd['text_id']}|Summary: {cd['summary']}|Key Quote: {cd['key_quote']}"
                 if isinstance(cd, dict) else cd
                 for cd in combined_data
             ]
@@ -186,6 +187,7 @@ class RAGProcess:
             for idx, result in enumerate(reranked_response.results):
                 combined_data_text = result.document if isinstance(result.document, str) else result.document['text']
                 st.write(f"Reranked document text: {combined_data_text}")  # Debugging statement
+
                 data_parts = combined_data_text.split("|")
                 if len(data_parts) >= 4:
                     search_type = data_parts[0].strip()
@@ -218,6 +220,7 @@ class RAGProcess:
         except Exception as e:
             st.write(f"Rerank results error: {e}")
             raise Exception("Error in reranking: " + str(e))
+
 
 
     def get_final_model_response(self, user_query, initial_answer, formatted_input_for_model):

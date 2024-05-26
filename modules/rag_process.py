@@ -126,7 +126,7 @@ class RAGProcess:
                             "text_id": entry['text_id'],
                             "source": entry['source'],
                             "summary": entry.get('summary', ''),
-                            "quote": formatted_snippet,
+                            "key_quote": formatted_snippet,
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })

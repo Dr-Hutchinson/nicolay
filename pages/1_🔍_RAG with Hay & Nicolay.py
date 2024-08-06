@@ -477,7 +477,7 @@ with st.form("Search Interface"):
              # Send the messages to the fine-tuned model
                 response = client.chat.completions.create(
                     #model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",  # Hays finetuned model, GPT-3.5
-                    model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",  # Replace with your fine-tuned model
+                    model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",  # Hays finetuned model, GPT-4O
                     messages=messages_for_model,
                     temperature=0,
                     max_tokens=500,
@@ -865,7 +865,8 @@ with st.form("Search Interface"):
 
                         # Send the messages to the finetuned model
                         second_model_response = client.chat.completions.create(
-                            model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Specific finetuned model
+                            #model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Nicolay finetuned model, GPT-3.5
+                            model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",  # Nicolay finetuned model, GPT-3.5
                             messages=messages_for_second_model,
                             temperature=0,
                             max_tokens=2000,

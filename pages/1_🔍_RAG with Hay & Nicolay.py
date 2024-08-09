@@ -384,9 +384,19 @@ with st.form("Search Interface"):
                 top_n["UserQuery"] = user_query  # Add 'UserQuery' column to the DataFrame
                 return top_n, user_query_embedding
 
-            def segment_text(text, segment_size=100):
+            #def segment_text(text, segment_size=100):
+            #    words = text.split()
+            #    return [' '.join(words[i:i+segment_size]) for i in range(0, len(words), segment_siz
+
+            # text splitting - 0.1
+            def segment_text(text, segment_size=500, overlap=100):
                 words = text.split()
-                return [' '.join(words[i:i+segment_size]) for i in range(0, len(words), segment_size)]
+                segments = []
+                for i in range(0, len(words), segment_size - overlap):
+                    segment = words[i:i + segment_size]
+                    segments.append(' '.join(segment))
+                return segments
+
 
             def compare_segments_with_query_parallel(segments, query_embedding):
                 with ThreadPoolExecutor(max_workers=5) as executor:

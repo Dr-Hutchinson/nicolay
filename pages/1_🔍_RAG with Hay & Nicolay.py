@@ -393,8 +393,8 @@ with st.form("Search Interface"):
 
                             if keyword_positions:
                                 highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                                start_quote = max(0, highest_original_weighted_position - context_size // 2)
-                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 2)
+                                start_quote = max(0, highest_original_weighted_position - context_size // 3)
+                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 3)
                                 snippet = entry['full_text'][start_quote:end_quote]
                                 instances.append({
                                     "text_id": entry['text_id'],

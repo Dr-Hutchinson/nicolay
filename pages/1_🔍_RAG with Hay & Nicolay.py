@@ -353,7 +353,7 @@ with st.form("Search Interface"):
             #    return instances[:top_n]
 
             # keyword text segment - 0.1
-            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5, context_size=500):
+            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5, context_size=1000):
                 instances = []
                 if text_keywords:
                     if isinstance(text_keywords, list):

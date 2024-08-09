@@ -634,14 +634,28 @@ with st.form("Search Interface"):
                             with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
                                 st.write(keyword_search_explainer)
 
+                            # text segment - 0.0
+
+                            #for idx, result in enumerate(search_results, start=1):
+                            #    expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
+                            #    with st.expander(expander_label):
+                            #        st.markdown(f"{result['source']}")
+                            #        st.markdown(f"{result['text_id']}")
+                            #        st.markdown(f"{result['summary']}")
+                            #        st.markdown(f"**Key Quote:**\n{result['quote']}")
+                            #        st.markdown(f"**Weighted Score:** {result['weighted_score']}")
+                            #        st.markdown("**Keyword Counts:**")
+                            #        st.json(result['keyword_counts'])
+
+                            # text segment - 0.1
 
                             for idx, result in enumerate(search_results, start=1):
                                 expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
                                 with st.expander(expander_label):
-                                    st.markdown(f"{result['source']}")
-                                    st.markdown(f"{result['text_id']}")
-                                    st.markdown(f"{result['summary']}")
-                                    st.markdown(f"**Key Quote:**\n{result['quote']}")
+                                    st.markdown(f"**Source:** {result['source']}")
+                                    st.markdown(f"**Text ID:** {result['text_id']}")
+                                    st.markdown(f"**Summary:**\n{result['summary']}")
+                                    st.markdown(f"**Key Quote:**\n{result['quote']}")  # Display the full expanded quote
                                     st.markdown(f"**Weighted Score:** {result['weighted_score']}")
                                     st.markdown("**Keyword Counts:**")
                                     st.json(result['keyword_counts'])

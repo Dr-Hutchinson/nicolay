@@ -298,10 +298,63 @@ with st.form("Search Interface"):
                 text_id_str = f"Text #: {text_id}"
                 return lincoln_dict.get(text_id_str, {}).get('source'), lincoln_dict.get(text_id_str, {}).get('summary')
 
-            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+            # keyword text segment - 0.0
+
+            #def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+            #    instances = []
+            #    # original processing for text_keywords formatted as strings - however, inconsistencies in the finetuning dataset cause issues here. For now code below is used.
+            #    #text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')] if text_keywords else []
+            #    if text_keywords:
+            #        if isinstance(text_keywords, list):
+            #            text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
+            #        else:
+            #            text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
+            #    else:
+            #        text_keywords_list = []
+            #    for entry in data:
+            #        if 'full_text' in entry and 'source' in entry:
+            #            entry_text_lower = entry['full_text'].lower()
+            #            source_lower = entry['source'].lower()
+            #            summary_lower = entry.get('summary', '').lower()
+            #            keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+            #            match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
+            #            match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+            #            if match_source_year and match_source_text:
+            #                total_dynamic_weighted_score = 0
+            #                keyword_counts = {}
+            #                keyword_positions = {}
+            #                combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+            #                for keyword in original_weights.keys():
+            #                    keyword_lower = keyword.lower()
+            #                    for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
+            #                        count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
+            #                        dynamic_weight = dynamic_weights.get(keyword, 0)
+            #                        if count > 0:
+            #                            keyword_counts[keyword] = count
+            #                            total_dynamic_weighted_score += count * dynamic_weight
+            #                            keyword_index = match.start()
+            #                            original_weight = original_weights[keyword]
+            #                            keyword_positions[keyword_index] = (keyword, original_weight)
+            #                if keyword_positions:
+            #                    highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
+            #                    context_length = 300
+            #                    start_quote = max(0, highest_original_weighted_position - context_length)
+            #                    end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
+            #                    snippet = entry['full_text'][start_quote:end_quote]
+            #                    instances.append({
+            #                        "text_id": entry['text_id'],
+            #                        "source": entry['source'],
+            #                        "summary": entry.get('summary', ''),
+            #                        "quote": snippet.replace('\n', ' '),
+            #                        "weighted_score": total_dynamic_weighted_score,
+            #                        "keyword_counts": keyword_counts
+            #                    })
+            #    instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+            #    return instances[:top_n]
+
+            # keyword text segment - 0.1
+            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5, context_size=500):
                 instances = []
-                # original processing for text_keywords formatted as strings - however, inconsistencies in the finetuning dataset cause issues here. For now code below is used.
-                #text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')] if text_keywords else []
                 if text_keywords:
                     if isinstance(text_keywords, list):
                         text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
@@ -309,19 +362,23 @@ with st.form("Search Interface"):
                         text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
                 else:
                     text_keywords_list = []
+
                 for entry in data:
                     if 'full_text' in entry and 'source' in entry:
                         entry_text_lower = entry['full_text'].lower()
                         source_lower = entry['source'].lower()
                         summary_lower = entry.get('summary', '').lower()
                         keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+
                         match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
                         match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+
                         if match_source_year and match_source_text:
                             total_dynamic_weighted_score = 0
                             keyword_counts = {}
                             keyword_positions = {}
                             combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+
                             for keyword in original_weights.keys():
                                 keyword_lower = keyword.lower()
                                 for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
@@ -333,11 +390,11 @@ with st.form("Search Interface"):
                                         keyword_index = match.start()
                                         original_weight = original_weights[keyword]
                                         keyword_positions[keyword_index] = (keyword, original_weight)
+
                             if keyword_positions:
                                 highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                                context_length = 300
-                                start_quote = max(0, highest_original_weighted_position - context_length)
-                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
+                                start_quote = max(0, highest_original_weighted_position - context_size // 2)
+                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 2)
                                 snippet = entry['full_text'][start_quote:end_quote]
                                 instances.append({
                                     "text_id": entry['text_id'],
@@ -347,8 +404,14 @@ with st.form("Search Interface"):
                                     "weighted_score": total_dynamic_weighted_score,
                                     "keyword_counts": keyword_counts
                                 })
+
                 instances.sort(key=lambda x: x['weighted_score'], reverse=True)
                 return instances[:top_n]
+
+
+
+
+
 
             # Updated main search function to use expanded search
             def search_with_dynamic_weights_expanded(user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5):

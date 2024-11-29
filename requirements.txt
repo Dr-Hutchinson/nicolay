@@ -1,6 +1,6 @@
 cohere==4.40
 numpy==1.26.3
-openai==1.6.1
+openai==1.55.3
 pandas==2.0.3
 pygsheets==2.0.6
 streamlit==1.29.0

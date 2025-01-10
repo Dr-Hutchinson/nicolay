@@ -238,7 +238,7 @@ with st.form("Search Interface"):
     perform_keyword_search = st.toggle("Weighted Keyword Search", value=True)
     perform_semantic_search = st.toggle("Semantic Search", value=True)
     # Always display the reranking toggle
-    perform_reranking = st.toggle("Response and Analysis", value=False, key="reranking")
+    perform_reranking = st.toggle("Response and Analysis", value=True, key="reranking")
 
     # Display a warning message if reranking is selected without any search methods
     if perform_reranking and not (perform_keyword_search or perform_semantic_search):

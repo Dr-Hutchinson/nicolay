@@ -785,6 +785,11 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
                       if len(data_parts) >= 4:
                           search_type, text_id_part, summary, quote = data_parts
                           text_id = str(text_id_part.split(":")[-1].strip())
+
+                            # Convert "Text #: 66" to just "66"
+                          if text_id.startswith("Text #:"):
+                              text_id = text_id.replace("Text #:", "").strip()
+
                           summary = summary.strip()
                           quote = quote.strip()
                           #text_id_str = f"Text #: {text_id}"

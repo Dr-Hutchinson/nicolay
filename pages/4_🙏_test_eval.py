@@ -467,15 +467,15 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     for result in rerank_results:
         if result['UserQuery'] == query and result['Rank'] <= 3:
             top_3_ids.append(str(result['Text ID']))
-    print(f"Top 3 ids {top_3_ids}")
+    st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
-    print(f"hits {hits}")
+    st.write(f"hits {hits}")
     if len(top_3_ids) > 0:
          precision = len(set(top_3_ids).intersection(ideal_documents)) / 3
     else:
         precision = 0
-    print(f"precision {precision}")
+    st.write(f"precision {precision}")
 
     average_rank = None
     ranks = []
@@ -486,7 +486,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     if len(ranks) > 0:
         average_rank = sum(ranks) / len(ranks)
 
-    print(f"average rank {average_rank}")
+    st.write(f"average rank {average_rank}")
 
     return hits, precision, average_rank
 

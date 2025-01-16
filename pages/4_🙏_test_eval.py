@@ -851,8 +851,8 @@ else:
     question_titles = questions_df['Question'].tolist()
     selected_question_title = st.selectbox("Select a question:", question_titles)
     selected_question_row = questions_df[questions_df['Question'] == selected_question_title].iloc[0]
-    selected_question = selected_question_row['Question']
-    selected_ideal_documents = selected_question_row['Ideal Documents'].split(',') if pd.notna(selected_question_row['Ideal Documents']) else []
+    selected_question = selected_question_row['question']
+    selected_ideal_documents = selected_question_row['ideal_documents'].split(',') if pd.notna(selected_question_row['Ideal Documents']) else []
     # Button to run RAG
     if st.button("Run RAG Process"):
         with st.spinner("Running RAG..."):

@@ -347,8 +347,8 @@ def search_text(df: pd.DataFrame, user_query: str, n: int = 5) -> Tuple[pd.DataF
     user_query_embedding = get_embedding(user_query)
     df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
     top_n = df.sort_values("similarities", ascending=False).head(n)
-    top_n["UserQuery"] = user_query
     top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'})  # assign new df to top_n
+    top_n["UserQuery"] = user_query
     return top_n, user_query_embedding
 
 def extract_full_text(record: str) -> str:
@@ -890,7 +890,7 @@ else:
                     with st.expander(semantic_expander_label, expanded=False):
                             # Display 'source', 'text_id', 'summary'
                         st.markdown(f"**Source:** {row['source']}")
-                        st.markdown(f"**Text ID:** {row['Unnamed: 0']}")
+                        st.markdown(f"**Text ID:** {row['text_id']}")
                         st.markdown(f"**Summary:**\n{row['summary']}")
                         st.markdown(f"**Key Quote:** {row['TopSegment']}")
                         st.markdown(f"**Similarity Score:** {row['similarities']:.2f}")

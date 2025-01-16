@@ -676,14 +676,13 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
   formatted_input_for_model = None  # Initialize to None before the if statement
   if perform_reranking:
     if not search_results.empty or not semantic_matches.empty:
-
-        if isinstance(search_results, list):
-            search_results = pd.DataFrame(search_results)
+        if isinstance(search_results, list): # double check if this is a list
+          search_results = pd.DataFrame(search_results) # and then convert to dataframe
 
         if not search_results.empty:
-            search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+          search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
         else:
-             search_results = pd.DataFrame(columns=['text_id'])
+          search_results = pd.DataFrame(columns=['text_id'])
 
         semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
         semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)

@@ -740,7 +740,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
             search_results = pd.DataFrame(search_results)
 
           if not search_results.empty:
-            search_results['text_id'] = search_results['TextID].str.extract('(\d+)').astype(int)
+            search_results['text_id'] = search_results['TextID'].str.extract('(\d+)').astype(int)
           else:
             search_results = pd.DataFrame(columns=['TextID'])
 

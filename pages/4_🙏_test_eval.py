@@ -471,7 +471,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
     if len(top_3_ids) > 0:
-        precision = hits / len(top_3_ids)
+         precision = len(set(top_3_ids).intersection(ideal_documents)) / 3
     else:
         precision = 0
 

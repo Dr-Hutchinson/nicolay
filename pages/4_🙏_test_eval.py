@@ -410,12 +410,12 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
 
     kw_text_ids = set()
     for idx, kw_result in keyword_results.iterrows():
-        if kw_result['UserQuery'] == query:
-            kw_text_ids.add(kw_result['TextID'])
+        if kw_result['user_query'] == query:
+            kw_text_ids.add(kw_result['text_id'])
 
     final_text_ids = set()
     for entry in nicolay_data:
-        if isinstance(entry, dict) and entry.get('UserQuery') == query:
+        if isinstance(entry, dict) and entry.get('user_query') == query:
             for match_key, match_value in entry.items():
                 if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
                     final_text_ids.add(match_value['Text ID'])
@@ -437,12 +437,12 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
 def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict], query: str) -> Tuple[int, float, float]:
   sem_text_ids = set()
   for sem_result in semantic_results:
-    if sem_result['UserQuery'] == query:
-      sem_text_ids.add(str(sem_result['TextID']))
+    if sem_result['user_query'] == query:
+      sem_text_ids.add(str(sem_result['text_id']))
 
   final_text_ids = set()
   for entry in nicolay_data:
-    if isinstance(entry, dict) and entry.get('UserQuery') == query:
+    if isinstance(entry, dict) and entry.get('user_query') == query:
         for match_key, match_value in entry.items():
             if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
                 final_text_ids.add(str(match_value['Text ID']))

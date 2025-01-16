@@ -347,6 +347,7 @@ def search_text(df: pd.DataFrame, user_query: str, n: int = 5) -> Tuple[pd.DataF
     df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
     top_n = df.sort_values("similarities", ascending=False).head(n)
     top_n["UserQuery"] = user_query
+    top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'}) # rename the column here.
     return top_n, user_query_embedding
 
 def extract_full_text(record: str) -> str:

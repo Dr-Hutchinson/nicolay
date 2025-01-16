@@ -821,9 +821,11 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
     keyword_counts, keyword_hits, keyword_precision, keyword_recall = track_keyword_success(hays_data=[hays_data], keyword_results=keyword_results_df, nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
     semantic_hits, semantic_precision, semantic_recall = track_semantic_success(semantic_results=semantic_results_df.to_dict(orient='records'), nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
     rerank_hits, rerank_precision, rerank_avg_rank = track_rerank_success(rerank_results=reranking_results_df.to_dict(orient='records'), query=user_query, ideal_documents=ideal_documents)
+    st.write(f"Rerank metrics - hits:{rerank_hits} precision:{rerank_precision} avg_rank: {rerank_avg_rank}")
+
     #LLM Eval output
     if model_output:
-          llm_eval = evaluate_nicolay_output(user_query, initial_answer, formatted_input_for_model, model_output.get('FinalAnswer', {}), llm_eval_prompt)
+        llm_eval = evaluate_nicolay_output(user_query, initial_answer, formatted_input_for_model, model_output.get('FinalAnswer', {}), llm_eval_prompt)
     else:
           llm_eval = {}
 

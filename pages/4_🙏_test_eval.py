@@ -467,6 +467,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     for result in rerank_results:
         if result['user_query'] == query and result['result_ranking'] <= 3:
             top_3_ids.append(str(result['text_id']))
+    st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
     if len(top_3_ids) > 0:
@@ -482,7 +483,24 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
 
     if len(ranks) > 0:
         average_rank = sum(ranks) / len(ranks)
+
+    st.write(f"average rank {average_rank}")
+
     return hits, precision, average_rank
+
+def test_track_rerank_success():
+  test_rerank_results = [
+      {'UserQuery': 'test_query', 'Rank': 1, 'Text ID': '100', 'Relevance Score': 0.95},
+      {'UserQuery': 'test_query', 'Rank': 2, 'Text ID': '200', 'Relevance Score': 0.85},
+      {'UserQuery': 'test_query', 'Rank': 3, 'Text ID': '300', 'Relevance Score': 0.75},
+      {'UserQuery': 'test_query', 'Rank': 4, 'Text ID': '400', 'Relevance Score': 0.65}
+  ]
+  ideal_docs_test = ['100', '200', '300']
+  hits, precision, average_rank = track_rerank_success(rerank_results=test_rerank_results, query="test_query", ideal_documents=ideal_docs_test)
+  print(f"Test case: hits:{hits}, precision: {precision}, avg_rank: {average_rank}")
+
+test_track_rerank_success()
+
 
 
 # Load data
@@ -853,6 +871,8 @@ else:
     selected_question_row = questions_df[questions_df['question'] == selected_question_title].iloc[0]
     selected_question = selected_question_row['question']
     selected_ideal_documents = selected_question_row['ideal_documents'].split(',') if pd.notna(selected_question_row['ideal_documents']) else []
+    st.write(f"Ideal documents for question {selected_question}: {selected_ideal_documents}")
+
     # Button to run RAG
     if st.button("Run RAG Process"):
         with st.spinner("Running RAG..."):

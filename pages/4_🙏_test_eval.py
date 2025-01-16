@@ -465,9 +465,9 @@ def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict
 def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents: List[str]) -> Tuple[int, float, float]:
     st.write(f"Ideal documents for the query: {ideal_documents}")
     top_3_ids = []
-    for result in rerank_results:
-        if result['user_query'] == query and result['result_ranking'] <= 3:
-            top_3_ids.append(str(result['text_id']))
+    for idx, result in enumerate(rerank_results):
+        if idx < 3 and result['UserQuery'] == query:
+            top_3_ids.append(str(result['Text ID']))
     st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
@@ -861,6 +861,7 @@ else:
     selected_question_row = questions_df[questions_df['question'] == selected_question_title].iloc[0]
     selected_question = selected_question_row['question']
     selected_ideal_documents = selected_question_row['ideal_documents'].split(',') if pd.notna(selected_question_row['ideal_documents']) else []
+    selected_ideal_documents = [doc.strip().replace('Text #: ', '') for doc in selected_ideal_documents]
     st.write(f"Ideal documents for question {selected_question}: {selected_ideal_documents}")
 
     # Button to run RAG

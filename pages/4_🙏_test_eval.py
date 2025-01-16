@@ -488,21 +488,6 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
 
     return hits, precision, average_rank
 
-def test_track_rerank_success():
-  test_rerank_results = [
-      {'UserQuery': 'test_query', 'Rank': 1, 'Text ID': '100', 'Relevance Score': 0.95},
-      {'UserQuery': 'test_query', 'Rank': 2, 'Text ID': '200', 'Relevance Score': 0.85},
-      {'UserQuery': 'test_query', 'Rank': 3, 'Text ID': '300', 'Relevance Score': 0.75},
-      {'UserQuery': 'test_query', 'Rank': 4, 'Text ID': '400', 'Relevance Score': 0.65}
-  ]
-  ideal_docs_test = ['100', '200', '300']
-  hits, precision, average_rank = track_rerank_success(rerank_results=test_rerank_results, query="test_query", ideal_documents=ideal_docs_test)
-  print(f"Test case: hits:{hits}, precision: {precision}, avg_rank: {average_rank}")
-
-test_track_rerank_success()
-
-
-
 # Load data
 lincoln_speeches_file_path = 'data/lincoln_speech_corpus.json'
 keyword_frequency_file_path = 'data/voyant_word_counts.json'
@@ -1007,3 +992,16 @@ else:
                 st.write(f"**Citation Accuracy Rationale:** {rag_results['llm_eval'].get('citation_accuracy_rationale', 'No rationale')}")
             else:
                 st.write("LLM judge output not available.")
+
+def test_track_rerank_success():
+  test_rerank_results = [
+      {'UserQuery': 'test_query', 'Rank': 1, 'Text ID': '100', 'Relevance Score': 0.95},
+      {'UserQuery': 'test_query', 'Rank': 2, 'Text ID': '200', 'Relevance Score': 0.85},
+      {'UserQuery': 'test_query', 'Rank': 3, 'Text ID': '300', 'Relevance Score': 0.75},
+      {'UserQuery': 'test_query', 'Rank': 4, 'Text ID': '400', 'Relevance Score': 0.65}
+  ]
+  ideal_docs_test = ['100', '200', '300']
+  hits, precision, average_rank = track_rerank_success(rerank_results=test_rerank_results, query="test_query", ideal_documents=ideal_docs_test)
+  print(f"Test case: hits:{hits}, precision: {precision}, avg_rank: {average_rank}")
+
+test_track_rerank_success()

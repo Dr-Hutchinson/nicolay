@@ -624,7 +624,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
         search_results = pd.DataFrame(search_results_list) # convert to dataframe
         #log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
         # IMPORTANT: store the updated DataFrame
-        #global keyword_results_df  # or handle scoping as needed
+        global keyword_results_df  # or handle scoping as needed
         keyword_results_df = log_keyword_search_results(
             keyword_results_logger=keyword_results_logger,
             search_results=search_results,

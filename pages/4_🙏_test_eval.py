@@ -465,8 +465,8 @@ def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict
 def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents: List[str]) -> Tuple[int, float, float]:
     top_3_ids = []
     for result in rerank_results:
-        if result['user_query'] == query and result['result_ranking'] <= 3:
-            top_3_ids.append(str(result['text_id']))
+        if result['UserQuery'] == query and result['Rank'] <= 3:
+            top_3_ids.append(str(result['Text ID']))
     st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
@@ -478,8 +478,8 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     average_rank = None
     ranks = []
     for result in rerank_results:
-       if result['user_query'] == query and str(result['text_id']) in ideal_documents:
-           ranks.append(result['result_ranking'])
+       if result['UserQuery'] == query and str(result['Text ID']) in ideal_documents:
+           ranks.append(result['Rank'])
 
     if len(ranks) > 0:
         average_rank = sum(ranks) / len(ranks)

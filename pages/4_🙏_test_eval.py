@@ -672,6 +672,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
 
 
   full_reranked_results = []
+  formatted_input_for_model = None  # Initialize to None before the if statement
   if perform_reranking:
     if not search_results.empty or not semantic_matches.empty:
 

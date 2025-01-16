@@ -71,19 +71,19 @@ def log_keyword_search_results(keyword_results_logger: DataLogger, search_result
         }
         keyword_results_logger.record_api_outputs(record)
 
-def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
-    now = dt.now()
+ def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
+     now = dt.now()
 
-    for idx, row in semantic_matches.iterrows():
-        record = {
-            'Timestamp': now,
-            'UserQuery': row['UserQuery'],
-            'HyDE_Query': initial_answer,
-            'TextID': row['text_id'],
-            'SimilarityScore': row['similarities'],
-            'TopSegment': row['TopSegment']
-        }
-        semantic_results_logger.record_api_outputs(record)
+     for idx, row in semantic_matches.iterrows():
+         record = {
+             'Timestamp': now,
+             'UserQuery': row['UserQuery'],
+             'HyDE_Query': initial_answer,
+             'TextID': row['text_id'], # Corrected key to 'text_id'
+             'SimilarityScore': row['similarities'],
+             'TopSegment': row['TopSegment']
+         }
+         semantic_results_logger.record_api_outputs(record)
 
 def log_reranking_results(reranking_results_logger: DataLogger, reranked_df: pd.DataFrame, user_query: str) -> None:
     now = dt.now()
@@ -347,7 +347,7 @@ def search_text(df: pd.DataFrame, user_query: str, n: int = 5) -> Tuple[pd.DataF
     df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
     top_n = df.sort_values("similarities", ascending=False).head(n)
     top_n["UserQuery"] = user_query
-    top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'}) # rename the column here.
+    top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'})  # assign new df to top_n
     return top_n, user_query_embedding
 
 def extract_full_text(record: str) -> str:

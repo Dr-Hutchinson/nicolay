@@ -399,7 +399,7 @@ def evaluate_nicolay_output(query: str, initial_answer: str, formatted_matches_f
           st.error(f"Error in LLM evaluation: {e}")
           return {"error": str(e), 'factual_accuracy_rating': 'No rating', 'factual_accuracy_rationale': 'No rating', 'quote_integration_rating': 'No rating', 'quote_integration_rationale': 'No rating', 'citation_accuracy_rating': 'No rating', 'citation_accuracy_rationale': 'No rating'}
 
-def track_keyword_success(hays_data: List[Dict], keyword_results: List[Dict], nicolay_data: List[Dict], query: str) -> Tuple[int, int, float, float]:
+def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, nicolay_data: List[Dict], query: str) -> Tuple[int, int, float, float]:
     hay_entry = next((entry for entry in hays_data if entry['query'] == query), None)
     if not hay_entry:
       return 0, 0, 0, 0
@@ -409,7 +409,7 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: List[Dict], ni
       return 0,0,0,0
 
     kw_text_ids = set()
-    for kw_result in keyword_results:
+    for idx, kw_result in keyword_results.iterrows():
         if kw_result['UserQuery'] == query:
             kw_text_ids.add(kw_result['TextID'])
 
@@ -433,7 +433,6 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: List[Dict], ni
         recall_rate = 0
 
     return len(weighted_keywords), hits, precision_rate, recall_rate
-
 
 def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict], query: str) -> Tuple[int, float, float]:
   sem_text_ids = set()
@@ -813,10 +812,10 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
          model_output = {}
 
   # Track performance metrics here using defined functions
-  keyword_counts, keyword_hits, keyword_precision, keyword_recall = track_keyword_success(hays_data=[hays_data], keyword_results=keyword_results_df.to_dict(orient='records'), nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
+   # Track performance metrics here using defined functions
+  keyword_counts, keyword_hits, keyword_precision, keyword_recall = track_keyword_success(hays_data=[hays_data], keyword_results=keyword_results_df, nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
   semantic_hits, semantic_precision, semantic_recall = track_semantic_success(semantic_results=semantic_results_df.to_dict(orient='records'), nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
   rerank_hits, rerank_precision, rerank_avg_rank = track_rerank_success(rerank_results=reranking_results_df.to_dict(orient='records'), query=user_query, ideal_documents=ideal_documents)
-
   #LLM Eval output
   if model_output:
         llm_eval = evaluate_nicolay_output(user_query, initial_answer, formatted_input_for_model, model_output.get('FinalAnswer', {}), llm_eval_prompt)

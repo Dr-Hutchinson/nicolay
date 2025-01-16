@@ -848,9 +848,9 @@ st.title("Nicolay RAG Evaluation")
 if questions_df.empty:
   st.error("The 'benchmark_questions' sheet is empty or could not be loaded. Please check your data source.")
 else:
-    question_titles = questions_df['Question'].tolist()
+    question_titles = questions_df['question'].tolist()
     selected_question_title = st.selectbox("Select a question:", question_titles)
-    selected_question_row = questions_df[questions_df['Question'] == selected_question_title].iloc[0]
+    selected_question_row = questions_df[questions_df['question'] == selected_question_title].iloc[0]
     selected_question = selected_question_row['question']
     selected_ideal_documents = selected_question_row['ideal_documents'].split(',') if pd.notna(selected_question_row['Ideal Documents']) else []
     # Button to run RAG

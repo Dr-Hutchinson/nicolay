@@ -75,7 +75,7 @@ def log_keyword_search_results(
             'Weighted_Keywoords': model_weighted_keywords,
             'Year_Keywords': model_year_keywords,
             'text_keywords': model_text_keywords,
-            'TextID': result['text_id'],
+            'TextID': result['TextID'],
             'KeyQuote': result['quote'],
             'WeightedScore': result['weighted_score'],
             'KeywordCounts': json.dumps(result['keyword_counts'])
@@ -120,7 +120,7 @@ def log_reranking_results(reranking_results_logger: DataLogger, reranked_df: pd.
             'UserQuery': user_query,
             'Rank': row['Rank'],
             'SearchType': row['Search Type'],
-            'TextID': str(row['Text ID']),
+            'TextID': str(row['TextID']),
             'KeyQuote': row['Key Quote'],
             'Relevance_Score': row['Relevance Score']
         }
@@ -150,8 +150,8 @@ def log_nicolay_model_output(nicolay_data_logger: DataLogger, model_output: Dict
 
         if 'Text ID' in match_details:
             #formatted_text_id = f"Text #: {match_details.get('Text ID')}"
-            formatted_text_id = str(match_details.get('Text ID'))
-            speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
+            formatted_text_id = str(match_details.get('TextID'))
+            speech = next((item for item in lincoln_data if item['TextID'] == formatted_text_id), None)
             if speech:
               highlight_success_dict[match_key] = highlight_key_quote(speech['full_text'], match_details.get('Key Quote', "")) != speech['full_text']
             else:
@@ -374,7 +374,8 @@ def search_text(df: pd.DataFrame, user_query: str, n: int = 5) -> Tuple[pd.DataF
     user_query_embedding = get_embedding(user_query)
     df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
     top_n = df.sort_values("similarities", ascending=False).head(n)
-    top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'})  # assign new df to top_n
+    #top_n = top_n.rename(columns={'Unnamed: 0': 'text_id'})  # assign new df to top_n
+    top_n.rename(columns={'Unnamed: 0': 'TextID'}, inplace=True)
     top_n["UserQuery"] = user_query
     return top_n, user_query_embedding
 
@@ -391,7 +392,7 @@ def extract_full_text(record: str) -> str:
 
 def remove_duplicates(search_results: pd.DataFrame, semantic_matches: pd.DataFrame) -> pd.DataFrame:
   combined_results = pd.concat([search_results, semantic_matches])
-  deduplicated_results = combined_results.drop_duplicates(subset='text_id')
+  deduplicated_results = combined_results.drop_duplicates(subset='TextID')
   return deduplicated_results
 
 def format_reranked_results_for_model_input(reranked_results: List[Dict]) -> str:
@@ -652,6 +653,8 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
         )
       if search_results_list: # the return is a list
         search_results = pd.DataFrame(search_results_list) # convert to dataframe
+        search_results.rename(columns={'text_id': 'TextID'}, inplace=True)
+        search_results['TextID'] = search_results['TextID'].astype(int)
         #log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
         # IMPORTANT: store the updated DataFrame
         #global keyword_results_df  # or handle scoping as needed
@@ -737,12 +740,15 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
             search_results = pd.DataFrame(search_results)
 
           if not search_results.empty:
-            search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+            search_results['text_id'] = search_results['TextID].str.extract('(\d+)').astype(int)
           else:
-            search_results = pd.DataFrame(columns=['text_id'])
+            search_results = pd.DataFrame(columns=['TextID'])
 
-          semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
-          semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
+          #semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+          #semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
+
+          semantic_matches.rename(columns={'Unnamed: 0': 'TextID'}, inplace=True)
+          semantic_matches['TextID'] = semantic_matches['TextID'].astype(int)
 
 
           if search_results.empty:

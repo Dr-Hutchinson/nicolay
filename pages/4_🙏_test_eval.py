@@ -886,7 +886,7 @@ else:
             st.subheader("Semantic Search:")
             if not rag_results['semantic_matches'].empty:
                 for idx, row in rag_results['semantic_matches'].iterrows():
-                    semantic_expander_label = f"**Semantic Match {idx+1}**: *{row['source']}* `Text #: {row['Unnamed: 0']}`"
+                    semantic_expander_label = f"**Semantic Match {idx+1}**: *{row['source']}* `Text #: {row['text_id']}`"
                     with st.expander(semantic_expander_label, expanded=False):
                             # Display 'source', 'text_id', 'summary'
                         st.markdown(f"**Source:** {row['source']}")

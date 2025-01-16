@@ -476,7 +476,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     ranks = []
     for result in rerank_results:
        if result['user_query'] == query and str(result['text_id']) in ideal_documents:
-           ranks.append(result['Rank'])
+           ranks.append(result['result_ranking'])
 
     if len(ranks) > 0:
         average_rank = sum(ranks) / len(ranks)

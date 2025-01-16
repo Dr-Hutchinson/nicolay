@@ -105,7 +105,7 @@ def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_ma
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
             'HyDE_Query': initial_answer,
-            'TextID': row['TextID'], # Corrected key to 'text_id'
+            'TextID': row['TextID'],
             'SimilarityScore': row['similarities'],
             'TopSegment': row['TopSegment']
         }
@@ -725,6 +725,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
           top_segment = max(segment_scores, key=lambda x: x[1])
           top_segments.append(top_segment[0])
         semantic_matches["TopSegment"] = top_segments
+        semantic_matches.rename(columns={'text_id': 'TextID'}, inplace=True)
         log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
 
 

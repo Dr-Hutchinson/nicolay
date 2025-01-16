@@ -95,7 +95,7 @@ def log_reranking_results(reranking_results_logger: DataLogger, reranked_df: pd.
             'UserQuery': user_query,
             'Rank': row['Rank'],
             'SearchType': row['Search Type'],
-            'TextID': row['Text ID'],
+            'TextID': str(row['Text ID']),
             'KeyQuote': row['Key Quote'],
             'Relevance_Score': row['Relevance Score']
         }

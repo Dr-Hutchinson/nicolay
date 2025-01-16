@@ -521,7 +521,6 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
       {"role": "system", "content": keyword_prompt},
       {"role": "user", "content": user_query}
   ]
-
   try:
       response = client.chat.completions.create(
           model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
@@ -552,6 +551,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
       'rerank_avg_rank': None,
       'llm_eval': {}
       }
+
 
   msg = response.choices[0].message.content
 
@@ -605,8 +605,9 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
           text_keywords=text_keywords,
           top_n_results=5
           )
-     if not search_results.empty:
-         log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+     if search_results: # the return is a list
+       search_results = pd.DataFrame(search_results) # convert to dataframe
+       log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 
 
   semantic_matches = pd.DataFrame()

@@ -63,7 +63,7 @@ def log_keyword_search_results(
     model_year_keywords: List[str],
     model_text_keywords: List[str],
     keyword_results_df: pd.DataFrame  # <--- new parameter
-) -> pd.DataFrame:            
+) -> pd.DataFrame:
 
     now = dt.now()
 
@@ -88,6 +88,14 @@ def log_keyword_search_results(
 
     return keyword_results_df
 
+def parse_text_id_from_match_string(s: str) -> str:
+    # example: "Text ID: 52; Source: ..."
+    match = re.search(r"Text ID:\s*(\d+)", s)
+    if match:
+        return match.group(1)  # e.g. "52"
+    return ""  # or None
+
+
 def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
 
     now = dt.now()
@@ -97,7 +105,7 @@ def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_ma
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
             'HyDE_Query': initial_answer,
-            'TextID': row['text_id'], # Corrected key to 'text_id'
+            'TextID': row['TextID'], # Corrected key to 'text_id'
             'SimilarityScore': row['similarities'],
             'TopSegment': row['TopSegment']
         }
@@ -432,14 +440,17 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
     kw_text_ids = set()
     for idx, kw_result in keyword_results.iterrows():
         if kw_result['UserQuery'] == query:
-            kw_text_ids.add(kw_result['text_id'])
+            kw_text_ids.add(kw_result['TextID'])
 
     final_text_ids = set()
     for entry in nicolay_data:
-        if isinstance(entry, dict) and entry.get('UserQuery') == query:
-            for match_key, match_value in entry.items():
-                if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
-                    final_text_ids.add(match_value['Text ID'])
+        if entry.get('UserQuery') == query:
+            for col_name, match_value in entry.items():
+                if col_name.startswith("match_") and isinstance(match_value, str):
+                    # parse the text
+                    text_id_str = parse_text_id_from_match_string(match_value)
+                    if text_id_str:
+                        final_text_ids.add(text_id_str)
 
     hits = len(kw_text_ids.intersection(final_text_ids))
 
@@ -455,18 +466,23 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
 
     return len(weighted_keywords), hits, precision_rate, recall_rate
 
+
+
 def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict], query: str) -> Tuple[int, float, float]:
   sem_text_ids = set()
   for sem_result in semantic_results:
     if sem_result['UserQuery'] == query:
-      sem_text_ids.add(str(sem_result['text_id']))
+      sem_text_ids.add(str(sem_result['TextID']))
 
   final_text_ids = set()
   for entry in nicolay_data:
-    if isinstance(entry, dict) and entry.get('UserQuery') == query:
-        for match_key, match_value in entry.items():
-            if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
-                final_text_ids.add(str(match_value['Text ID']))
+    if entry.get('UserQuery') == query:
+        for col_name, match_value in entry.items():
+            if col_name.startswith("match_") and isinstance(match_value, str):
+                # parse the text
+                text_id_str = parse_text_id_from_match_string(match_value)
+                if text_id_str:
+                    final_text_ids.add(text_id_str)
 
   hits = len(sem_text_ids.intersection(final_text_ids))
   if len(sem_text_ids) > 0:

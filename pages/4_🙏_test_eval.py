@@ -463,6 +463,7 @@ def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict
   return hits, precision_rate, recall_rate
 
 def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents: List[str]) -> Tuple[int, float, float]:
+    st.write(f"Ideal documents for the query: {ideal_documents}")
     top_3_ids = []
     for result in rerank_results:
         if result['UserQuery'] == query and result['Rank'] <= 3:

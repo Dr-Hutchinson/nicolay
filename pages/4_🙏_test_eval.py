@@ -79,7 +79,7 @@ def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_ma
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
             'HyDE_Query': initial_answer,
-            'TextID': row['Unnamed: 0'],
+            'TextID': row['text_id'],
             'SimilarityScore': row['similarities'],
             'TopSegment': row['TopSegment']
         }

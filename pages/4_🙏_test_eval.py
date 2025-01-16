@@ -53,7 +53,18 @@ semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
 nicolay_data_logger = DataLogger(gc, 'nicolay_data')
 
-def log_keyword_search_results(keyword_results_logger: DataLogger, search_results: pd.DataFrame, user_query: str, initial_answer: str, model_weighted_keywords: Dict[str, float], model_year_keywords: List[str], model_text_keywords: List[str]) -> None:
+#def log_keyword_search_results(keyword_results_logger: DataLogger, search_results: pd.DataFrame, user_query: str, initial_answer: str, model_weighted_keywords: Dict[str, float], model_year_keywords: List[str], model_text_keywords: List[str]) -> None:
+def log_keyword_search_results(
+    keyword_results_logger: DataLogger,
+    search_results: pd.DataFrame,
+    user_query: str,
+    initial_answer: str,
+    model_weighted_keywords: Dict[str, float],
+    model_year_keywords: List[str],
+    model_text_keywords: List[str],
+    keyword_results_df: pd.DataFrame  # <--- new parameter
+) -> pd.DataFrame:            
+
     now = dt.now()
 
     for idx, result in search_results.iterrows():

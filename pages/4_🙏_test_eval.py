@@ -466,8 +466,8 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     st.write(f"Ideal documents for the query: {ideal_documents}")
     top_3_ids = []
     for result in rerank_results:
-        if result['UserQuery'] == query and result['Rank'] <= 3:
-            top_3_ids.append(str(result['Text ID']))
+        if result['user_query'] == query and result['result_ranking'] <= 3:
+            top_3_ids.append(str(result['text_id']))
     st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))
@@ -481,8 +481,8 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     average_rank = None
     ranks = []
     for result in rerank_results:
-       if result['UserQuery'] == query and str(result['Text ID']) in ideal_documents:
-           ranks.append(result['Rank'])
+       if result['user_query'] == query and str(result['text_id']) in ideal_documents:
+           ranks.append(result['result_ranking'])
 
     if len(ranks) > 0:
         average_rank = sum(ranks) / len(ranks)
@@ -998,10 +998,10 @@ else:
 
 def test_track_rerank_success():
   test_rerank_results = [
-      {'UserQuery': 'test_query', 'Rank': 1, 'Text ID': '100', 'Relevance Score': 0.95},
-      {'UserQuery': 'test_query', 'Rank': 2, 'Text ID': '200', 'Relevance Score': 0.85},
-      {'UserQuery': 'test_query', 'Rank': 3, 'Text ID': '300', 'Relevance Score': 0.75},
-      {'UserQuery': 'test_query', 'Rank': 4, 'Text ID': '400', 'Relevance Score': 0.65}
+      {'user_query': 'test_query', 'result_ranking': 1, 'text_id': '100', 'Relevance Score': 0.95},
+      {'user_query': 'test_query', 'result_ranking': 2, 'text_id': '200', 'Relevance Score': 0.85},
+      {'user_query': 'test_query', 'result_ranking': 3, 'text_id': '300', 'Relevance Score': 0.75},
+      {'user_query': 'test_query', 'result_ranking': 4, 'text_id': '400', 'Relevance Score': 0.65}
   ]
   ideal_docs_test = ['100', '200', '300']
   hits, precision, average_rank = track_rerank_success(rerank_results=test_rerank_results, query="test_query", ideal_documents=ideal_docs_test)

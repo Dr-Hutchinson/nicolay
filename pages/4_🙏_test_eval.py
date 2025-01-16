@@ -475,7 +475,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     top_3_ids = []
     for idx, result in enumerate(rerank_results):
         if idx < 3 and result['UserQuery'] == query:
-            top_3_ids.append(str(result['text_id']))
+            top_3_ids.append(str(result['Text ID']))
     st.write(f"Top 3 ids {top_3_ids}")
 
     hits = len(set(top_3_ids).intersection(ideal_documents))

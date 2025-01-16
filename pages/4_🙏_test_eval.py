@@ -71,7 +71,7 @@ def log_keyword_search_results(keyword_results_logger: DataLogger, search_result
         }
         keyword_results_logger.record_api_outputs(record)
 
- def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
+  def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
      now = dt.now()
 
      for idx, row in semantic_matches.iterrows():

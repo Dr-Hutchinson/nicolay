@@ -512,7 +512,7 @@ lincoln_dict = {item['text_id']: item for item in lincoln_data}
 
 def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword_search: bool = True, perform_semantic_search: bool = True, perform_reranking: bool = True) -> Dict:
 
-     global keyword_results_df
+    global keyword_results_df
 
     if not perform_keyword_search and not perform_semantic_search:
       return {

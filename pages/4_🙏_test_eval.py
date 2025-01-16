@@ -497,292 +497,292 @@ keyword_data = load_json(keyword_frequency_file_path)
 lincoln_dict = {item['text_id']: item for item in lincoln_data}
 
 def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword_search: bool = True, perform_semantic_search: bool = True, perform_reranking: bool = True) -> Dict:
-  if not perform_keyword_search and not perform_semantic_search:
-    return {
-      'initial_answer': 'No Search Methods Selected',
-      'search_results': pd.DataFrame(),
-      'semantic_matches': pd.DataFrame(),
-      'full_reranked_results': [],
-      'model_output': {},
-      'keyword_counts': 0,
-      'keyword_hits': 0,
-      'keyword_precision': 0,
-      'keyword_recall': 0,
-      'semantic_hits': 0,
-      'semantic_precision': 0,
-      'semantic_recall': 0,
-      'rerank_hits': 0,
-      'rerank_precision': 0,
-      'rerank_avg_rank': None,
-      'llm_eval': {}
-      }
+    if not perform_keyword_search and not perform_semantic_search:
+      return {
+        'initial_answer': 'No Search Methods Selected',
+        'search_results': pd.DataFrame(),
+        'semantic_matches': pd.DataFrame(),
+        'full_reranked_results': [],
+        'model_output': {},
+        'keyword_counts': 0,
+        'keyword_hits': 0,
+        'keyword_precision': 0,
+        'keyword_recall': 0,
+        'semantic_hits': 0,
+        'semantic_precision': 0,
+        'semantic_recall': 0,
+        'rerank_hits': 0,
+        'rerank_precision': 0,
+        'rerank_avg_rank': None,
+        'llm_eval': {}
+        }
 
-  # Construct the messages for the model
-  messages_for_model = [
-      {"role": "system", "content": keyword_prompt},
-      {"role": "user", "content": user_query}
-  ]
-  try:
-      response = client.chat.completions.create(
+    # Construct the messages for the model
+    messages_for_model = [
+        {"role": "system", "content": keyword_prompt},
+        {"role": "user", "content": user_query}
+    ]
+
+    try:
+        response = client.chat.completions.create(
           model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
-          messages=messages_for_model,
-          temperature=0,
-          max_tokens=500,
-          top_p=1,
-          frequency_penalty=0,
-          presence_penalty=0
-      )
-  except Exception as e:
-     st.error(f"Error during API call: {e}")
-     return {
-      'initial_answer': 'Error with API call',
-      'search_results': pd.DataFrame(),
-      'semantic_matches': pd.DataFrame(),
-      'full_reranked_results': [],
-      'model_output': {},
-      'keyword_counts': 0,
-      'keyword_hits': 0,
-      'keyword_precision': 0,
-      'keyword_recall': 0,
-      'semantic_hits': 0,
-      'semantic_precision': 0,
-      'semantic_recall': 0,
-      'rerank_hits': 0,
-      'rerank_precision': 0,
-      'rerank_avg_rank': None,
-      'llm_eval': {}
-      }
+            messages=messages_for_model,
+            temperature=0,
+            max_tokens=500,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+    except Exception as e:
+       st.error(f"Error during API call: {e}")
+       return {
+        'initial_answer': 'Error with API call',
+        'search_results': pd.DataFrame(),
+        'semantic_matches': pd.DataFrame(),
+        'full_reranked_results': [],
+        'model_output': {},
+        'keyword_counts': 0,
+        'keyword_hits': 0,
+        'keyword_precision': 0,
+        'keyword_recall': 0,
+        'semantic_hits': 0,
+        'semantic_precision': 0,
+        'semantic_recall': 0,
+        'rerank_hits': 0,
+        'rerank_precision': 0,
+        'rerank_avg_rank': None,
+         'llm_eval': {}
+        }
 
+    msg = response.choices[0].message.content
 
-  msg = response.choices[0].message.content
+    try:
+      api_response_data = json.loads(msg)
+      initial_answer = api_response_data['initial_answer']
+      model_weighted_keywords = api_response_data['weighted_keywords']
+      model_year_keywords = api_response_data['year_keywords']
+      model_text_keywords = api_response_data['text_keywords']
+    except (json.JSONDecodeError, KeyError) as e:
+          st.error(f"Error parsing or accessing JSON response from Hay: {e}")
+          return {
+            'initial_answer': 'Error with parsing of Hay model output',
+            'search_results': pd.DataFrame(),
+            'semantic_matches': pd.DataFrame(),
+            'full_reranked_results': [],
+            'model_output': {},
+            'keyword_counts': 0,
+            'keyword_hits': 0,
+            'keyword_precision': 0,
+            'keyword_recall': 0,
+            'semantic_hits': 0,
+            'semantic_precision': 0,
+            'semantic_recall': 0,
+            'rerank_hits': 0,
+            'rerank_precision': 0,
+            'rerank_avg_rank': None,
+             'llm_eval': {}
+             }
 
-  try:
-    api_response_data = json.loads(msg)
-    initial_answer = api_response_data['initial_answer']
-    model_weighted_keywords = api_response_data['weighted_keywords']
-    model_year_keywords = api_response_data['year_keywords']
-    model_text_keywords = api_response_data['text_keywords']
-  except (json.JSONDecodeError, KeyError) as e:
-        st.error(f"Error parsing or accessing JSON response from Hay: {e}")
-        return {
-          'initial_answer': 'Error with parsing of Hay model output',
-          'search_results': pd.DataFrame(),
-          'semantic_matches': pd.DataFrame(),
-          'full_reranked_results': [],
-          'model_output': {},
-          'keyword_counts': 0,
-          'keyword_hits': 0,
-          'keyword_precision': 0,
-          'keyword_recall': 0,
-          'semantic_hits': 0,
-          'semantic_precision': 0,
-          'semantic_recall': 0,
-          'rerank_hits': 0,
-          'rerank_precision': 0,
-          'rerank_avg_rank': None,
-           'llm_eval': {}
-           }
+    hays_data = {
+        'query': user_query,
+        'initial_answer': initial_answer,
+        'weighted_keywords': model_weighted_keywords,
+        'year_keywords': model_year_keywords,
+        'text_keywords': model_text_keywords,
+        'full_output': msg
+    }
+    hays_data_logger.record_api_outputs(hays_data)
 
-  hays_data = {
-      'query': user_query,
-      'initial_answer': initial_answer,
-      'weighted_keywords': model_weighted_keywords,
-      'year_keywords': model_year_keywords,
-      'text_keywords': model_text_keywords,
-      'full_output': msg
-  }
-  hays_data_logger.record_api_outputs(hays_data)
+    weighted_keywords = model_weighted_keywords
+    year_keywords = model_year_keywords
+    text_keywords = model_text_keywords
 
-  weighted_keywords = model_weighted_keywords
-  year_keywords = model_year_keywords
-  text_keywords = model_text_keywords
-
-  search_results = pd.DataFrame()
-  if perform_keyword_search:
-     search_results = search_with_dynamic_weights_expanded(
+    search_results = pd.DataFrame()
+    if perform_keyword_search:
+      search_results = search_with_dynamic_weights_expanded(
           user_keywords=weighted_keywords,
           json_data=keyword_data,
           year_keywords=year_keywords,
           text_keywords=text_keywords,
           top_n_results=5
-          )
-     if search_results: # the return is a list
-       search_results = pd.DataFrame(search_results) # convert to dataframe
-       log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+        )
+      if search_results: # the return is a list
+        search_results = pd.DataFrame(search_results) # convert to dataframe
+        log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
 
-
-  semantic_matches = pd.DataFrame()
-  if perform_semantic_search:
-      embedding_size = 1536
-      df = pd.read_csv(lincoln_speeches_embedded)
-      df['full_text'] = df['combined'].apply(extract_full_text)
-      try:
-        df['embedding'] = df['full_text'].apply(lambda x: get_embedding(x) if x else np.zeros(embedding_size))
-      except Exception as e:
-         st.error(f"Error getting embeddings: {e}")
-         return {
-          'initial_answer': initial_answer,
-          'search_results': search_results,
-          'semantic_matches': pd.DataFrame(),
-          'full_reranked_results': [],
-          'model_output': {},
-          'keyword_counts': 0,
-          'keyword_hits': 0,
-          'keyword_precision': 0,
-          'keyword_recall': 0,
-          'semantic_hits': 0,
-          'semantic_precision': 0,
-          'semantic_recall': 0,
-          'rerank_hits': 0,
-          'rerank_precision': 0,
-          'rerank_avg_rank': None,
-          'llm_eval': {}
-           }
-      df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(get_source_and_summary))
-      try:
-        semantic_matches, user_query_embedding = search_text(df, user_query + initial_answer, n=5)
-      except Exception as e:
-         st.error(f"Error with semantic search: {e}")
-         return {
-          'initial_answer': initial_answer,
-          'search_results': search_results,
-          'semantic_matches': pd.DataFrame(),
-          'full_reranked_results': [],
-          'model_output': {},
-          'keyword_counts': 0,
-          'keyword_hits': 0,
-          'keyword_precision': 0,
-          'keyword_recall': 0,
-          'semantic_hits': 0,
-          'semantic_precision': 0,
-          'semantic_recall': 0,
-          'rerank_hits': 0,
-          'rerank_precision': 0,
-          'rerank_avg_rank': None,
-           'llm_eval': {}
-           }
-      top_segments = []
-
-      for idx, row in semantic_matches.iterrows():
-        segments = segment_text(row['full_text'])
-        segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-        top_segment = max(segment_scores, key=lambda x: x[1])
-        top_segments.append(top_segment[0])
-      semantic_matches["TopSegment"] = top_segments
-      log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
-
-
-  full_reranked_results = []
-  formatted_input_for_model = None  # Initialize to None before the if statement
-  if perform_reranking:
-    if not search_results.empty or not semantic_matches.empty:
-        if isinstance(search_results, list): # double check if this is a list
-          search_results = pd.DataFrame(search_results) # and then convert to dataframe
-
-        if not search_results.empty:
-          search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
-        else:
-          search_results = pd.DataFrame(columns=['text_id'])
-
-        semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
-        semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
-
-
-        if search_results.empty:
-            deduplicated_results = semantic_matches
-        else:
-            deduplicated_results = remove_duplicates(search_results, semantic_matches)
-
-        all_combined_data = []
-
-        for index, result in deduplicated_results.iterrows():
-            if not search_results.empty and result.text_id in search_results.text_id.values and perform_keyword_search:
-                combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
-                all_combined_data.append(combined_data)
-            elif not semantic_matches.empty and result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                segments = segment_text(result.full_text)
-                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                top_segment = max(segment_scores, key=lambda x: x[1])
-                combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
-                all_combined_data.append(combined_data)
+    semantic_matches = pd.DataFrame()
+    if perform_semantic_search:
+        embedding_size = 1536
+        df = pd.read_csv(lincoln_speeches_embedded)
+        df['full_text'] = df['combined'].apply(extract_full_text)
         try:
-            if all_combined_data:
-                reranked_response = co.rerank(
-                    model='rerank-english-v2.0',
-                    query=user_query,
-                    documents=all_combined_data,
-                    top_n=10
-                )
-
-
-                for idx, result in enumerate(reranked_response.results):
-                  combined_data = result.document
-                  data_parts = combined_data['text'].split("|")
-                  if len(data_parts) >= 4:
-                      search_type, text_id_part, summary, quote = data_parts
-                      text_id = str(text_id_part.split(":")[-1].strip())
-                      summary = summary.strip()
-                      quote = quote.strip()
-                      text_id_str = f"Text #: {text_id}"
-                      source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-                      full_reranked_results.append({
-                          'Rank': idx + 1,
-                          'Search Type': search_type,
-                          'Text ID': text_id,
-                          'Source': source,
-                          'Summary': summary,
-                          'Key Quote': quote,
-                          'Relevance Score': result.relevance_score
-                      })
-
-            else:
-                full_reranked_results = [] # Handle case where no data is present
-
+          df['embedding'] = df['full_text'].apply(lambda x: get_embedding(x) if x else np.zeros(embedding_size))
         except Exception as e:
-                st.error(f"Error in reranking: {e}")
-                full_reranked_results = [] # handle the error case
+           st.error(f"Error getting embeddings: {e}")
+           return {
+            'initial_answer': initial_answer,
+            'search_results': search_results,
+            'semantic_matches': pd.DataFrame(),
+            'full_reranked_results': [],
+            'model_output': {},
+            'keyword_counts': 0,
+            'keyword_hits': 0,
+            'keyword_precision': 0,
+            'keyword_recall': 0,
+            'semantic_hits': 0,
+            'semantic_precision': 0,
+            'semantic_recall': 0,
+            'rerank_hits': 0,
+            'rerank_precision': 0,
+            'rerank_avg_rank': None,
+             'llm_eval': {}
+             }
+        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(get_source_and_summary))
+        try:
+          semantic_matches, user_query_embedding = search_text(df, user_query + initial_answer, n=5)
+        except Exception as e:
+           st.error(f"Error with semantic search: {e}")
+           return {
+            'initial_answer': initial_answer,
+            'search_results': search_results,
+            'semantic_matches': pd.DataFrame(),
+            'full_reranked_results': [],
+            'model_output': {},
+            'keyword_counts': 0,
+            'keyword_hits': 0,
+            'keyword_precision': 0,
+            'keyword_recall': 0,
+            'semantic_hits': 0,
+            'semantic_precision': 0,
+            'semantic_recall': 0,
+            'rerank_hits': 0,
+            'rerank_precision': 0,
+            'rerank_avg_rank': None,
+             'llm_eval': {}
+            }
+        top_segments = []
 
-        if full_reranked_results:
-           reranked_df = pd.DataFrame(full_reranked_results)
-           log_reranking_results(reranking_results_logger, reranked_df, user_query)
-        else:
-            formatted_input_for_model = None # handle the case where there are no reranking results
+        for idx, row in semantic_matches.iterrows():
+          segments = segment_text(row['full_text'])
+          segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+          top_segment = max(segment_scores, key=lambda x: x[1])
+          top_segments.append(top_segment[0])
+        semantic_matches["TopSegment"] = top_segments
+        log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer)
+
+
+    full_reranked_results = []
+    formatted_input_for_model = None  # Initialize to None before the if statement
+    if perform_reranking:
+      if not search_results.empty or not semantic_matches.empty:
+          if isinstance(search_results, list):
+            search_results = pd.DataFrame(search_results)
+
+          if not search_results.empty:
+            search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+          else:
+            search_results = pd.DataFrame(columns=['text_id'])
+
+          semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+          semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
+
+
+          if search_results.empty:
+              deduplicated_results = semantic_matches
+          else:
+              deduplicated_results = remove_duplicates(search_results, semantic_matches)
+
+          all_combined_data = []
+
+          for index, result in deduplicated_results.iterrows():
+            if not search_results.empty and result.text_id in search_results.text_id.values and perform_keyword_search:
+                  combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                  all_combined_data.append(combined_data)
+            elif not semantic_matches.empty and result.text_id in semantic_matches.text_id.values and perform_semantic_search:
+                  segments = segment_text(result.full_text)
+                  segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                  top_segment = max(segment_scores, key=lambda x: x[1])
+                  combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
+                  all_combined_data.append(combined_data)
+
+          try:
+              if all_combined_data:
+                  reranked_response = co.rerank(
+                      model='rerank-english-v2.0',
+                      query=user_query,
+                      documents=all_combined_data,
+                      top_n=10
+                  )
+
+
+                  for idx, result in enumerate(reranked_response.results):
+                      combined_data = result.document
+                      data_parts = combined_data['text'].split("|")
+                      if len(data_parts) >= 4:
+                          search_type, text_id_part, summary, quote = data_parts
+                          text_id = str(text_id_part.split(":")[-1].strip())
+                          summary = summary.strip()
+                          quote = quote.strip()
+                          text_id_str = f"Text #: {text_id}"
+                          source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
+                          full_reranked_results.append({
+                              'Rank': idx + 1,
+                              'Search Type': search_type,
+                              'Text ID': text_id,
+                              'Source': source,
+                              'Summary': summary,
+                              'Key Quote': quote,
+                              'Relevance Score': result.relevance_score
+                          })
+              else:
+                  full_reranked_results = [] # Handle case where no data is present
+
+          except Exception as e:
+              st.error(f"Error in reranking: {e}")
+              full_reranked_results = [] # handle the error case
+
+          if full_reranked_results:
+             reranked_df = pd.DataFrame(full_reranked_results)
+             log_reranking_results(reranking_results_logger, reranked_df, user_query)
+             formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
+      else:
+        formatted_input_for_model = None # if no results then don't call second model
     else:
-      formatted_input_for_model = None
-  else:
-    formatted_input_for_model = None
+      formatted_input_for_model = None # if reranking is turned off, then don't call the second model
 
-  if formatted_input_for_model:
-      messages_for_second_model = [
-          {"role": "system", "content": response_prompt},
-          {"role": "user", "content": f"User Query: {user_query}\n\n"
-                                      f"Initial Answer: {initial_answer}\n\n"
-                                      f"{formatted_input_for_model}"}
-      ]
-      try:
-            second_model_response = client.chat.completions.create(
+
+    if formatted_input_for_model:
+        print(f"Formatted Input for Nicolay: {formatted_input_for_model}")  # Log formatted input
+        messages_for_second_model = [
+            {"role": "system", "content": response_prompt},
+            {"role": "user", "content": f"User Query: {user_query}\n\n"
+                                        f"Initial Answer: {initial_answer}\n\n"
+                                        f"{formatted_input_for_model}"}
+        ]
+        try:
+              second_model_response = client.chat.completions.create(
                 model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
-                messages=messages_for_second_model,
-                temperature=0,
-                max_tokens=2000,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0
-            )
-            response_content = second_model_response.choices[0].message.content
-            if response_content:
+                  messages=messages_for_second_model,
+                  temperature=0,
+                  max_tokens=2000,
+                  top_p=1,
+                  frequency_penalty=0,
+                  presence_penalty=0
+              )
+              response_content = second_model_response.choices[0].message.content
+              if response_content:
                 try:
                     model_output = json.loads(response_content)
                     doc_match_counter = 0
                     highlight_success_dict = {}
                     highlight_style = """
-                                  <style>
-                                  mark {
+                                <style>
+                                mark {
                                     background-color: #90ee90;
                                     color: black;
-                                  }
-                                  </style>
-                              """
+                                }
+                                </style>
+                            """
                     if "Match Analysis" in model_output:
                       speech = None # Ensure 'speech' is initialized before the loop.
                       for match_key, match_info in model_output["Match Analysis"].items():
@@ -794,7 +794,7 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
                           if speech:
                               formatted_full_text = speech['full_text'].replace("\\n", "<br>")
                               if key_quote in speech['full_text']:
-                                 formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
+                                formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
                               else:
                                   formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
                                   formatted_full_text = formatted_full_text.replace("\\n", "<br>")
@@ -803,45 +803,43 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
                 except (json.JSONDecodeError, KeyError) as e:
                      st.error(f"Error parsing or accessing JSON response from Nicolay: {e}")
                      model_output = {}
+              else:
+                  model_output = {}
+        except Exception as e:
+           st.error(f"Error with Nicolay Model API Call {e}")
+           model_output = {}
+    else:
+           model_output = {} # ensure that model_output is defined even if there are no reranking results.
 
-            else:
-                model_output = {}
-      except Exception as e:
-         st.error(f"Error with Nicolay Model API Call {e}")
-         model_output = {}
-  else:
-         model_output = {}
-
-  # Track performance metrics here using defined functions
-   # Track performance metrics here using defined functions
-  keyword_counts, keyword_hits, keyword_precision, keyword_recall = track_keyword_success(hays_data=[hays_data], keyword_results=keyword_results_df, nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
-  semantic_hits, semantic_precision, semantic_recall = track_semantic_success(semantic_results=semantic_results_df.to_dict(orient='records'), nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
-  rerank_hits, rerank_precision, rerank_avg_rank = track_rerank_success(rerank_results=reranking_results_df.to_dict(orient='records'), query=user_query, ideal_documents=ideal_documents)
-  #LLM Eval output
-  if model_output:
-        llm_eval = evaluate_nicolay_output(user_query, initial_answer, formatted_input_for_model, model_output.get('FinalAnswer', {}), llm_eval_prompt)
-  else:
-        llm_eval = {}
+    # Track performance metrics here using defined functions
+    keyword_counts, keyword_hits, keyword_precision, keyword_recall = track_keyword_success(hays_data=[hays_data], keyword_results=keyword_results_df, nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
+    semantic_hits, semantic_precision, semantic_recall = track_semantic_success(semantic_results=semantic_results_df.to_dict(orient='records'), nicolay_data=nicolay_results_df.to_dict(orient='records'), query=user_query)
+    rerank_hits, rerank_precision, rerank_avg_rank = track_rerank_success(rerank_results=reranking_results_df.to_dict(orient='records'), query=user_query, ideal_documents=ideal_documents)
+    #LLM Eval output
+    if model_output:
+          llm_eval = evaluate_nicolay_output(user_query, initial_answer, formatted_input_for_model, model_output.get('FinalAnswer', {}), llm_eval_prompt)
+    else:
+          llm_eval = {}
 
 
-  return {
-      'initial_answer': initial_answer,
-      'search_results': search_results,
-      'semantic_matches': semantic_matches,
-      'full_reranked_results': full_reranked_results,
-      'model_output': model_output,
-      'keyword_counts': keyword_counts,
-      'keyword_hits': keyword_hits,
-      'keyword_precision': keyword_precision,
-      'keyword_recall': keyword_recall,
-      'semantic_hits': semantic_hits,
-      'semantic_precision': semantic_precision,
-      'semantic_recall': semantic_recall,
-      'rerank_hits': rerank_hits,
-      'rerank_precision': rerank_precision,
-      'rerank_avg_rank': rerank_avg_rank,
-      'llm_eval': llm_eval
-      }
+    return {
+        'initial_answer': initial_answer,
+        'search_results': search_results,
+        'semantic_matches': semantic_matches,
+        'full_reranked_results': full_reranked_results,
+        'model_output': model_output,
+        'keyword_counts': keyword_counts,
+        'keyword_hits': keyword_hits,
+        'keyword_precision': keyword_precision,
+        'keyword_recall': keyword_recall,
+        'semantic_hits': semantic_hits,
+        'semantic_precision': semantic_precision,
+        'semantic_recall': semantic_recall,
+        'rerank_hits': rerank_hits,
+        'rerank_precision': rerank_precision,
+        'rerank_avg_rank': rerank_avg_rank,
+        'llm_eval': llm_eval
+        }
 
 # Streamlit App
 st.title("Nicolay RAG Evaluation")

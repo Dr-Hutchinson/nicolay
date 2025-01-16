@@ -71,6 +71,12 @@ def log_keyword_search_results(keyword_results_logger: DataLogger, search_result
         }
         keyword_results_logger.record_api_outputs(record)
 
+        # 2) Also append to the in-memory DataFrame
+        new_row_df = pd.DataFrame([record])
+        keyword_results_df = pd.concat([keyword_results_df, new_row_df], ignore_index=True)
+
+    return keyword_results_df
+
 def log_semantic_search_results(semantic_results_logger: DataLogger, semantic_matches: pd.DataFrame, initial_answer: str) -> None:
 
     now = dt.now()
@@ -124,7 +130,8 @@ def log_nicolay_model_output(nicolay_data_logger: DataLogger, model_output: Dict
         match_data[match_key] = "; ".join(match_info)
 
         if 'Text ID' in match_details:
-            formatted_text_id = f"Text #: {match_details.get('Text ID')}"
+            #formatted_text_id = f"Text #: {match_details.get('Text ID')}"
+            formatted_text_id = str(match_details.get('Text ID'))
             speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
             if speech:
               highlight_success_dict[match_key] = highlight_key_quote(speech['full_text'], match_details.get('Key Quote', "")) != speech['full_text']
@@ -257,7 +264,8 @@ def compare_segments_with_query_parallel(segments: List[str], query_embedding: n
 
 # function for loading JSON 'text_id' for comparsion for semantic search results
 def get_source_and_summary(text_id: str) -> Tuple[str, str]:
-  text_id_str = f"Text #: {text_id}"
+  #text_id_str = f"Text #: {text_id}"
+  text_id_str = str(text_id)
   return lincoln_dict.get(text_id_str, {}).get('source'), lincoln_dict.get(text_id_str, {}).get('summary')
 
 # keyword text segment - 0.1
@@ -412,12 +420,12 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
 
     kw_text_ids = set()
     for idx, kw_result in keyword_results.iterrows():
-        if kw_result['user_query'] == query:
+        if kw_result['UserQuery'] == query:
             kw_text_ids.add(kw_result['text_id'])
 
     final_text_ids = set()
     for entry in nicolay_data:
-        if isinstance(entry, dict) and entry.get('user_query') == query:
+        if isinstance(entry, dict) and entry.get('UserQuery') == query:
             for match_key, match_value in entry.items():
                 if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
                     final_text_ids.add(match_value['Text ID'])
@@ -439,12 +447,12 @@ def track_keyword_success(hays_data: List[Dict], keyword_results: pd.DataFrame, 
 def track_semantic_success(semantic_results: List[Dict], nicolay_data: List[Dict], query: str) -> Tuple[int, float, float]:
   sem_text_ids = set()
   for sem_result in semantic_results:
-    if sem_result['user_query'] == query:
+    if sem_result['UserQuery'] == query:
       sem_text_ids.add(str(sem_result['text_id']))
 
   final_text_ids = set()
   for entry in nicolay_data:
-    if isinstance(entry, dict) and entry.get('user_query') == query:
+    if isinstance(entry, dict) and entry.get('UserQuery') == query:
         for match_key, match_value in entry.items():
             if match_key.startswith('Match') and isinstance(match_value, dict) and 'Text ID' in match_value:
                 final_text_ids.add(str(match_value['Text ID']))
@@ -466,7 +474,7 @@ def track_rerank_success(rerank_results: List[Dict], query: str, ideal_documents
     st.write(f"Ideal documents for the query: {ideal_documents}")
     top_3_ids = []
     for idx, result in enumerate(rerank_results):
-        if idx < 3 and result['user_query'] == query:
+        if idx < 3 and result['UserQuery'] == query:
             top_3_ids.append(str(result['text_id']))
     st.write(f"Top 3 ids {top_3_ids}")
 
@@ -605,16 +613,29 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
 
     search_results = pd.DataFrame()
     if perform_keyword_search:
-      search_results = search_with_dynamic_weights_expanded(
+      search_results_list = search_with_dynamic_weights_expanded(
           user_keywords=weighted_keywords,
           json_data=keyword_data,
           year_keywords=year_keywords,
           text_keywords=text_keywords,
           top_n_results=5
         )
-      if search_results: # the return is a list
-        search_results = pd.DataFrame(search_results) # convert to dataframe
-        log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+      if search_results_list: # the return is a list
+        search_results = pd.DataFrame(search_results_list) # convert to dataframe
+        #log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords)
+        # IMPORTANT: store the updated DataFrame
+        #global keyword_results_df  # or handle scoping as needed
+        keyword_results_df = log_keyword_search_results(
+            keyword_results_logger=keyword_results_logger,
+            search_results=search_results,
+            user_query=user_query,
+            initial_answer=initial_answer,
+            model_weighted_keywords=model_weighted_keywords,
+            model_year_keywords=model_year_keywords,
+            model_text_keywords=model_text_keywords,
+            keyword_results_df=keyword_results_df  # pass in our current local DataFrame
+        )
+
 
     semantic_matches = pd.DataFrame()
     if perform_semantic_search:
@@ -729,7 +750,8 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
                           text_id = str(text_id_part.split(":")[-1].strip())
                           summary = summary.strip()
                           quote = quote.strip()
-                          text_id_str = f"Text #: {text_id}"
+                          #text_id_str = f"Text #: {text_id}"
+                          text_id_str = str(text_id)
                           source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
                           full_reranked_results.append({
                               'Rank': idx + 1,
@@ -793,7 +815,8 @@ def run_rag_process(user_query: str, ideal_documents: List[str], perform_keyword
                       speech = None # Ensure 'speech' is initialized before the loop.
                       for match_key, match_info in model_output["Match Analysis"].items():
                           text_id = match_info.get("Text ID")
-                          formatted_text_id = f"Text #: {text_id}"
+                          #formatted_text_id = f"Text #: {text_id}"
+                          formatted_text_id = str(text_id)
                           key_quote = match_info.get("Key Quote", "")
                           speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None) # speech is redefined
                           doc_match_counter += 1

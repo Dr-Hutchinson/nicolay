@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
+import pygsheets
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger
 from modules.semantic_search import semantic_search
@@ -13,6 +14,13 @@ st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 
 # Load prompts
 load_prompts()
+
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
+
+gc = pygsheets.authorize(custom_credentials=credentials)
 
 # Google Sheets setup
 st.write("Loading Google Sheets data...")

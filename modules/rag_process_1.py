@@ -132,7 +132,8 @@ class RAGProcess:
                         })
                         #st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
                     else:
-                        st.write(f"No keywords found for entry {entry['text_id']}")
+                        #st.write(f"No keywords found for entry {entry['text_id']}")
+                        st.write("Ignore")
             else:
                 st.write(f"Skipping entry without full_text or source: {entry}")
 

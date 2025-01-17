@@ -10,10 +10,14 @@ from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 import pygsheets
 from google.oauth2 import service_account
+import logging
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 st.title("RAG Benchmarking and Evaluation Module")
+
+# Suppress debug messages globally
+logging.basicConfig(level=logging.INFO)
 
 # Google Sheets Client Initialization
 credentials = service_account.Credentials.from_service_account_info(

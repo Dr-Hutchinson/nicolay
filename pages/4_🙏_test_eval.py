@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import pygsheets
+from google.oauth2 import service_account
 from modules.rag_process import RAGProcess
 from modules.data_logging import DataLogger
 from modules.semantic_search import semantic_search
@@ -14,24 +15,25 @@ st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 
 # Load prompts
 load_prompts()
+st.write("Prompts loaded")
 
-#scope = ['https://spreadsheets.google.com/feeds',
-#             'https://www.googleapis.com/auth/drive']
-#credentials = service_account.Credentials.from_service_account_info(
-#                    st.secrets["gcp_service_account"], scopes = scope)
+scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+credentials = service_account.Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes = scope)
 
-#gc = pygsheets.authorize(custom_credentials=credentials)
+gc = pygsheets.authorize(custom_credentials=credentials)
 
 # Google Sheets setup
-st.write("Loading Google Sheets data...")
-try:
+#st.write("Loading Google Sheets data...")
+#try:
     # Load benchmark questions from Google Sheet
-    credentials = st.secrets["gcp_service_account"]
-    sheet_name = "benchmark_questions"
-    benchmark_data = DataLogger(gc=None, sheet_name=sheet_name).sheet.get_as_df()
-    st.write("Benchmark questions loaded successfully.")
-except Exception as e:
-    st.error(f"Error loading Google Sheets data: {e}")
+#    credentials = st.secrets["gcp_service_account"]
+#    sheet_name = "benchmark_questions"
+#    benchmark_data = DataLogger(gc=None, sheet_name=sheet_name).sheet.get_as_df()
+#    st.write("Benchmark questions loaded successfully.")
+#except Exception as e:
+#    st.error(f"Error loading Google Sheets data: {e}")
 
 # Initialize RAG process
 rag = RAGProcess(
@@ -41,6 +43,8 @@ rag = RAGProcess(
     hays_data_logger=DataLogger(gc=None, sheet_name='hays_data'),
     keyword_results_logger=DataLogger(gc=None, sheet_name='keyword_search_results')
 )
+
+st.write("APIs/Datalogging engaged")
 
 # Process benchmark questions
 for idx, row in benchmark_data.iterrows():

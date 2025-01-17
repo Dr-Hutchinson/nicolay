@@ -31,6 +31,12 @@ semantic_results_logger = DataLogger(gc=gc, sheet_name="semantic_search_results"
 # Load Prompts
 load_prompts()
 
+# Initialize session state variables
+if 'messages' not in st.session_state:
+    st.session_state['messages'] = []  # Initialize as an empty list or the expected default value
+if 'response_model_system_prompt' not in st.session_state:
+    st.session_state['response_model_system_prompt'] = load_prompts()['response_prompt']  # Ensure prompt is loaded
+
 # Load Benchmark Questions from Google Sheets
 try:
     benchmark_sheet = gc.open("benchmark_questions").sheet1
@@ -39,6 +45,11 @@ try:
 except Exception as e:
     st.error(f"Error loading benchmark questions: {e}")
 
+# Preprocess the 'ideal_documents' column to handle comma-separated values
+benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
+    lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+)
+
 # Initialize RAG Process
 rag = RAGProcess(
     openai_api_key=st.secrets["openai_api_key"],
@@ -46,12 +57,6 @@ rag = RAGProcess(
     gcp_service_account=st.secrets["gcp_service_account"],
     hays_data_logger=hays_data_logger,
     keyword_results_logger=keyword_results_logger
-)
-
-# Iterate Through Benchmark Questions
-# Preprocess the 'ideal_documents' column to handle comma-separated values
-benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
-    lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
 )
 
 # Iterate Through Benchmark Questions
@@ -108,7 +113,6 @@ for idx, row in benchmark_data.iterrows():
 
     except Exception as e:
         st.error(f"Error processing query {idx + 1}: {e}")
-
 
 # Summary and Visualization (Future Implementation)
 st.write("### Summary and Visualization")

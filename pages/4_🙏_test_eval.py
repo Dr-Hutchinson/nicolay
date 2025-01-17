@@ -49,13 +49,20 @@ rag = RAGProcess(
 )
 
 # Iterate Through Benchmark Questions
+# Preprocess the 'ideal_documents' column to handle comma-separated values
+benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
+    lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+)
+
+# Iterate Through Benchmark Questions
 for idx, row in benchmark_data.iterrows():
     st.subheader(f"Benchmark Question {idx + 1}")
     user_query = row["question"]
-    expected_documents = json.loads(row["ideal_documents"])
+    expected_documents = row["ideal_documents"]  # Use preprocessed list
 
     try:
         st.write(f"Processing query: {user_query}")
+
         # Execute RAG Process
         rag_result = rag.run_rag_process(user_query)
 
@@ -94,13 +101,14 @@ for idx, row in benchmark_data.iterrows():
         # Log Results
         nicolay_data_logger.record_api_outputs({
             'Benchmark Question': user_query,
-            'Expected Documents': expected_documents,
+            'Ideal Documents': expected_documents,
             'Matched Documents': top_reranked_ids,
             'LLM Evaluation': llm_evaluation
         })
 
     except Exception as e:
         st.error(f"Error processing query {idx + 1}: {e}")
+
 
 # Summary and Visualization (Future Implementation)
 st.write("### Summary and Visualization")

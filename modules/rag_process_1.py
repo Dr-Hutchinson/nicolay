@@ -156,14 +156,32 @@ class RAGProcess:
             segment_embeddings = [future.result() for future in futures]
             return [(segments[i], self.cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
 
-    def remove_duplicates(self, search_results, semantic_matches):
-        combined_results = pd.concat([search_results, semantic_matches])
+    #def remove_duplicates(self, search_results, semantic_matches):
+    #    combined_results = pd.concat([search_results, semantic_matches])
         #st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
 
-        deduplicated_results = combined_results.drop_duplicates(subset='text_id')
+    #    deduplicated_results = combined_results.drop_duplicates(subset='text_id')
         #st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
+    #    return deduplicated_results
+
+    def remove_duplicates(self, search_results, semantic_matches):
+        # Combine results from search and semantic matches
+        combined_results = pd.concat([search_results, semantic_matches], ignore_index=True)
+
+        # Ensure both datasets have a 'text_id' column and check for duplicates
+        if 'text_id' not in combined_results.columns:
+            raise ValueError("The 'text_id' column is missing from combined results.")
+
+        # Drop duplicates based on 'text_id' while keeping the first occurrence
+        deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
+
+        # If additional columns like 'key_quote' or 'summary' should also contribute to deduplication,
+        # you can include them in the subset parameter, e.g., subset=['text_id', 'key_quote', 'summary']
+
         return deduplicated_results
+
+
 
 
     def rerank_results(self, user_query, combined_data):
@@ -378,7 +396,9 @@ class RAGProcess:
                 # If all key_quotes are NaN, return the first entry
                 return group.iloc[0]
 
-            deduplicated_results = combined_results.groupby('text_id').apply(deduplicate_with_key_quote).reset_index(drop=True)
+            #deduplicated_results = combined_results.groupby('text_id').apply(deduplicate_with_key_quote).reset_index(drop=True)
+            # Deduplicate combined results using the standardized method
+            deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Debugging: Display deduplicated results
             #st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")

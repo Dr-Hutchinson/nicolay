@@ -213,7 +213,7 @@ class RAGProcess:
                         'Relevance Score': result.relevance_score
                     })
                 else:
-                    #st.write(f"Data parts length is less than expected: {data_parts}")  # Debugging statement
+                    st.write(f"Data parts length is less than expected: {data_parts}")  # Debugging statement
 
             #st.write(f"Full reranked results: {full_reranked_results}")  # Debugging statement
             return full_reranked_results

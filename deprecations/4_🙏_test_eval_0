@@ -106,9 +106,9 @@ if st.button("Run Benchmark Question"):
         st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
 
         # Display Final Response
-        #st.write("### Nicolay's Final Response")
+        st.write("### Nicolay's Final Response")
         final_response = rag_result["response"]
-        #st.markdown(final_response)
+        st.markdown(final_response)
 
         # Evaluate Nicolay Response with LLM
         evaluation_prompt = st.session_state['response_model_system_prompt']
@@ -116,15 +116,13 @@ if st.button("Run Benchmark Question"):
         st.write("### LLM Evaluation of Nicolay's Response")
         st.json(llm_evaluation)
 
-        # Fix logging for proper Google Sheet
-
         # Log Results
-        #nicolay_data_logger.record_api_outputs({
-        #    'Benchmark Question': user_query,
-        #    'Ideal Documents': expected_documents,
-        #    'Matched Documents': top_reranked_ids,
-        #    'LLM Evaluation': llm_evaluation
-        #})
+        nicolay_data_logger.record_api_outputs({
+            'Benchmark Question': user_query,
+            'Ideal Documents': expected_documents,
+            'Matched Documents': top_reranked_ids,
+            'LLM Evaluation': llm_evaluation
+        })
 
     except Exception as e:
         st.error(f"Error processing query {selected_question_index + 1}: {e}")

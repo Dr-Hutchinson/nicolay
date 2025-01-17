@@ -52,7 +52,7 @@ rag = RAGProcess(
 for idx, row in benchmark_data.iterrows():
     st.subheader(f"Benchmark Question {idx + 1}")
     user_query = row["question"]
-    expected_documents = json.loads(row["expected_documents"])
+    expected_documents = json.loads(row["ideal_documents"])
 
     try:
         st.write(f"Processing query: {user_query}")

@@ -344,17 +344,17 @@ class RAGProcess:
             )
 
             search_results_df = pd.DataFrame(search_results)
-            #st.write(f"Search results: {search_results_df}")  # Debugging statement
+            st.write(f"Search results: {search_results_df}")  # Debugging statement
 
             # Ensure key_quote column exists in keyword search results
             if 'key_quote' not in search_results_df.columns:
                 search_results_df['key_quote'] = ''
 
             # Debugging: Verify key_quote values in keyword search results
-            #st.write(f"Keyword search results after populating key_quote: {search_results_df[['text_id', 'key_quote']]}")
+            st.write(f"Keyword search results after populating key_quote: {search_results_df[['text_id', 'key_quote']]}")
 
             semantic_matches, user_query_embedding = self.search_text(df, user_query + initial_answer, n=5)
-            #st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
+            st.write(f"Semantic matches: {semantic_matches}")  # Debugging statement
 
             semantic_matches.rename(columns={df.index.name: 'text_id'}, inplace=True)
 

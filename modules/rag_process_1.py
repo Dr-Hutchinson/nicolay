@@ -401,7 +401,7 @@ class RAGProcess:
             deduplicated_results = self.remove_duplicates(search_results_df, semantic_matches)
 
             # Debugging: Display deduplicated results
-            #st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")
+            st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:

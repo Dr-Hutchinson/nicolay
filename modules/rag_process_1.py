@@ -169,9 +169,10 @@ class RAGProcess:
         # Combine results
         combined_results = pd.concat([search_results, semantic_matches], ignore_index=True)
 
-        # Ensure 'text_id' column exists
+        # Ensure 'text_id' exists and clean its values
         if 'text_id' not in combined_results.columns:
             raise ValueError("'text_id' column is missing from the combined results.")
+        combined_results['text_id'] = combined_results['text_id'].str.strip()
 
         # Handle missing or NaN 'key_quote' values
         if 'key_quote' not in combined_results.columns:

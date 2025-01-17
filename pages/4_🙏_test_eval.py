@@ -12,12 +12,12 @@ import pygsheets
 from google.oauth2 import service_account
 import logging
 
+# Suppress debug messages globally
+logging.basicConfig(level=logging.WARNING)
+
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 st.title("RAG Benchmarking and Evaluation Module")
-
-# Suppress debug messages globally
-logging.basicConfig(level=logging.INFO)
 
 # Google Sheets Client Initialization
 credentials = service_account.Credentials.from_service_account_info(
@@ -54,22 +54,31 @@ benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
     lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
 )
 
-# Initialize RAG Process
-rag = RAGProcess(
-    openai_api_key=st.secrets["openai_api_key"],
-    cohere_api_key=st.secrets["cohere_api_key"],
-    gcp_service_account=st.secrets["gcp_service_account"],
-    hays_data_logger=hays_data_logger,
-    keyword_results_logger=keyword_results_logger
+# Add dropdown to select a benchmark question
+selected_question_index = st.selectbox(
+    "Select a Benchmark Question:",
+    options=range(len(benchmark_data)),
+    format_func=lambda idx: f"{idx + 1}: {benchmark_data.iloc[idx]['question']}"
 )
 
-# Iterate Through Benchmark Questions
-for idx, row in benchmark_data.iterrows():
-    st.subheader(f"Benchmark Question {idx + 1}")
+# Add a button to process the selected question
+if st.button("Run Benchmark Question"):
+    # Get the selected question
+    row = benchmark_data.iloc[selected_question_index]
     user_query = row["question"]
     expected_documents = row["ideal_documents"]  # Use preprocessed list
 
+    # Initialize RAG Process
+    rag = RAGProcess(
+        openai_api_key=st.secrets["openai_api_key"],
+        cohere_api_key=st.secrets["cohere_api_key"],
+        gcp_service_account=st.secrets["gcp_service_account"],
+        hays_data_logger=hays_data_logger,
+        keyword_results_logger=keyword_results_logger
+    )
+
     try:
+        st.subheader(f"Benchmark Question {selected_question_index + 1}")
         st.write(f"Processing query: {user_query}")
 
         # Execute RAG Process
@@ -116,7 +125,7 @@ for idx, row in benchmark_data.iterrows():
         })
 
     except Exception as e:
-        st.error(f"Error processing query {idx + 1}: {e}")
+        st.error(f"Error processing query {selected_question_index + 1}: {e}")
 
 # Summary and Visualization (Future Implementation)
 st.write("### Summary and Visualization")

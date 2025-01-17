@@ -7,6 +7,8 @@ import streamlit as st
 
 class DataLogger:
     def __init__(self, gc, sheet_name):
+        if gc is None:
+            raise ValueError("Google Sheets client (gc) is not initialized.")
         self.gc = gc
         self.sheet = self.gc.open(sheet_name).sheet1
 

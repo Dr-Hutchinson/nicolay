@@ -24,6 +24,11 @@ credentials = service_account.Credentials.from_service_account_info(
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 
+# Pass the initialized client to DataLogger
+hays_data_logger=hays_data_logger,
+keyword_results_logger=keyword_results_logger
+
+
 # Google Sheets setup
 #st.write("Loading Google Sheets data...")
 #try:

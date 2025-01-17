@@ -61,9 +61,9 @@ class RAGProcess:
         max_weight = max(inverse_weights.values())
         normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
 
-        st.write(f"User keywords: {user_keywords}")  # Debugging statement
-        st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
-        st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
+        #st.write(f"User keywords: {user_keywords}")  # Debugging statement
+        #st.write(f"Inverse weights: {inverse_weights}")  # Debugging statement
+        #st.write(f"Normalized weights: {normalized_weights}")  # Debugging statement
 
         return self.find_instances_expanded_search(
             dynamic_weights=normalized_weights,
@@ -130,7 +130,7 @@ class RAGProcess:
                             "weighted_score": total_dynamic_weighted_score,
                             "keyword_counts": keyword_counts
                         })
-                        st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
+                        #st.write(f"Extracted key_quote: {formatted_snippet}")  # Debugging statement
                     else:
                         st.write(f"No keywords found for entry {entry['text_id']}")
             else:
@@ -157,10 +157,10 @@ class RAGProcess:
 
     def remove_duplicates(self, search_results, semantic_matches):
         combined_results = pd.concat([search_results, semantic_matches])
-        st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
+        #st.write(f"Combined results before deduplication: {combined_results}")  # Debugging statement
 
         deduplicated_results = combined_results.drop_duplicates(subset='text_id')
-        st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
+        #st.write(f"Deduplicated results: {deduplicated_results}")  # Debugging statement
 
         return deduplicated_results
 
@@ -174,7 +174,7 @@ class RAGProcess:
                 for cd in combined_data
             ]
 
-            st.write(f"Combined data strings for reranking: {combined_data_strs}")  # Debugging statement
+            #st.write(f"Combined data strings for reranking: {combined_data_strs}")  # Debugging statement
 
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
@@ -186,7 +186,7 @@ class RAGProcess:
             full_reranked_results = []
             for idx, result in enumerate(reranked_response.results):
                 combined_data_text = result.document if isinstance(result.document, str) else result.document['text']
-                st.write(f"Reranked document text: {combined_data_text}")  # Debugging statement
+                #st.write(f"Reranked document text: {combined_data_text}")  # Debugging statement
 
                 data_parts = combined_data_text.split("|")
                 if len(data_parts) >= 4:
@@ -199,7 +199,7 @@ class RAGProcess:
                     summary = summary.replace("Summary:", "").strip()
                     quote = quote.replace("Key Quote:", "").strip()
 
-                    st.write(f"Extracted data - Search Type: {search_type}, Text ID: {text_id}, Summary: {summary}, Key Quote: {quote}")  # Debugging statement
+                    #st.write(f"Extracted data - Search Type: {search_type}, Text ID: {text_id}, Summary: {summary}, Key Quote: {quote}")  # Debugging statement
 
                     source = self.lincoln_dict.get(f"Text #: {text_id}", {}).get('source', 'Source information not available')
 
@@ -213,9 +213,9 @@ class RAGProcess:
                         'Relevance Score': result.relevance_score
                     })
                 else:
-                    st.write(f"Data parts length is less than expected: {data_parts}")  # Debugging statement
+                    #st.write(f"Data parts length is less than expected: {data_parts}")  # Debugging statement
 
-            st.write(f"Full reranked results: {full_reranked_results}")  # Debugging statement
+            #st.write(f"Full reranked results: {full_reranked_results}")  # Debugging statement
             return full_reranked_results
         except Exception as e:
             st.write(f"Rerank results error: {e}")
@@ -249,8 +249,8 @@ class RAGProcess:
             keyword_data = self.voyant_data
             df = self.lincoln_index_df
 
-            st.write(f"Type of lincoln_data: {type(lincoln_data)}")  # Debugging statement
-            st.write(f"Sample lincoln_data: {lincoln_data[:1]}")  # Debugging statement
+            #st.write(f"Type of lincoln_data: {type(lincoln_data)}")  # Debugging statement
+            #st.write(f"Sample lincoln_data: {lincoln_data[:1]}")  # Debugging statement
 
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
             self.lincoln_dict = lincoln_dict
@@ -367,7 +367,7 @@ class RAGProcess:
             combined_results = pd.concat([search_results_df, semantic_matches])
 
             # Debugging: Display combined results before deduplication
-            st.write(f"Combined results before deduplication: {combined_results[['text_id', 'key_quote']]}")
+            #st.write(f"Combined results before deduplication: {combined_results[['text_id', 'key_quote']]}")
 
             # Correct deduplication process to retain correct key_quote
             def deduplicate_with_key_quote(group):
@@ -380,7 +380,7 @@ class RAGProcess:
             deduplicated_results = combined_results.groupby('text_id').apply(deduplicate_with_key_quote).reset_index(drop=True)
 
             # Debugging: Display deduplicated results
-            st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")
+            #st.write(f"Deduplicated results: {deduplicated_results[['text_id', 'key_quote']]}")
 
             # Ensure any missing columns like 'quote' are added with default values
             if 'quote' not in deduplicated_results.columns:

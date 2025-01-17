@@ -166,20 +166,31 @@ class RAGProcess:
     #    return deduplicated_results
 
     def remove_duplicates(self, search_results, semantic_matches):
-        # Combine results from search and semantic matches
+        # Combine results
         combined_results = pd.concat([search_results, semantic_matches], ignore_index=True)
 
-        # Ensure both datasets have a 'text_id' column and check for duplicates
+        # Ensure 'text_id' column exists
         if 'text_id' not in combined_results.columns:
-            raise ValueError("The 'text_id' column is missing from combined results.")
+            raise ValueError("'text_id' column is missing from the combined results.")
 
-        # Drop duplicates based on 'text_id' while keeping the first occurrence
-        deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
+        # Handle missing or NaN 'key_quote' values
+        if 'key_quote' not in combined_results.columns:
+            combined_results['key_quote'] = ''
+        combined_results['key_quote'] = combined_results['key_quote'].fillna('')
 
-        # If additional columns like 'key_quote' or 'summary' should also contribute to deduplication,
-        # you can include them in the subset parameter, e.g., subset=['text_id', 'key_quote', 'summary']
+        # Group by 'text_id' and retain the row with the longest 'key_quote'
+        deduplicated_results = (
+            combined_results.loc[
+                combined_results.groupby('text_id')['key_quote'].apply(len).idxmax()
+            ]
+        ).reset_index(drop=True)
+
+        # Ensure other necessary columns like 'quote' are filled with defaults
+        if 'quote' not in deduplicated_results.columns:
+            deduplicated_results['quote'] = ''
 
         return deduplicated_results
+
 
 
 

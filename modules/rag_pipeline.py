@@ -102,9 +102,15 @@ def run_rag_pipeline(
         model_weighted_keywords = hay_output.get("weighted_keywords", {})
         model_year_keywords = hay_output.get("year_keywords", [])
         model_text_keywords = hay_output.get("text_keywords", [])
-    except:
-        st.error("Hay model output was not valid JSON.")
-        return {}
+    except JSONDecodeError as e:
+        st.error(f"Failed to parse JSON: {e}")
+        st.stop()
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
+        st.stop()
+    #except:
+    #    st.error("Hay model output was not valid JSON.")
+    #    return {}
 
     # Log the “Hay” data
     if hays_data_logger:

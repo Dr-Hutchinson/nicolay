@@ -21,7 +21,7 @@ from modules.semantic_search import (
     get_embedding,
 )
 from modules.misc_helpers import remove_duplicates, highlight_key_quote, get_source_and_summary
-from modules.reranker import rerank_results, format_reranked_results_for_model_input
+from modules.reranking import rerank_results, format_reranked_results_for_model_input
 
 # You might also import or pass in these clients, depending on your architecture:
 from openai import OpenAI

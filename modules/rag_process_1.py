@@ -219,12 +219,19 @@ class RAGProcess:
                 for cd in combined_data
             ]
 
+            unique_combined_data_strs = list(set(combined_data_strs))
+            st.write(f"Combined data size before deduplication: {len(combined_data_strs)}")
+            st.write(f"Combined data size after deduplication: {len(unique_combined_data_strs)}")
+
+
+
             #st.write(f"Combined data strings for reranking: {combined_data_strs}")  # Debugging statement
 
             reranked_response = self.cohere_client.rerank(
                 model='rerank-english-v2.0',
                 query=user_query,
-                documents=combined_data_strs,
+                #documents=combined_data_strs,
+                documents=unique_combined_data_strs,
                 top_n=10
             )
 
@@ -439,16 +446,17 @@ class RAGProcess:
             #    f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in semantic_matches.iterrows()
             #]
 
-            # Deduplicate semantic matches as well to avoid overlaps
             deduplicated_semantic_matches = self.remove_duplicates(pd.DataFrame(), semantic_matches)
 
-            # Combine deduplicated results
             all_combined_data = [
                 f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['key_quote']}" for idx, row in deduplicated_results.iterrows()
             ] + [
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in deduplicated_semantic_matches.iterrows()
             ]
 
+            st.write(f"Size of all_combined_data before reranking: {len(all_combined_data)}")
+            st.write("Contents of all_combined_data:")
+            st.write(all_combined_data)
 
 
             st.write(f"Duplicate removal and result combination took {time.time() - step_time:.2f} seconds.")
@@ -458,6 +466,10 @@ class RAGProcess:
             #st.write(f"Reranked results: {reranked_results}")  # Debugging statement
 
             reranked_results_df = pd.DataFrame(reranked_results)
+
+            st.write(f"Reranked Results Shape: {reranked_results_df.shape}")
+            st.write(f"Duplicate Entries in Reranked Results: {reranked_results_df.duplicated(subset='Text ID').sum()}")
+
 
             st.write(f"Reranking results took {time.time() - step_time:.2f} seconds.")
             step_time = time.time()

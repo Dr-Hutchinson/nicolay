@@ -9,12 +9,22 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import pygsheets
 import streamlit as st
-from modules.data_utils import load_lincoln_speech_corpus, load_voyant_word_counts, load_lincoln_index_embedded
-from modules.data_logging import DataLogger
+from modules.data_utils import (
+    load_lincoln_speech_corpus,
+    load_voyant_word_counts,
+    load_lincoln_index_embedded
+)
+from modules.data_logging import (
+    DataLogger,
+    log_keyword_search_results,
+    log_semantic_search_results,
+    log_reranking_results,
+    log_nicolay_model_output
+)
 import time
 
 class RAGProcess:
-    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger):
+    def __init__(self, openai_api_key, cohere_api_key, gcp_service_account, hays_data_logger, keyword_results_logger):
         # Initialize OpenAI and Cohere clients
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.cohere_client = cohere.Client(api_key=cohere_api_key)
@@ -24,13 +34,18 @@ class RAGProcess:
         credentials = service_account.Credentials.from_service_account_info(gcp_service_account, scopes=scope)
         self.gc = pygsheets.authorize(custom_credentials=credentials)
 
-        # Store the hays_data_logger
+        # Store loggers
         self.hays_data_logger = hays_data_logger
+        self.keyword_results_logger = keyword_results_logger
 
         # Load data using cached functions
         self.lincoln_data = load_lincoln_speech_corpus()
         self.voyant_data = load_voyant_word_counts()
         self.lincoln_index_df = load_lincoln_index_embedded()
+
+    def log_and_debug(self, logger_func, data, label):
+        logger_func(data)
+        st.write(f"{label}: {data}")
 
     def get_embedding(self, text, model="text-embedding-ada-002"):
         text = text.replace("\n", " ")
@@ -43,108 +58,94 @@ class RAGProcess:
         norm_vec2 = np.linalg.norm(vec2)
         return dot_product / (norm_vec1 * norm_vec2)
 
+    def search_with_dynamic_weights_expanded(self, user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5, lincoln_data=None):
+        # Calculate weights
+        total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
+        relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
+        inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
+        max_weight = max(inverse_weights.values())
+        normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
+
+        results = self.find_instances_expanded_search(
+            dynamic_weights=normalized_weights,
+            original_weights=user_keywords,
+            data=lincoln_data,
+            year_keywords=year_keywords,
+            text_keywords=text_keywords,
+            top_n=top_n_results
+        )
+        self.log_and_debug(log_keyword_search_results, results, "Keyword Search Results")
+        return results
+
+    def find_instances_expanded_search(self, dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
+        instances = []
+        for entry in data:
+            if 'full_text' in entry and 'source' in entry:
+                combined_text = f"{entry['full_text'].lower()} {entry.get('summary', '').lower()} {entry.get('keywords', '').lower()}"
+                total_score = sum(dynamic_weights.get(kw.lower(), 0) * combined_text.count(kw.lower()) for kw in original_weights)
+                if total_score > 0:
+                    instances.append({
+                        "text_id": entry['text_id'],
+                        "source": entry['source'],
+                        "summary": entry.get('summary', ''),
+                        "key_quote": combined_text[:300],
+                        "weighted_score": total_score
+                    })
+        instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+        return instances[:top_n]
+
     def remove_duplicates(self, combined_results):
-        """
-        Deduplicate combined search results.
-        Args:
-            combined_results (DataFrame): Combined results DataFrame.
-        Returns:
-            DataFrame: Deduplicated results with the highest-priority entries retained.
-        """
-        # Sort by priority (e.g., weighted_score > similarity) before deduplication
-        if 'weighted_score' in combined_results.columns:
-            combined_results = combined_results.sort_values(by='weighted_score', ascending=False)
-        elif 'similarities' in combined_results.columns:
-            combined_results = combined_results.sort_values(by='similarities', ascending=False)
-
-        # Deduplicate based on `text_id`, keeping the highest-priority row
         deduplicated = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
-
-        # Fill missing columns like `key_quote` and `summary` with defaults
-        deduplicated['key_quote'] = deduplicated.get('key_quote', '').fillna('')
-        deduplicated['summary'] = deduplicated.get('summary', '').fillna('')
+        st.write(f"Deduplicated Results: {deduplicated}")
         return deduplicated
 
     def rerank_results(self, user_query, combined_data):
-        """
-        Rerank results using a model.
-        Args:
-            user_query (str): User query.
-            combined_data (DataFrame): Combined and deduplicated results.
-        Returns:
-            DataFrame: Reranked results.
-        """
-        # Create standardized input strings for reranking
-        combined_data['rerank_input'] = combined_data.apply(
-            lambda row: f"{row.get('search_type', 'Unknown')}|Text ID: {row['text_id']}|Summary: {row['summary']}|Key Quote: {row['key_quote']}",
-            axis=1
-        )
-
-        # Ensure unique entries for reranking
-        unique_inputs = combined_data['rerank_input'].drop_duplicates().tolist()
-        st.write(f"Combined data size before reranking: {len(unique_inputs)}")
-
-        # Perform reranking
+        combined_data_strs = list(set(
+            f"{row['search_type']}|Text ID: {row['text_id']}|Summary: {row['summary']}|Key Quote: {row['key_quote']}"
+            for row in combined_data
+        ))
         reranked_response = self.cohere_client.rerank(
             model='rerank-english-v2.0',
             query=user_query,
-            documents=unique_inputs,
+            documents=combined_data_strs,
             top_n=10
         )
-
-        # Map reranked results back to the DataFrame
-        reranked_results = pd.DataFrame([
+        reranked_results = [
             {
                 "Rank": idx + 1,
-                "Text ID": result.document.split("|Text ID:")[1].split("|Summary:")[0].strip(),
-                "Summary": result.document.split("|Summary:")[1].split("|Key Quote:")[0].strip(),
-                "Key Quote": result.document.split("|Key Quote:")[1].strip(),
+                "Search Type": doc.split("|")[0],
+                "Text ID": doc.split("|")[1].replace("Text ID: ", ""),
+                "Summary": doc.split("|")[2].replace("Summary: ", ""),
+                "Key Quote": doc.split("|")[3].replace("Key Quote: ", ""),
                 "Relevance Score": result.relevance_score
             }
-            for idx, result in enumerate(reranked_response.results)
-        ])
+            for idx, (result, doc) in enumerate(zip(reranked_response.results, combined_data_strs))
+        ]
+        self.log_and_debug(log_reranking_results, reranked_results, "Reranked Results")
         return reranked_results
 
     def run_rag_process(self, user_query):
         try:
-            start_time = time.time()
+            lincoln_data = self.lincoln_data.to_dict('records')
+            df = self.lincoln_index_df
+            df['embedding'] = df['embedding'].apply(lambda x: list(map(float, x.strip("[]").split(","))))
 
-            # Step 1: Perform keyword and semantic searches
-            keyword_results = self.search_with_dynamic_weights_expanded(...)
-            semantic_matches, query_embedding = self.search_text(...)
+            keyword_results = self.search_with_dynamic_weights_expanded(
+                user_keywords=["freedom", "constitution"],
+                json_data=self.voyant_data.iloc[0],
+                lincoln_data=lincoln_data
+            )
+            semantic_results, query_embedding = self.search_text(df, user_query, n=5)
 
-            # Step 2: Combine and deduplicate results
-            combined_results = pd.concat([keyword_results, semantic_matches], ignore_index=True)
-            combined_results = self.remove_duplicates(combined_results)
+            combined_results = pd.concat([pd.DataFrame(keyword_results), semantic_results])
+            deduplicated_results = self.remove_duplicates(combined_results)
+            reranked_results = self.rerank_results(user_query, deduplicated_results.to_dict('records'))
 
-            # Step 3: Rerank combined results
-            reranked_results = self.rerank_results(user_query, combined_results)
-
-            # Step 4: Display reranked results
-            st.write(f"Final Reranked Results: {reranked_results}")
-            return reranked_results
-
+            return {
+                "keyword_results": keyword_results,
+                "semantic_results": semantic_results,
+                "reranked_results": reranked_results
+            }
         except Exception as e:
-            st.error(f"Error in RAG process: {e}")
+            st.write(f"Error in run_rag_process: {e}")
             raise
-
-# Helper Functions
-def segment_text(text, segment_size=100):
-    words = text.split()
-    return [' '.join(words[i:i+segment_size]) for i in range(0, len(words), segment_size)]
-
-def load_prompt(file_name):
-    """Load prompt from a file."""
-    with open(file_name, 'r') as file:
-        return file.read()
-
-def load_prompts():
-    if 'keyword_model_system_prompt' not in st.session_state:
-        st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
-    if 'response_model_system_prompt' not in st.session_state:
-        st.session_state['response_model_system_prompt'] = load_prompt('prompts/response_model_system_prompt.txt')
-
-# Ensure prompts are loaded
-load_prompts()
-keyword_prompt = st.session_state['keyword_model_system_prompt']
-response_prompt = st.session_state['response_model_system_prompt']

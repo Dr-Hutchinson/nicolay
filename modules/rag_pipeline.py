@@ -86,7 +86,7 @@ def run_rag_pipeline(
         model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
         messages=messages_for_model,
         temperature=0,
-        max_tokens=500
+        max_tokens=2000
     )
     msg = response.choices[0].message.content
 

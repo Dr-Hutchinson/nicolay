@@ -83,7 +83,7 @@ def run_rag_pipeline(
         {"role": "user", "content": user_query}
     ]
     response = openai_client.chat.completions.create(
-        model="YOUR_HAY_MODEL",
+        model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
         messages=messages_for_model,
         temperature=0,
         max_tokens=500
@@ -300,7 +300,7 @@ def run_rag_pipeline(
                                         f"{formatted_for_nicolay}"}
         ]
         second_model_response = openai_client.chat.completions.create(
-            model="YOUR_NICOLAY_MODEL",
+            model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
             messages=messages_for_second_model,
             temperature=0,
             max_tokens=2000

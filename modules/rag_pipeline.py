@@ -6,7 +6,7 @@ import streamlit as st
 import numpy as np
 
 # Import modules that handle each step:
-from prompt_loader import load_prompts  # If you want to ensure they're loaded here
+from modules.prompt_loader import load_prompts  # If you want to ensure they're loaded here
 from data_logging import (
     log_keyword_search_results,
     log_semantic_search_results,

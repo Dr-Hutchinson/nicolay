@@ -92,6 +92,8 @@ def run_rag_pipeline(
     hay_output_str = response.choices[0].message.content
     st.write("Raw Hays Output:")
     st.write(hay_output_str)
+    st.write("REPR output:")
+    st.write(repr(hay_output_str)
 
     # Parse the JSON
     try:

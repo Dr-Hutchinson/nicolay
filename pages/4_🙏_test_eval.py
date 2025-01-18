@@ -34,6 +34,10 @@ credentials = service_account.Credentials.from_service_account_info(
 )
 gc = pygsheets.authorize(custom_credentials=credentials)
 
+openai_api_key=st.secrets["openai_api_key"],
+cohere_api_key=st.secrets["cohere_api_key"],
+gcp_service_account=st.secrets["gcp_service_account"],
+
 # Logger Instances
 hays_data_logger = DataLogger(gc=gc, sheet_name="hays_data")
 keyword_results_logger = DataLogger(gc=gc, sheet_name="keyword_search_results")
@@ -106,9 +110,9 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             lincoln_speeches_json='data/lincoln_speech_corpus.json',
             lincoln_embedded_csv='lincoln_index_embedded.csv',
             # Pass your API keys
-            openai_api_key=st.secrets["openai_api_key"],
-            cohere_api_key=st.secrets["cohere_api_key"],
-            gc=gc  # If your pipeline also needs GSheets client
+            #openai_api_key=st.secrets["openai_api_key"],
+            #cohere_api_key=st.secrets["cohere_api_key"],
+            #gc=gc  # If your pipeline also needs GSheets client
         )
 
         # Unpack the pipeline results

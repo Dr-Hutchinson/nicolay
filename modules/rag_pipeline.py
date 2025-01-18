@@ -28,6 +28,8 @@ from openai import OpenAI
 import cohere
 from google.oauth2 import service_account
 import pygsheets
+from json import JSONDecodeError
+
 
 def run_rag_pipeline(
     user_query,

@@ -7,21 +7,21 @@ import numpy as np
 
 # Import modules that handle each step:
 from modules.prompt_loader import load_prompts  # If you want to ensure they're loaded here
-from data_logging import (
+from modules.data_logging import (
     log_keyword_search_results,
     log_semantic_search_results,
     log_reranking_results,
     log_nicolay_model_output,
 )
-from keyword_search import search_with_dynamic_weights_expanded
-from semantic_search import (
+from modules.keyword_search import search_with_dynamic_weights_expanded
+from modules.semantic_search import (
     search_text,
     compare_segments_with_query_parallel,
     segment_text,
     get_embedding,
 )
-from misc_helpers import remove_duplicates, highlight_key_quote, get_source_and_summary
-from reranker import rerank_results, format_reranked_results_for_model_input
+from modules.misc_helpers import remove_duplicates, highlight_key_quote, get_source_and_summary
+from modules.reranker import rerank_results, format_reranked_results_for_model_input
 
 # You might also import or pass in these clients, depending on your architecture:
 from openai import OpenAI

@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 from datetime import datetime as dt
-from modules.rag_process_1 import RAGProcess
+from modules.rag_process_2 import RAGProcess
 from modules.data_logging import DataLogger
 from modules.semantic_search import semantic_search
 from modules.keyword_search import search_with_dynamic_weights_expanded

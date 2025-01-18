@@ -182,31 +182,52 @@ class RAGProcess:
     #    return deduplicated_results
 
 
-    def remove_duplicates(self, search_results, semantic_matches):
+    #def remove_duplicates(self, search_results, semantic_matches):
         # Combine results from search and semantic matches
-        combined_results = pd.concat([search_results, semantic_matches], ignore_index=True)
+    #    combined_results = pd.concat([search_results, semantic_matches], ignore_index=True)
 
-        if 'text_id' not in combined_results.columns:
-            raise ValueError("The 'text_id' column is missing from combined results.")
+    #    if 'text_id' not in combined_results.columns:
+    #        raise ValueError("The 'text_id' column is missing from combined results.")
 
         # Sort by priority metrics (e.g., `weighted_score` or `similarities`) before deduplication
+    #    if 'weighted_score' in combined_results.columns:
+    #        combined_results = combined_results.sort_values(by='weighted_score', ascending=False)
+    #    elif 'similarities' in combined_results.columns:
+    #        combined_results = combined_results.sort_values(by='similarities', ascending=False)
+
+        # Drop duplicates based on `text_id`, keeping the highest-priority row
+    #    deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
+
+        # Ensure important columns like `key_quote` or `summary` are populated
+    #    deduplicated_results['key_quote'] = deduplicated_results['key_quote'].fillna('')
+    #    deduplicated_results['summary'] = deduplicated_results['summary'].fillna('')
+
+    #    st.write(f"Combined Results Before Deduplication: {combined_results.shape}")
+    #    st.write(f"Results After Deduplication: {deduplicated_results.shape}")
+
+    #    return deduplicated_results
+
+    def remove_duplicates(combined_results):
+        """
+        Deduplicate combined search results.
+        Args:
+            combined_results (DataFrame): Combined results DataFrame.
+        Returns:
+            DataFrame: Deduplicated results with the highest-priority entries retained.
+        """
+        # Sort by priority (e.g., weighted_score > similarity) before deduplication
         if 'weighted_score' in combined_results.columns:
             combined_results = combined_results.sort_values(by='weighted_score', ascending=False)
         elif 'similarities' in combined_results.columns:
             combined_results = combined_results.sort_values(by='similarities', ascending=False)
 
-        # Drop duplicates based on `text_id`, keeping the highest-priority row
-        deduplicated_results = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
+        # Deduplicate based on `text_id`, keeping the highest-priority row
+        deduplicated = combined_results.drop_duplicates(subset='text_id', keep='first').reset_index(drop=True)
 
-        # Ensure important columns like `key_quote` or `summary` are populated
-        deduplicated_results['key_quote'] = deduplicated_results['key_quote'].fillna('')
-        deduplicated_results['summary'] = deduplicated_results['summary'].fillna('')
-
-        st.write(f"Combined Results Before Deduplication: {combined_results.shape}")
-        st.write(f"Results After Deduplication: {deduplicated_results.shape}")
-
-        return deduplicated_results
-
+        # Fill missing columns like `key_quote` and `summary` with defaults
+        deduplicated['key_quote'] = deduplicated.get('key_quote', '').fillna('')
+        deduplicated['summary'] = deduplicated.get('summary', '').fillna('')
+        return deduplicated
 
 
 
@@ -447,12 +468,19 @@ class RAGProcess:
             #]
 
             deduplicated_semantic_matches = self.remove_duplicates(pd.DataFrame(), semantic_matches)
+            #deduplicated_semantic_matches = self.remove_duplicates(pd.DataFrame(), semantic_matches)
 
+
+
+            # Combine keyword and semantic results
             all_combined_data = [
                 f"Keyword|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['key_quote']}" for idx, row in deduplicated_results.iterrows()
             ] + [
                 f"Semantic|Text ID: {row['text_id']}|Summary: {row['summary']}|{row['TopSegment']}" for idx, row in deduplicated_semantic_matches.iterrows()
             ]
+
+            # Deduplicate based on 'Text ID'
+            unique_combined_data = list({entry.split("|")[1]: entry for entry in all_combined_data}.values())
 
             st.write(f"Size of all_combined_data before reranking: {len(all_combined_data)}")
             st.write("Contents of all_combined_data:")

@@ -19,7 +19,7 @@ from modules.data_logging import DataLogger
 from modules.semantic_search import semantic_search
 from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
-from .prompt_loader import load_prompts
+from modules.prompt_loader import load_prompts
 
 # Suppress debug messages globally
 #logging.basicConfig(level=logging.WARNING)

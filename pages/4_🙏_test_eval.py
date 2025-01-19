@@ -1,180 +1,201 @@
-# modules/data_logging.py
+# benchmark_script.py
 
-import pygsheets
+import streamlit as st
 import pandas as pd
-from datetime import datetime as dt
 import json
+from datetime import datetime as dt
+import pygsheets
+from google.oauth2 import service_account
+import logging
 
-class DataLogger:
-    def __init__(self, gc, sheet_name):
-        self.gc = gc
-        self.sheet = self.gc.open(sheet_name).sheet1
+# --- Our new pipeline orchestrator ---
+from modules.rag_pipeline import run_rag_pipeline
 
-    def record_api_outputs(self, data_dict):
+# Logging Modules
+from modules.data_logging import DataLogger
+
+# Possibly still need these imports if you do advanced steps:
+from modules.semantic_search import semantic_search
+from modules.keyword_search import search_with_dynamic_weights_expanded
+from modules.reranking import rerank_results
+from modules.prompt_loader import load_prompts
+
+# If you want to suppress debug messages globally, uncomment:
+# logging.basicConfig(level=logging.WARNING)
+
+# Streamlit App Initialization
+st.set_page_config(page_title="RAG Benchmarking", layout="wide")
+st.title("RAG Benchmarking and Evaluation Module")
+
+# Google Sheets Client Initialization
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
+gc = pygsheets.authorize(custom_credentials=credentials)
+
+# Logger Instances
+hays_data_logger = DataLogger(gc=gc, sheet_name="hays_data")
+keyword_results_logger = DataLogger(gc=gc, sheet_name="keyword_search_results")
+nicolay_data_logger = DataLogger(gc=gc, sheet_name="nicolay_data")
+reranking_results_logger = DataLogger(gc=gc, sheet_name="reranking_results")
+semantic_results_logger = DataLogger(gc=gc, sheet_name="semantic_search_results")
+
+# Load Prompts into session_state
+load_prompts()
+
+# Initialize session state variables
+if 'messages' not in st.session_state:
+    st.session_state['messages'] = []
+if 'response_model_system_prompt' not in st.session_state:
+    st.session_state['response_model_system_prompt'] = st.session_state.get('response_model_system_prompt', "")
+
+# Load Benchmark Questions from Google Sheets
+try:
+    benchmark_sheet = gc.open("benchmark_questions").sheet1
+    benchmark_data = pd.DataFrame(benchmark_sheet.get_all_records())
+    st.success("Benchmark questions loaded successfully.")
+except Exception as e:
+    st.error(f"Error loading benchmark questions: {e}")
+    benchmark_data = pd.DataFrame()
+
+# Preprocess the 'ideal_documents' column to handle comma-separated values
+if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
+    benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
+        lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+    )
+
+# Add dropdown to select a benchmark question
+if not benchmark_data.empty:
+    selected_question_index = st.selectbox(
+        "Select a Benchmark Question:",
+        options=range(len(benchmark_data)),
+        format_func=lambda idx: f"{idx + 1}: {benchmark_data.iloc[idx]['question']}"
+    )
+else:
+    st.warning("No benchmark data available.")
+    selected_question_index = None
+
+# Add a button to process the selected question
+if selected_question_index is not None and st.button("Run Benchmark Question"):
+    # Get the selected question
+    row = benchmark_data.iloc[selected_question_index]
+    user_query = row["question"]
+    expected_documents = row["ideal_documents"]  # Preprocessed list
+
+    # Display the question we're processing
+    st.subheader(f"Benchmark Question {selected_question_index + 1}")
+    st.write(f"Processing query: {user_query}")
+
+    try:
+        # --- 1. Execute the RAG Pipeline ---
+        pipeline_results = run_rag_pipeline(
+            user_query=user_query,
+            perform_keyword_search=True,
+            perform_semantic_search=True,
+            perform_reranking=True,
+            # Provide references to your loggers, so the pipeline can log
+            hays_data_logger=hays_data_logger,
+            keyword_results_logger=keyword_results_logger,
+            nicolay_data_logger=nicolay_data_logger,
+            reranking_results_logger=reranking_results_logger,
+            semantic_results_logger=semantic_results_logger,
+            # Provide the file paths or read from st.secrets if needed
+            #keyword_json_path='data/voyant_word_counts.json',
+            #lincoln_speeches_json='data/lincoln_speech_corpus.json',
+            #lincoln_embedded_csv='lincoln_index_embedded.csv',
+            # If you want to pass your keys explicitly:
+            # openai_api_key=openai_api_key,
+            # cohere_api_key=cohere_api_key,
+            #gc=gc  # if you want GSheets access in the pipeline
+        )
+
+        # --- 2. Unpack the pipeline results ---
+        hay_output = pipeline_results.get("hay_output", {})
+        search_results = pipeline_results.get("search_results", pd.DataFrame())
+        semantic_matches = pipeline_results.get("semantic_results", pd.DataFrame())
+        reranked_results = pipeline_results.get("reranked_results", pd.DataFrame())
+        nicolay_output = pipeline_results.get("nicolay_output", {})
+
+        # Extract items from hay_output
+        initial_answer = hay_output.get("initial_answer", "")
+        weighted_keywords = hay_output.get("weighted_keywords", {})
+        year_keywords = hay_output.get("year_keywords", [])
+        text_keywords = hay_output.get("text_keywords", [])
+
+        # --- 3. Display the Hay Initial Answer ---
+        st.write("### Hay's Initial Answer")
+        st.markdown(initial_answer)
+        # Also optionally show the extracted keywords:
+        st.write("**Keywords from Hay**:", weighted_keywords)
+        st.write("**Year Keywords**:", year_keywords)
+        st.write("**Text Keywords**:", text_keywords)
+
+        # --- 4. Display the RAG Search Results ---
+        st.write("### Keyword Search Results")
+        if not search_results.empty:
+            st.dataframe(search_results)
+        else:
+            st.write("No keyword search results found.")
+
+        st.write("### Semantic Search Results")
+        if not semantic_matches.empty:
+            st.dataframe(semantic_matches)
+        else:
+            st.write("No semantic search results found.")
+
+        st.write("### Reranked Results")
+        if not reranked_results.empty:
+            st.dataframe(reranked_results)
+        else:
+            st.write("No reranked results found.")
+
+        # --- 5. Compare to Benchmark ---
+        st.write("### Benchmark Analysis")
+        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
+        matching_expected = len(set(expected_documents) & set(top_reranked_ids))
+        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
+
+        # --- 6. Display Nicolay's Final Response ---
+        # nicolay_output should be a dict with something like:
+        # { "FinalAnswer": {"Text": "...", "References": [...]}, ...}
+        final_answer_dict = nicolay_output.get("FinalAnswer", {})
+        final_answer_text = final_answer_dict.get("Text", "")
+
+        st.write("### Nicolay's Final Response")
+        st.markdown(final_answer_text)
+
+        # If references exist, display them
+        references = final_answer_dict.get("References", [])
+        if references:
+            st.write("**References:**")
+            for ref in references:
+                st.write(f"- {ref}")
+
+        # --- 7. Optional: Evaluate Nicolay's response with a separate LLM ---
+        # You can replicate the old approach if you want:
         """
-        Records a dictionary of data to the specified Google Sheet.
-
-        Parameters:
-        - data_dict (dict): Dictionary containing data to log.
+        evaluation_prompt = st.session_state['response_model_system_prompt']
+        # Suppose you have a function that does a final model check:
+        # llm_evaluation = evaluate_nicolay_answer(openai_api_key, user_query, initial_answer, final_answer_text)
+        # st.write("### LLM Evaluation of Nicolay's Response")
+        # st.json(llm_evaluation)
         """
-        now = dt.now()
-        data_dict['Timestamp'] = now  # Add timestamp to the data
 
-        # Convert the data dictionary to a DataFrame
-        df = pd.DataFrame([data_dict])
+        # --- 8. Log final results, if desired ---
+        # For example, in the nicolay_data logger:
+        if nicolay_data_logger and final_answer_text:
+            nicolay_data_logger.record_api_outputs({
+                'Benchmark Question': user_query,
+                'Ideal Documents': expected_documents,
+                'Matched Documents': top_reranked_ids,
+                'Nicolay_Final_Answer': final_answer_text,
+                'Timestamp': dt.now(),
+            })
 
-        # Find the next empty row in the sheet to avoid overwriting existing data
-        end_row = len(self.sheet.get_all_records()) + 2
+    except Exception as e:
+        st.error(f"Error processing query {selected_question_index + 1}: {e}")
 
-        # Append the new data row to the sheet
-        self.sheet.set_dataframe(df, (end_row, 1), copy_head=False, extend=True)
-
-def log_keyword_search_results(keyword_results_logger, search_results, user_query, initial_answer, model_weighted_keywords, model_year_keywords, model_text_keywords):
-    """
-    Logs the keyword search results to Google Sheets.
-
-    Parameters:
-    - keyword_results_logger (DataLogger): Instance of DataLogger for keyword search.
-    - search_results (pd.DataFrame): DataFrame containing keyword search results.
-    - user_query (str): The user's search query.
-    - initial_answer (str): The initial answer generated by the model.
-    - model_weighted_keywords (dict): Weighted keywords generated by the model.
-    - model_year_keywords (list): Year keywords generated by the model.
-    - model_text_keywords (list): Text keywords generated by the model.
-    """
-    now = dt.now()  # Current timestamp
-
-    for idx, result in search_results.iterrows():
-        # Ensure 'KeyQuote' is a string
-        key_quote = result.get('quote', "")
-        if pd.isna(key_quote) or not isinstance(key_quote, str):
-            key_quote = "No key quote available."
-
-        # Create a record for each search result
-        record = {
-            'Timestamp': now,
-            'UserQuery': user_query,
-            "initial_Answer": initial_answer,
-            'Weighted_Keywords': json.dumps(model_weighted_keywords),  # Convert dict to JSON string
-            'Year_Keywords': json.dumps(model_year_keywords),
-            'Text_Keywords': json.dumps(model_text_keywords),
-            'TextID': result['text_id'],
-            'KeyQuote': key_quote,
-            'WeightedScore': result['weighted_score'],
-            'KeywordCounts': json.dumps(result['keyword_counts'])  # Convert dict to JSON string
-        }
-
-        # Log the record
-        keyword_results_logger.record_api_outputs(record)
-
-def log_semantic_search_results(semantic_results_logger, semantic_matches):
-    """
-    Logs the semantic search results to Google Sheets.
-
-    Parameters:
-    - semantic_results_logger (DataLogger): Instance of DataLogger for semantic search.
-    - semantic_matches (pd.DataFrame): DataFrame containing semantic search results.
-    """
-    now = dt.now()  # Current timestamp
-
-    for idx, row in semantic_matches.iterrows():
-        record = {
-            'Timestamp': now,
-            'UserQuery': row['UserQuery'],
-            'HyDE_Query': row['initial_answer'],  # Assuming 'initial_answer' is stored here
-            'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
-            'SimilarityScore': row['similarities'],
-            'TopSegment': row['TopSegment']
-        }
-
-        # Log the record
-        semantic_results_logger.record_api_outputs(record)
-
-def log_reranking_results(reranking_results_logger, reranked_df):
-    """
-    Logs the reranking results to Google Sheets.
-
-    Parameters:
-    - reranking_results_logger (DataLogger): Instance of DataLogger for reranking.
-    - reranked_df (pd.DataFrame): DataFrame containing reranked results.
-    """
-    now = dt.now()  # Current timestamp
-
-    for idx, row in reranked_df.iterrows():
-        record = {
-            'Timestamp': now,
-            'UserQuery': row['UserQuery'],
-            'Rank': row['Rank'],
-            'SearchType': row['Search Type'],
-            'TextID': row['Text ID'],
-            'KeyQuote': row['Key Quote'],
-            'Relevance_Score': row['Relevance Score']
-        }
-
-        # Log the record
-        reranking_results_logger.record_api_outputs(record)
-
-def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict):
-    """
-    Logs the Nicolay model output to Google Sheets.
-
-    Parameters:
-    - nicolay_data_logger (DataLogger): Instance of DataLogger for Nicolay model.
-    - model_output (dict): Dictionary containing Nicolay model output.
-    - user_query (str): The user's search query.
-    - highlight_success_dict (dict): Dictionary indicating highlight success for each match.
-    """
-    # Extract key information from model output
-    final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
-    references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
-
-    # User query analysis
-    query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
-    historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
-
-    # Initial answer review
-    answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
-    quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
-
-    # Response effectiveness and suggestions
-    response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
-    suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
-
-    # Match analysis - concatenating details of each match into single strings
-    match_analysis = model_output.get("Match Analysis", {})
-    match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
-    match_data = {}
-
-    for match_key, match_details in match_analysis.items():
-        match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
-        match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
-
-        # Add highlight success information for each match
-        match_data[f'{match_key}_HighlightSuccess'] = highlight_success_dict.get(match_key, False)
-
-    # Meta analysis
-    meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
-    meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
-
-    # Construct a record for logging
-    record = {
-        'Timestamp': dt.now(),
-        'UserQuery': user_query,
-        'Initial_Answer': model_output.get("InitialAnswer", "No initial answer available."),
-        'FinalAnswer': final_answer_text,
-        'References': references,
-        'QueryIntent': query_intent,
-        'HistoricalContext': historical_context,
-        'AnswerEvaluation': answer_evaluation,
-        'QuoteIntegration': quote_integration,
-        'MetaStrategy': json.dumps(meta_strategy),  # Convert dictionary to JSON string
-        'MetaSynthesis': meta_synthesis,
-        'ResponseEffectiveness': response_effectiveness,
-        'Suggestions': suggestions_for_improvement
-    }
-
-    # Add match data to the record
-    record.update(match_data)
-
-    # Log the record
-    nicolay_data_logger.record_api_outputs(record)
+# Summary/Visualization or further analysis
+st.write("### Summary and Visualization")
+st.write("Additional charts or summary metrics can go here.")

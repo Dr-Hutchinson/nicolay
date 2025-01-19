@@ -534,4 +534,4 @@ def run_rag_pipeline(
                 "semantic_results": semantic_matches_df,
                 "reranked_results": reranked_df,
                 "nicolay_output": nicolay_output
-            }
+         }

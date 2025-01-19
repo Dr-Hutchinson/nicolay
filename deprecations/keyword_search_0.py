@@ -1,5 +1,3 @@
-# keyword_search.py
-
 import json
 import re
 
@@ -57,28 +55,26 @@ def find_instances_expanded_search(dynamic_weights, original_weights, data, year
     instances.sort(key=lambda x: x['weighted_score'], reverse=True)
     return instances[:top_n]
 
-def search_with_dynamic_weights_expanded(user_keywords, corpus_terms, data, year_keywords=None, text_keywords=None, top_n_results=5):
-    total_words = sum(term['rawFreq'] for term in corpus_terms['terms'])
-    relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in corpus_terms['terms']}
+def search_with_dynamic_weights_expanded(user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5):
+    total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
+    relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
     inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
-    max_weight = max(inverse_weights.values()) if inverse_weights else 1
+    max_weight = max(inverse_weights.values())
     normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
     return find_instances_expanded_search(
         dynamic_weights=normalized_weights,
         original_weights=user_keywords,  # Using user-provided keywords as original weights for snippet centering
-        data=data,
+        data=json_data,
         year_keywords=year_keywords,
         text_keywords=text_keywords,
         top_n=top_n_results
     )
 
-def keyword_search(user_query, json_data_path, data_path, year_keywords=None, text_keywords=None, top_n=5):
+def keyword_search(user_query, json_data_path, year_keywords=None, text_keywords=None, top_n=5):
     keyword_data = load_json(json_data_path)
-    speech_data = load_json(data_path)  # Assuming data is stored in JSON
     return search_with_dynamic_weights_expanded(
         user_keywords=user_query,
-        corpus_terms=keyword_data,  # Assuming 'corpus_terms' are in keyword_data
-        data=speech_data,
+        json_data=keyword_data,
         year_keywords=year_keywords,
         text_keywords=text_keywords,
         top_n_results=top_n

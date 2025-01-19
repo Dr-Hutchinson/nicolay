@@ -1,5 +1,3 @@
-# benchmark_script.py
-
 import streamlit as st
 import pandas as pd
 import json
@@ -9,7 +7,7 @@ from google.oauth2 import service_account
 import logging
 
 # --- Our new pipeline orchestrator ---
-from modules.rag_pipeline import run_rag_pipeline
+from modules.rag_pipeline import run_rag_pipeline  # If you stored it differently, adjust the import path
 
 # Logging Modules
 from modules.data_logging import DataLogger
@@ -33,6 +31,11 @@ credentials = service_account.Credentials.from_service_account_info(
     scopes=["https://www.googleapis.com/auth/drive"]
 )
 gc = pygsheets.authorize(custom_credentials=credentials)
+
+# Optionally set your keys here if needed (though your rag_pipeline may also read from st.secrets):
+# openai_api_key = st.secrets["openai_api_key"]
+# cohere_api_key = st.secrets["cohere_api_key"]
+# gcp_service_account = st.secrets["gcp_service_account"]
 
 # Logger Instances
 hays_data_logger = DataLogger(gc=gc, sheet_name="hays_data")
@@ -112,7 +115,7 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
 
         # --- 2. Unpack the pipeline results ---
         hay_output = pipeline_results.get("hay_output", {})
-        search_results = pipeline_results.get("search_results", pd.DataFrame())
+        search_results = pipeline_results.get("keyword_results", pd.DataFrame())
         semantic_matches = pipeline_results.get("semantic_results", pd.DataFrame())
         reranked_results = pipeline_results.get("reranked_results", pd.DataFrame())
         nicolay_output = pipeline_results.get("nicolay_output", {})
@@ -133,22 +136,13 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
 
         # --- 4. Display the RAG Search Results ---
         st.write("### Keyword Search Results")
-        if not search_results.empty:
-            st.dataframe(search_results)
-        else:
-            st.write("No keyword search results found.")
+        st.dataframe(search_results)
 
         st.write("### Semantic Search Results")
-        if not semantic_matches.empty:
-            st.dataframe(semantic_matches)
-        else:
-            st.write("No semantic search results found.")
+        st.dataframe(semantic_matches)
 
         st.write("### Reranked Results")
-        if not reranked_results.empty:
-            st.dataframe(reranked_results)
-        else:
-            st.write("No reranked results found.")
+        st.dataframe(reranked_results)
 
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")
@@ -184,14 +178,13 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
 
         # --- 8. Log final results, if desired ---
         # For example, in the nicolay_data logger:
-        if nicolay_data_logger and final_answer_text:
-            nicolay_data_logger.record_api_outputs({
-                'Benchmark Question': user_query,
-                'Ideal Documents': expected_documents,
-                'Matched Documents': top_reranked_ids,
-                'Nicolay_Final_Answer': final_answer_text,
-                'Timestamp': dt.now(),
-            })
+        nicolay_data_logger.record_api_outputs({
+            'Benchmark Question': user_query,
+            'Ideal Documents': expected_documents,
+            'Matched Documents': top_reranked_ids,
+            'Nicolay_Final_Answer': final_answer_text,
+            'Timestamp': dt.now(),
+        })
 
     except Exception as e:
         st.error(f"Error processing query {selected_question_index + 1}: {e}")

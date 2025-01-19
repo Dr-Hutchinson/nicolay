@@ -1,4 +1,4 @@
-# modules/rag_pipeline.py
+# rag_pipeline.py
 
 import json
 import numpy as np
@@ -22,32 +22,18 @@ from modules.data_logging import (
     DataLogger
 )
 
-# Data-loading functions
+# We replicate the data-loading pattern from rag_process
 from modules.data_utils import (
     load_lincoln_speech_corpus,
     load_voyant_word_counts,
     load_lincoln_index_embedded
 )
-
-# Miscellaneous helpers
 from modules.misc_helpers import (
     remove_duplicates,
     highlight_key_quote
-    # Add other helpers as needed
+    # if you have others like `get_source_and_summary`
 )
-
-# Prompt loader
 from modules.prompt_loader import load_prompts
-
-# Keyword search functions
-from modules.keyword_search import search_with_dynamic_weights_expanded
-
-# Define semantic search and reranking imports as needed
-from modules.semantic_search import (
-    search_text,
-    compare_segments_with_query_parallel
-)
-from modules.reranking import rerank_results, format_reranked_results_for_model_input
 
 #######################################################
 # HELPER FUNCTIONS (Mirroring rag_process's approach)
@@ -64,13 +50,31 @@ def extract_full_text(combined_text):
     else:
         return ""
 
-def segment_text(text, segment_size=100, overlap=50):
+def segment_text(text, segment_size=100):
     words = text.split()
-    segments = []
-    for i in range(0, len(words), segment_size - overlap):
-        segment = words[i:i + segment_size]
-        segments.append(' '.join(segment))
-    return segments
+    return [
+        " ".join(words[i : i + segment_size])
+        for i in range(0, len(words), segment_size)
+    ]
+
+def format_reranked_results_for_model_input(reranked_results):
+    """
+    Formats the top 3 reranked results to pass to Nicolay, just like in rag_process.
+    """
+    formatted_results = []
+    top_three_results = reranked_results[:3]
+    for result in top_three_results:
+        formatted_entry = (
+            f"Match {result['Rank']}: "
+            f"Search Type - {result['Search Type']}, "
+            f"Text ID - {result['Text ID']}, "
+            f"Source - {result['Source']}, "
+            f"Summary - {result['Summary']}, "
+            f"Key Quote - {result['Key Quote']}, "
+            f"Relevance Score - {result['Relevance Score']:.2f}"
+        )
+        formatted_results.append(formatted_entry)
+    return "\n\n".join(formatted_results)
 
 #######################################################
 # MAIN PIPELINE FUNCTION
@@ -104,7 +108,7 @@ def run_rag_pipeline(
       - "hay_output" (the raw JSON from the first model)
     """
 
-    # 1. Load Prompts
+    # 1. Load Prompts (like rag_process does at the end)
     load_prompts()
     keyword_prompt = st.session_state["keyword_model_system_prompt"]
     response_prompt = st.session_state["response_model_system_prompt"]
@@ -118,14 +122,17 @@ def run_rag_pipeline(
     openai_client = OpenAI(api_key=openai_api_key)
     cohere_client = cohere.Client(api_key=cohere_api_key)
 
-    # 3. Load the data
+    # 3. Load the data (just like rag_process does in constructor)
+    #    using your cached data_utils
     lincoln_data_df = load_lincoln_speech_corpus()       # DataFrame
     voyant_data_df = load_voyant_word_counts()           # DataFrame
     lincoln_index_df = load_lincoln_index_embedded()     # DataFrame
 
+    # Convert them to needed structures
     lincoln_data = lincoln_data_df.to_dict("records")
     lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
+    # E.g., the corpusTerms might be in the first row
     if not voyant_data_df.empty and "corpusTerms" in voyant_data_df.columns:
         corpus_terms_json = voyant_data_df.at[0, "corpusTerms"]
         if isinstance(corpus_terms_json, str):
@@ -139,11 +146,14 @@ def run_rag_pipeline(
         corpus_terms = []  # fallback
 
     # Prepare the Lincoln index DF
+    # Convert embedding column from string to numeric array
     lincoln_index_df["embedding"] = lincoln_index_df["embedding"].apply(
-        lambda x: list(map(float, x.strip("[]").split(","))) if isinstance(x, str) else []
+        lambda x: list(map(float, x.strip("[]").split(",")))
     )
+    # Extract full text from 'combined' column
     lincoln_index_df["full_text"] = lincoln_index_df["combined"].apply(extract_full_text)
 
+    # For source, summary, etc., you might do something like:
     def get_source_and_summary(text_id_str):
         entry = lincoln_dict.get(text_id_str, {})
         return entry.get("source", ""), entry.get("summary", "")
@@ -195,17 +205,24 @@ def run_rag_pipeline(
 
     # 5. If toggled, do Weighted Keyword Search
     search_results_df = pd.DataFrame()
-    if perform_keyword_search and corpus_terms:
+    if perform_keyword_search and len(corpus_terms) > 0:
+        from modules.keyword_search import search_with_dynamic_weights_expanded
+        # The function expects a dict with "corpusTerms" -> "terms"
+        # so we mimic what rag_process does
+        wrapped_corpus_json = {"corpusTerms": {"terms": corpus_terms}}
+
+        # We need a custom function that does EXACTLY what rag_process's
+        # "search_with_dynamic_weights_expanded" does with the `lincoln_data`.
+        # For brevity, let's just replicate the call:
         results_list = search_with_dynamic_weights_expanded(
             user_keywords=model_weighted_keywords,
-            corpus_terms={"terms": corpus_terms},  # Adjust as per your JSON structure
-            data=lincoln_data,
+            json_data=wrapped_corpus_json,
             year_keywords=model_year_keywords,
             text_keywords=model_text_keywords,
             top_n_results=top_n_results
         )
         search_results_df = pd.DataFrame(results_list)
-        # Rename “quote” -> “key_quote” if needed
+        # rename “quote” -> “key_quote” if needed
         if "quote" in search_results_df.columns:
             search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
 
@@ -225,6 +242,12 @@ def run_rag_pipeline(
     semantic_matches_df = pd.DataFrame()
     user_query_embedding = None
     if perform_semantic_search and not lincoln_index_df.empty:
+        from modules.semantic_search import (
+            search_text,
+            compare_segments_with_query_parallel
+        )
+
+        # We pass user_query + initial_answer just like rag_process
         semantic_results, user_query_embedding = search_text(
             lincoln_index_df,
             user_query + initial_answer,
@@ -244,7 +267,7 @@ def run_rag_pipeline(
                 top_segments.append(best_segment[0])
             semantic_results["TopSegment"] = top_segments
 
-            # Rename "Unnamed: 0" -> "text_id" if present
+            # rename "Unnamed: 0" -> "text_id" if present
             if "Unnamed: 0" in semantic_results.columns:
                 semantic_results.rename(columns={"Unnamed: 0": "text_id"}, inplace=True)
 
@@ -257,11 +280,14 @@ def run_rag_pipeline(
     # 7. Combine & Deduplicate
     combined_df = pd.concat([search_results_df, semantic_matches_df], ignore_index=True)
     if not combined_df.empty:
+        # You might replicate the same approach from rag_process or simply do:
         combined_df = combined_df.drop_duplicates(subset=["text_id"], keep="first")
 
     # 8. Rerank if toggled
     reranked_df = pd.DataFrame()
     if perform_reranking and not combined_df.empty:
+        from modules.reranking import rerank_results
+
         # Build doc strings like "Keyword|Text ID: #|Summary|KeyQuote"
         docs_for_cohere = []
         for _, row in combined_df.iterrows():
@@ -273,59 +299,52 @@ def run_rag_pipeline(
                 f"{search_type}|Text ID: {text_id_str}|{summary_str}|{quote_str}"
             )
 
-        # Verify documents are valid
-        invalid_docs = [doc for doc in docs_for_cohere if not isinstance(doc, str) or "|" not in doc]
-        if invalid_docs:
-            st.error(f"Invalid documents for reranking: {invalid_docs}")
-            return {}
+        cohere_results = rerank_results(
+            query=user_query,
+            documents=docs_for_cohere,
+            api_key=cohere_api_key,
+            top_n=10
+        )
+        # Convert to DataFrame
+        reranked_data = []
+        for i, item in enumerate(cohere_results):
+            doc_text = item.document["text"] if isinstance(item.document, dict) else item.document
+            data_parts = doc_text.split("|")
+            if len(data_parts) >= 3:
+                search_type = data_parts[0].strip()
+                text_id_part = data_parts[1].strip()
+                summary = data_parts[2].strip() if len(data_parts) > 2 else ""
+                quote = data_parts[3].strip() if len(data_parts) > 3 else ""
 
-        try:
-            cohere_results = rerank_results(
-                query=user_query,
-                documents=docs_for_cohere,
-                api_key=cohere_api_key,
-                top_n=10
-            )
-            # Convert to DataFrame
-            reranked_data = []
-            for i, item in enumerate(cohere_results):
-                doc_text = item.document["text"] if isinstance(item.document, dict) else item.document
-                data_parts = doc_text.split("|")
-                if len(data_parts) >= 4:
-                    search_type = data_parts[0].strip()
-                    text_id_part = data_parts[1].strip()
-                    summary = data_parts[2].strip()
-                    quote = data_parts[3].strip()
+                # parse out actual text ID
+                text_id_str = text_id_part.replace("Text ID:", "").strip()
+                # if your code uses "Text #: 10" in lincoln_dict, you might need to strip that instead
 
-                    # Parse out actual text ID
-                    text_id_str = text_id_part.replace("Text ID:", "").strip()
+                # get source from lincoln_dict if you wish
+                source_str = lincoln_dict.get(text_id_str, {}).get("source", "Unknown Source")
 
-                    # Get source from lincoln_dict if you wish
-                    source_str = lincoln_dict.get(text_id_str, {}).get("source", "Unknown Source")
+                reranked_data.append({
+                    "Rank": i + 1,
+                    "Search Type": search_type,
+                    "Text ID": text_id_str,
+                    "Source": source_str,
+                    "Summary": summary,
+                    "Key Quote": quote,
+                    "Relevance Score": item.relevance_score
+                })
 
-                    reranked_data.append({
-                        "Rank": i + 1,
-                        "Search Type": search_type,
-                        "Text ID": text_id_str,
-                        "Source": source_str,
-                        "Summary": summary,
-                        "Key Quote": quote,
-                        "Relevance Score": item.relevance_score
-                    })
+        reranked_df = pd.DataFrame(reranked_data)
 
-            reranked_df = pd.DataFrame(reranked_data)
-
-            # Log reranking
-            if reranking_results_logger and not reranked_df.empty:
-                log_reranking_results(reranking_results_logger, reranked_df, user_query)
-
-        except Exception as e:
-            st.error("Error in reranking: " + str(e))
+        # Log reranking
+        if reranking_results_logger and not reranked_df.empty:
+            log_reranking_results(reranking_results_logger, reranked_df, user_query)
 
     # 9. Final "Nicolay" model call
     nicolay_output = {}
     if perform_reranking and not reranked_df.empty:
-        # Format top 3 for the second model
+        from modules.reranking import format_reranked_results_for_model_input
+
+        # format top 3 for the second model
         formatted_for_nicolay = format_reranked_results_for_model_input(reranked_df.to_dict("records"))
 
         # Build your message
@@ -347,11 +366,12 @@ def run_rag_pipeline(
         raw_nicolay = second_model_response.choices[0].message.content
         try:
             nicolay_output = json.loads(raw_nicolay)
-        except json.JSONDecodeError:
+        except:
             st.error("Nicolay model output was not valid JSON.")
 
         if nicolay_data_logger and nicolay_output:
             highlight_success_dict = {}
+            from modules.data_logging import log_nicolay_model_output
             log_nicolay_model_output(
                 nicolay_data_logger,
                 model_output=nicolay_output,

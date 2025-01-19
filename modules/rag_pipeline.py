@@ -14,7 +14,7 @@ from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
 from modules.data_logging import DataLogger, log_keyword_search_results, log_semantic_search_results, log_reranking_results, log_nicolay_model_output
-from modules.reranker import rerank_results, format_reranked_results_for_model_input
+from modules.reranking import rerank_results, format_reranked_results_for_model_input
 
 # Version 0.4 - Comprehensive RAG Pipeline with Modularized Components and Enhanced Error Handling
 

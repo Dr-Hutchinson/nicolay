@@ -110,7 +110,7 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             # If you want to pass your keys explicitly:
             # openai_api_key=openai_api_key,
             # cohere_api_key=cohere_api_key,
-            gc=gc  # if you want GSheets access in the pipeline
+            #gc=gc  # if you want GSheets access in the pipeline
         )
 
         # --- 2. Unpack the pipeline results ---

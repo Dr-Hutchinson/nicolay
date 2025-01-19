@@ -104,9 +104,9 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             reranking_results_logger=reranking_results_logger,
             semantic_results_logger=semantic_results_logger,
             # Provide the file paths or read from st.secrets if needed
-            keyword_json_path='data/voyant_word_counts.json',
-            lincoln_speeches_json='data/lincoln_speech_corpus.json',
-            lincoln_embedded_csv='lincoln_index_embedded.csv',
+            #keyword_json_path='data/voyant_word_counts.json',
+            #lincoln_speeches_json='data/lincoln_speech_corpus.json',
+            #lincoln_embedded_csv='lincoln_index_embedded.csv',
             # If you want to pass your keys explicitly:
             # openai_api_key=openai_api_key,
             # cohere_api_key=cohere_api_key,

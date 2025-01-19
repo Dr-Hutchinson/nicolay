@@ -1,31 +1,36 @@
+# modules/reranker.py
+
 import cohere
 import streamlit as st
 
 def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n=10):
     """
     Reranks a list of documents based on their relevance to a given query using Cohere's rerank model.
-
-    Parameters:
-    query (str): The query string.
-    documents (list of str): List of documents to be reranked.
-    api_key (str): API key for Cohere.
-    model (str): The rerank model to be used. Default is 'rerank-english-v2.0'.
-    top_n (int): Number of top results to return. Default is 10.
-
-    Returns:
-    list: Reranked results.
     """
     co = cohere.Client(api_key)
 
     # Debug: Display documents being sent for reranking
     st.write("### Documents sent to Cohere for reranking:")
-    st.write(documents)  # Ensure this outputs a list of strings
+    st.write(documents)
 
     # Validate that all documents are strings
     non_string_docs = [doc for doc in documents if not isinstance(doc, str)]
     if non_string_docs:
         st.error(f"Some documents are not strings: {non_string_docs}")
         return []
+
+    # Validate that no documents are empty strings
+    empty_docs = [doc for doc in documents if not doc.strip()]
+    if empty_docs:
+        st.error(f"Some documents are empty strings: {empty_docs}")
+        return []
+
+    # Additional Debugging: Check types and lengths
+    st.write("### Documents types:")
+    st.write([type(doc) for doc in documents])
+
+    st.write("### Number of documents:")
+    st.write(len(documents))
 
     try:
         reranked_response = co.rerank(
@@ -54,12 +59,6 @@ def rerank_results(query, documents, api_key, model='rerank-english-v2.0', top_n
 def format_reranked_results_for_model_input(reranked_results):
     """
     Formats the reranked results for model input, limiting to the top 3 results.
-
-    Parameters:
-    reranked_results (list): List of reranked results as dicts with 'Rank', 'Search Type', 'Text ID', 'Source', 'Summary', 'Key Quote', 'Relevance Score'.
-
-    Returns:
-    str: Formatted string of top results.
     """
     formatted_results = []
 

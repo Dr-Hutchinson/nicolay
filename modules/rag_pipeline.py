@@ -526,12 +526,12 @@ def run_rag_pipeline(
                         highlight_success_dict=highlight_success_dict
                     )
 
-        # 10. Return the final dictionary
-        #return {
-        #    "hay_output": hay_output,
-        #    "initial_answer": initial_answer,
-        #    "search_results": search_results_df,
-        #    "semantic_results": semantic_matches_df,
-        #    "reranked_results": reranked_df,
-        #    "nicolay_output": nicolay_output
-        #}
+            # 10. Return the final dictionary
+            return {
+                "hay_output": hay_output,
+                "initial_answer": initial_answer,
+                "search_results": search_results_df,
+                "semantic_results": semantic_matches_df,
+                "reranked_results": reranked_df,
+                "nicolay_output": nicolay_output
+            }

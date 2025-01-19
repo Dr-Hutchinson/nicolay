@@ -527,7 +527,7 @@ def run_rag_pipeline(
                     )
 
         # 10. Return the final dictionary
-        return{
+        return {
             "hay_output": hay_output,
             "initial_answer": initial_answer,
             "search_results": search_results_df,

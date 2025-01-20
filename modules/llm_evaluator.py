@@ -43,6 +43,29 @@ class LLMResponseEvaluator:
         formatted_sources = "\n\n".join([f"Source {i+1}:\n{text}"
                                        for i, text in enumerate(source_texts)])
 
+        # Define JSON template separately
+        json_template = '''{
+            "evaluation_scores": {
+                "query_response_quality": {"score": X, "examples": [], "suggestions": []},
+                "quote_usage": {"score": X, "examples": [], "suggestions": []},
+                "citation_accuracy": {"score": X, "examples": [], "suggestions": []},
+                "source_integration": {"score": X, "examples": [], "suggestions": []},
+                "historical_context": {"score": X, "examples": [], "suggestions": []},
+                "response_structure": {"score": X, "examples": [], "suggestions": []}
+            },
+            "analysis": {
+                "hallucinations": [],
+                "missed_opportunities": [],
+                "suggested_contexts": []
+            },
+            "overall_assessment": {
+                "total_score": X,
+                "strengths": [],
+                "weaknesses": [],
+                "improvement_priorities": []
+            }
+        }'''
+
         return f"""
         Evaluate this RAG (Retrieval Augmented Generation) response based on the following information:
 

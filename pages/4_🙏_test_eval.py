@@ -174,17 +174,6 @@ if user_query and st.button("Run Evaluation"):
                 return doc_id.split("Text #:")[1].strip()
             return str(doc_id)
 
-        # --- 5. Compare to Benchmark ---
-        st.write("### Benchmark Analysis")
-        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
-
-        # Normalize document IDs before comparison
-        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
-        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
-
-        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
-        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
-
         # --- 6. Display Nicolay's Final Response ---
         final_answer_dict = nicolay_output.get("FinalAnswer", {})
         final_answer_text = final_answer_dict.get("Text", "")
@@ -198,6 +187,18 @@ if user_query and st.button("Run Evaluation"):
             st.write("**References:**")
             for ref in references:
                 st.write(f"- {ref}")
+
+
+        # --- 5. Compare to Benchmark ---
+        st.write("### Benchmark Analysis")
+        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
+
+        # Normalize document IDs before comparison
+        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
+        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
+
+        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
+        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
 
         # --- 7. Run Selected Evaluations ---
         evaluation_results = None

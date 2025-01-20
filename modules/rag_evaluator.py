@@ -24,24 +24,27 @@ class RAGEvaluator:
             'rougeL_score': rougeL
         }
 
+    def normalize_doc_id(self, doc_id):
+        """Normalize document IDs by removing 'Text #: ' prefix and stripping whitespace."""
+        doc_id = str(doc_id).strip()
+        return doc_id.replace('Text #: ', '') if 'Text #: ' in doc_id else doc_id
+
     def calculate_retrieval_metrics(self, reranked_results, ideal_documents):
         """Calculate retrieval precision metrics."""
         retrieved_docs = reranked_results['Text ID'].tolist()
 
-        # Debug st.write
-        st.write("\nRetrieval Metrics Debugging:")
-        st.write(f"Retrieved documents: {retrieved_docs}")
-        st.write(f"Ideal documents: {ideal_documents}")
-        st.write(f"Retrieved doc types: {[type(doc) for doc in retrieved_docs]}")
-        st.write(f"Ideal doc types: {[type(doc) for doc in ideal_documents]}")
+        # Debug print
+        print("\nRetrieval Metrics Debugging:")
+        print(f"Retrieved documents (before normalization): {retrieved_docs}")
+        print(f"Ideal documents (before normalization): {ideal_documents}")
 
         # Normalize document IDs for comparison
-        retrieved_docs = [str(doc).strip() for doc in retrieved_docs]
-        ideal_documents = [str(doc).strip() for doc in ideal_documents]
+        retrieved_docs = [self.normalize_doc_id(doc) for doc in retrieved_docs]
+        ideal_documents = [self.normalize_doc_id(doc) for doc in ideal_documents]
 
-        st.write(f"After normalization:")
-        st.write(f"Retrieved documents: {retrieved_docs}")
-        st.write(f"Ideal documents: {ideal_documents}")
+        print(f"After normalization:")
+        print(f"Retrieved documents: {retrieved_docs}")
+        print(f"Ideal documents: {ideal_documents}")
 
         # Calculate MRR
         mrr = self.calculate_mrr(ideal_documents, retrieved_docs)
@@ -103,9 +106,9 @@ class RAGEvaluator:
 
     def evaluate_rag_response(self, reranked_results, generated_response, ideal_documents=None):
         """Evaluate RAG response with both content and retrieval metrics."""
-        st.write("\n=== Starting RAG Response Evaluation ===")
+        print("\n=== Starting RAG Response Evaluation ===")
         generated_response = str(generated_response)
-        st.write(f"Generated response length: {len(generated_response)}")
+        print(f"Generated response length: {len(generated_response)}")
 
         # Store individual document scores
         doc_scores = []

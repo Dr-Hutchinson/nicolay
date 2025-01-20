@@ -143,12 +143,6 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             st.write("No reranked results found.")
 
 
-        # Add this before the matching calculation
-        st.write("Expected documents types:", [type(doc) for doc in expected_documents])
-        st.write("Top reranked IDs types:", [type(id) for id in top_reranked_ids])
-        st.write("Expected documents:", expected_documents)
-        st.write("Top reranked IDs:", top_reranked_ids)
-
         # Add this before accessing the Text ID column
         st.write("Reranked results columns:", reranked_results.columns.tolist())
 
@@ -165,6 +159,13 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")
         top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
+
+        st.write("Expected documents types:", [type(doc) for doc in expected_documents])
+        st.write("Top reranked IDs types:", [type(id) for id in top_reranked_ids])
+        st.write("Expected documents:", expected_documents)
+        st.write("Top reranked IDs:", top_reranked_ids)
+
+
         matching_expected = len(set(expected_documents) & set(top_reranked_ids))
         st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
 

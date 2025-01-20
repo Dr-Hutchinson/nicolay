@@ -27,6 +27,21 @@ class RAGEvaluator:
         """Calculate retrieval precision metrics."""
         retrieved_docs = reranked_results['Text ID'].tolist()
 
+        # Debug st.write
+        st.write("\nRetrieval Metrics Debugging:")
+        st.write(f"Retrieved documents: {retrieved_docs}")
+        st.write(f"Ideal documents: {ideal_documents}")
+        st.write(f"Retrieved doc types: {[type(doc) for doc in retrieved_docs]}")
+        st.write(f"Ideal doc types: {[type(doc) for doc in ideal_documents]}")
+
+        # Normalize document IDs for comparison
+        retrieved_docs = [str(doc).strip() for doc in retrieved_docs]
+        ideal_documents = [str(doc).strip() for doc in ideal_documents]
+
+        st.write(f"After normalization:")
+        st.write(f"Retrieved documents: {retrieved_docs}")
+        st.write(f"Ideal documents: {ideal_documents}")
+
         # Calculate MRR
         mrr = self.calculate_mrr(ideal_documents, retrieved_docs)
 
@@ -87,9 +102,9 @@ class RAGEvaluator:
 
     def evaluate_rag_response(self, reranked_results, generated_response, ideal_documents=None):
         """Evaluate RAG response with both content and retrieval metrics."""
-        print("\n=== Starting RAG Response Evaluation ===")
+        st.write("\n=== Starting RAG Response Evaluation ===")
         generated_response = str(generated_response)
-        print(f"Generated response length: {len(generated_response)}")
+        st.write(f"Generated response length: {len(generated_response)}")
 
         # Store individual document scores
         doc_scores = []

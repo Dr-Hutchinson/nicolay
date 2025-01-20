@@ -232,7 +232,7 @@ def run_rag_pipeline(
                 )
 
                 if not reranked_df.empty and reranking_results_logger:
-                    log_reranking_results(reranking_results_logger, reranked_df)
+                    log_reranking_results(reranking_results_logger, reranked_df, user_query)
 
             except Exception as e:
                 st.error(f"Error in reranking: {str(e)}")

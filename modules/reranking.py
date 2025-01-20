@@ -109,23 +109,34 @@ def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0',
         return pd.DataFrame()
 
 
-def format_reranked_results_for_model_input(reranked_results):
+def format_reranked_results_for_model_input(reranked_results, max_results=3):
     """
     Formats reranked results for input to the Nicolay model.
+
+    Args:
+        reranked_results (list): List of dictionaries containing reranked results
+        max_results (int): Maximum number of results to format
+
+    Returns:
+        str: Formatted string of results
     """
     formatted_results = []
-    top_three = reranked_results.head(3)
 
-    for _, row in top_three.iterrows():
-        formatted_entry = (
-            f"Match {row['Rank']}: "
-            f"Search Type - {row['Search Type']}, "
-            f"Text ID - {row['Text ID']}, "
-            f"Source - {row.get('Source', 'N/A')}, "
-            f"Summary - {row['Summary']}, "
-            f"Key Quote - {row['Key Quote']}, "
-            f"Relevance Score - {row['Relevance Score']:.2f}"
-        )
-        formatted_results.append(formatted_entry)
+    # Take only the top N results
+    for idx, result in enumerate(reranked_results[:max_results], 1):
+        try:
+            formatted_entry = (
+                f"Match {idx}: "
+                f"Search Type - {result.get('Search Type', 'Unknown')}, "
+                f"Text ID - {result.get('Text ID', 'Unknown')}, "
+                f"Summary - {result.get('Summary', 'No summary')}, "
+                f"Key Quote - {result.get('Key Quote', 'No quote')}, "
+                f"Relevance Score - {result.get('Relevance Score', 0.0):.2f}"
+            )
+            formatted_results.append(formatted_entry)
 
-    return "\n\n".join(formatted_results)
+        except Exception as e:
+            st.error(f"Error formatting result {idx}: {str(e)}")
+            continue
+
+    return "\n\n".join(formatted_results) if formatted_results else "No results to format"

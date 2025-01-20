@@ -240,42 +240,63 @@ def run_rag_pipeline(
                 reranked_df = pd.DataFrame()  # Ensure we have an empty DataFrame on error
 
         # 8. Nicolay Model
+        # In rag_pipeline.py, modify the Nicolay model section:
+
+        # 9. Final "Nicolay" model call
         nicolay_output = {}
         if perform_reranking and not reranked_df.empty:
-            formatted_for_nicolay = format_reranked_results_for_model_input(
-                reranked_df.to_dict("records")
-            )
-
-            nicolay_messages = [
-                {"role": "system", "content": response_prompt},
-                {
-                    "role": "user",
-                    "content": f"User Query: {user_query}\n\n"
-                               f"Initial Answer: {initial_answer}\n\n"
-                               f"{formatted_for_nicolay}"
-                }
-            ]
-
-            second_model_response = openai_client.chat.completions.create(
-                model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
-                messages=nicolay_messages,
-                temperature=0,
-                max_tokens=2000
-            )
-
             try:
-                nicolay_output = json.loads(second_model_response.choices[0].message.content)
-                if nicolay_data_logger:
-                    log_nicolay_model_output(
-                        nicolay_data_logger,
-                        nicolay_output,
-                        user_query,
-                        highlight_success_dict={}
-                    )
-            except json.JSONDecodeError:
-                st.error("Nicolay model output was not valid JSON.")
+                # Convert reranked_df to records for formatting if needed
+                reranked_records = reranked_df.to_dict('records') if isinstance(reranked_df, pd.DataFrame) else []
 
-        # 9. Return Results
+                # Format top 3 for the second model
+                formatted_for_nicolay = format_reranked_results_for_model_input(reranked_records)
+
+                # Build your message
+                nicolay_messages = [
+                    {"role": "system", "content": response_prompt},
+                    {
+                        "role": "user",
+                        "content": f"User Query: {user_query}\n\n"
+                                   f"Initial Answer: {initial_answer}\n\n"
+                                   f"{formatted_for_nicolay}"
+                    }
+                ]
+
+                # Debug output
+                st.write("Sending to Nicolay model:")
+                st.write("Number of reranked results:", len(reranked_records))
+                st.write("Formatted input:", formatted_for_nicolay)
+
+                second_model_response = openai_client.chat.completions.create(
+                    model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
+                    messages=nicolay_messages,
+                    temperature=0,
+                    max_tokens=2000
+                )
+
+                raw_nicolay = second_model_response.choices[0].message.content
+                try:
+                    nicolay_output = json.loads(raw_nicolay)
+
+                    if nicolay_data_logger and nicolay_output:
+                        highlight_success_dict = {}
+                        log_nicolay_model_output(
+                            nicolay_data_logger,
+                            model_output=nicolay_output,
+                            user_query=user_query,
+                            highlight_success_dict=highlight_success_dict
+                        )
+
+                except json.JSONDecodeError as e:
+                    st.error(f"Nicolay model output was not valid JSON: {str(e)}")
+                    st.write("Raw output:", raw_nicolay)
+
+            except Exception as e:
+                st.error(f"Error in Nicolay model processing: {str(e)}")
+                st.exception(e)
+
+        # Return results
         return {
             "hay_output": hay_output,
             "initial_answer": initial_answer,

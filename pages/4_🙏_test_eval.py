@@ -148,25 +148,31 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
 
         # Normalized comparison function
         def normalize_doc_id(doc_id):
-            # Remove any non-numeric characters and convert to string
-            return str(''.join(filter(str.isdigit, str(doc_id))))
-
-        # Modified matching calculation
-        #normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
-        #normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
-        #matching_expected = len(set(normalized_expected) & set(normalized_reranked))
+            """Normalize document IDs by extracting just the numeric portion."""
+                if isinstance(doc_id, str) and "Text #:" in doc_id:
+                    return doc_id.split("Text #:")[1].strip()
+                return str(doc_id)
 
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")
         top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
 
+        # Debug outputs
+        st.write("Reranked results columns:", reranked_results.columns.tolist())
         st.write("Expected documents types:", [type(doc) for doc in expected_documents])
         st.write("Top reranked IDs types:", [type(id) for id in top_reranked_ids])
         st.write("Expected documents:", expected_documents)
         st.write("Top reranked IDs:", top_reranked_ids)
 
+        # Normalize document IDs before comparison
+        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
+        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
 
-        matching_expected = len(set(expected_documents) & set(top_reranked_ids))
+        # Debug normalized outputs
+        st.write("Normalized expected:", normalized_expected)
+        st.write("Normalized reranked:", normalized_reranked)
+
+        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
         st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
 
 

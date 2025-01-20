@@ -6,3 +6,4 @@ pygsheets==2.0.6
 streamlit==1.29.0
 msgpack==1.0.8
 pyarrow==16.1.0
+rouge-score==0.1.2

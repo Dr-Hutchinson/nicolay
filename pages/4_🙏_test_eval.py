@@ -19,6 +19,7 @@ from modules.semantic_search import semantic_search
 from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
+from modules.rag_evalutor import RAGEvaluator
 
 # If you want to suppress debug messages globally, uncomment:
 # logging.basicConfig(level=logging.WARNING)
@@ -192,15 +193,29 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             for ref in references:
                 st.write(f"- {ref}")
 
+        # Initialize RAG Evaluator
+        evaluator = RAGEvaluator()
+
+        # Get evaluation results
+        evaluation_results = evaluator.evaluate_rag_response(
+            reranked_results=reranked_results,
+            generated_response=final_answer_text
+        )
+
+        # Display evaluation results
+        st.markdown(add_evaluator_to_benchmark(evaluation_results))
+
+
+
         # --- 7. Optional: Evaluate Nicolay's response with a separate LLM ---
         # You can replicate the old approach if you want:
-        """
-        evaluation_prompt = st.session_state['response_model_system_prompt']
+        #"""
+        #evaluation_prompt = st.session_state['response_model_system_prompt']
         # Suppose you have a function that does a final model check:
         # llm_evaluation = evaluate_nicolay_answer(openai_api_key, user_query, initial_answer, final_answer_text)
         # st.write("### LLM Evaluation of Nicolay's Response")
         # st.json(llm_evaluation)
-        """
+        #"""
 
         # --- 8. Log final results, if desired ---
         # For example, in the nicolay_data logger:

@@ -1,5 +1,3 @@
-# benchmark_script.py
-
 import streamlit as st
 import pandas as pd
 import json
@@ -12,7 +10,7 @@ import logging
 from modules.rag_pipeline import run_rag_pipeline
 
 # Logging Modules
-from modules.data_logging import DataLogger
+from modules.data_logging import DataLogger, log_benchmark_results
 
 # Possibly still need these imports if you do advanced steps:
 from modules.semantic_search import semantic_search
@@ -21,9 +19,6 @@ from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMResponseEvaluator
-
-# If you want to suppress debug messages globally, uncomment:
-# logging.basicConfig(level=logging.WARNING)
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
@@ -42,6 +37,7 @@ keyword_results_logger = DataLogger(gc=gc, sheet_name="keyword_search_results")
 nicolay_data_logger = DataLogger(gc=gc, sheet_name="nicolay_data")
 reranking_results_logger = DataLogger(gc=gc, sheet_name="reranking_results")
 semantic_results_logger = DataLogger(gc=gc, sheet_name="semantic_search_results")
+benchmark_logger = DataLogger(gc=gc, sheet_name="benchmark_results")
 
 # Load Prompts into session_state
 load_prompts()
@@ -52,42 +48,70 @@ if 'messages' not in st.session_state:
 if 'response_model_system_prompt' not in st.session_state:
     st.session_state['response_model_system_prompt'] = st.session_state.get('response_model_system_prompt', "")
 
-# Load Benchmark Questions from Google Sheets
-try:
-    benchmark_sheet = gc.open("benchmark_questions").sheet1
-    benchmark_data = pd.DataFrame(benchmark_sheet.get_all_records())
-    st.success("Benchmark questions loaded successfully.")
-except Exception as e:
-    st.error(f"Error loading benchmark questions: {e}")
-    benchmark_data = pd.DataFrame()
+# Add query method selection
+query_method = st.radio(
+    "Select Query Input Method:",
+    ["Benchmark Questions", "Custom Query"]
+)
 
-# Preprocess the 'ideal_documents' column to handle comma-separated values
-if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
-    benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
-        lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
-    )
+# Variable to store query and expected documents
+user_query = None
+expected_documents = None
 
-# Add dropdown to select a benchmark question
-if not benchmark_data.empty:
-    selected_question_index = st.selectbox(
-        "Select a Benchmark Question:",
-        options=range(len(benchmark_data)),
-        format_func=lambda idx: f"{idx + 1}: {benchmark_data.iloc[idx]['question']}"
-    )
+# Query Input Section
+if query_method == "Benchmark Questions":
+    # Load Benchmark Questions from Google Sheets
+    try:
+        benchmark_sheet = gc.open("benchmark_questions").sheet1
+        benchmark_data = pd.DataFrame(benchmark_sheet.get_all_records())
+        st.success("Benchmark questions loaded successfully.")
+    except Exception as e:
+        st.error(f"Error loading benchmark questions: {e}")
+        benchmark_data = pd.DataFrame()
+
+    # Preprocess the 'ideal_documents' column
+    if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
+        benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
+            lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+        )
+
+    # Add dropdown to select a benchmark question
+    if not benchmark_data.empty:
+        selected_question_index = st.selectbox(
+            "Select a Benchmark Question:",
+            options=range(len(benchmark_data)),
+            format_func=lambda idx: f"{idx + 1}: {benchmark_data.iloc[idx]['question']}"
+        )
+        if selected_question_index is not None:
+            user_query = benchmark_data.iloc[selected_question_index]["question"]
+            expected_documents = benchmark_data.iloc[selected_question_index]["ideal_documents"]
+    else:
+        st.warning("No benchmark data available.")
+
 else:
-    st.warning("No benchmark data available.")
-    selected_question_index = None
+    # Custom query input
+    user_query = st.text_input("Enter your query:", "")
+    expected_docs_input = st.text_input(
+        "Enter expected document IDs (comma-separated):",
+        ""
+    )
+    if expected_docs_input:
+        expected_documents = [doc.strip() for doc in expected_docs_input.split(",")]
+    else:
+        expected_documents = []
 
-# Add a button to process the selected question
-if selected_question_index is not None and st.button("Run Benchmark Question"):
-    # Get the selected question
-    row = benchmark_data.iloc[selected_question_index]
-    user_query = row["question"]
-    expected_documents = row["ideal_documents"]  # Preprocessed list
+# Evaluation Method Selection
+st.subheader("Evaluation Options")
+eval_methods = st.multiselect(
+    "Select evaluation methods:",
+    ["BLEU/ROUGE Evaluation", "LLM-based Evaluation"],
+    default=["BLEU/ROUGE Evaluation"]
+)
 
-    # Display the question we're processing
-    st.subheader(f"Benchmark Question {selected_question_index + 1}")
-    st.write(f"Processing query: {user_query}")
+# Process button
+if user_query and st.button("Run Evaluation"):
+    st.subheader("Processing Query")
+    st.write(f"Query: {user_query}")
 
     try:
         # --- 1. Execute the RAG Pipeline ---
@@ -96,7 +120,6 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             perform_keyword_search=True,
             perform_semantic_search=True,
             perform_reranking=True,
-            # Provide references to your loggers, so the pipeline can log
             hays_data_logger=hays_data_logger,
             keyword_results_logger=keyword_results_logger,
             nicolay_data_logger=nicolay_data_logger,
@@ -144,10 +167,6 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         else:
             st.write("No reranked results found.")
 
-
-        # Add this before accessing the Text ID column
-        #st.write("Reranked results columns:", reranked_results.columns.tolist())
-
         # Normalized comparison function
         def normalize_doc_id(doc_id):
             """Normalize document IDs by extracting just the numeric portion."""
@@ -155,32 +174,7 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
                 return doc_id.split("Text #:")[1].strip()
             return str(doc_id)
 
-        # --- 5. Compare to Benchmark ---
-        st.write("### Benchmark Analysis")
-        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
-
-        # Debug outputs
-        #st.write("Reranked results columns:", reranked_results.columns.tolist())
-        #st.write("Expected documents types:", [type(doc) for doc in expected_documents])
-        #st.write("Top reranked IDs types:", [type(id) for id in top_reranked_ids])
-        #st.write("Expected documents:", expected_documents)
-        #st.write("Top reranked IDs:", top_reranked_ids)
-
-        # Normalize document IDs before comparison
-        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
-        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
-
-        # Debug normalized outputs
-        #st.write("Normalized expected:", normalized_expected)
-        #st.write("Normalized reranked:", normalized_reranked)
-
-        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
-        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
-
-
         # --- 6. Display Nicolay's Final Response ---
-        # nicolay_output should be a dict with something like:
-        # { "FinalAnswer": {"Text": "...", "References": [...]}, ...}
         final_answer_dict = nicolay_output.get("FinalAnswer", {})
         final_answer_text = final_answer_dict.get("Text", "")
 
@@ -194,60 +188,75 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             for ref in references:
                 st.write(f"- {ref}")
 
-        # Initialize RAG Evaluator
-        evaluator = RAGEvaluator()
 
-        # Get evaluation results
-        evaluation_results = evaluator.evaluate_rag_response(
-            reranked_results=reranked_results,
-            generated_response=final_answer_text,
-            ideal_documents=expected_documents
-        )
+        # --- 5. Compare to Benchmark ---
+        st.write("### Benchmark Analysis")
+        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
 
-        # Display evaluation results
-        st.markdown(add_evaluator_to_benchmark(evaluation_results))
+        # Normalize document IDs before comparison
+        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
+        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
 
-        # Debug display for Streamlit
-        #st.write("### Debug Information")
-        #st.write("Reranked Results Columns:", reranked_results.columns.tolist())
-        #st.write("Number of Reranked Results:", len(reranked_results))
-        #if not reranked_results.empty:
-        #    st.write("Sample of first reranked result:", reranked_results.iloc[0].to_dict())
-        #st.write("Length of Nicolay's response:", len(final_answer_text))
-        #st.write("First 200 chars of Nicolay's response:", final_answer_text[:200])
+        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
+        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
 
-        # Initialize the evaluator with your OpenAI API key
-        # Initialize the evaluator with your OpenAI API key
-        llm_evaluator = LLMResponseEvaluator()
+        # --- 7. Run Selected Evaluations ---
+        evaluation_results = None
+        eval_results = None
 
-        # After getting your RAG response
-        eval_results = llm_evaluator.evaluate_response(
-            query=user_query,
-            response=final_answer_text,
-            source_texts=reranked_results['Key Quote'].tolist(),
-            ideal_docs=expected_documents
-        )
+        if "BLEU/ROUGE Evaluation" in eval_methods:
+            st.subheader("BLEU/ROUGE Evaluation Results")
+            evaluator = RAGEvaluator()
+            evaluation_results = evaluator.evaluate_rag_response(
+                reranked_results=reranked_results,
+                generated_response=final_answer_text,
+                ideal_documents=expected_documents
+            )
+            st.markdown(add_evaluator_to_benchmark(evaluation_results))
 
-        # Display the evaluation results
-        if eval_results:
-            st.markdown(llm_evaluator.format_evaluation_results(eval_results))
-        else:
-            st.error("Unable to generate evaluation results")
+        if "LLM-based Evaluation" in eval_methods:
+            st.subheader("LLM Evaluation Results")
+            llm_evaluator = LLMResponseEvaluator()
+            eval_results = llm_evaluator.evaluate_response(
+                query=user_query,
+                response=final_answer_text,
+                source_texts=reranked_results['Key Quote'].tolist(),
+                ideal_docs=expected_documents
+            )
+            if eval_results:
+                st.markdown(llm_evaluator.format_evaluation_results(eval_results))
+            else:
+                st.error("Unable to generate LLM evaluation results")
 
-        # --- 8. Log final results, if desired ---
-        # For example, in the nicolay_data logger:
-        if nicolay_data_logger and final_answer_text:
-            nicolay_data_logger.record_api_outputs({
-                'Benchmark Question': user_query,
-                'Ideal Documents': expected_documents,
-                'Matched Documents': top_reranked_ids,
-                'Nicolay_Final_Answer': final_answer_text,
-                'Timestamp': dt.now(),
-            })
+        # Log benchmark results only if we have evaluation results
+        if evaluation_results or eval_results:
+            log_benchmark_results(
+                benchmark_logger=benchmark_logger,
+                user_query=user_query,
+                expected_documents=expected_documents,
+                bleu_rouge_results=evaluation_results or {},
+                llm_results=eval_results or {},
+                reranked_results=reranked_results
+            )
+
+            # --- 8. Log final results ---
+            #    if nicolay_data_logger and final_answer_text:
+            #        nicolay_data_logger.record_api_outputs({
+            #            'Benchmark Question': user_query,
+            #            'Ideal Documents': expected_documents,
+            #            'Matched Documents': top_reranked_ids,
+            #            'Nicolay_Final_Answer': final_answer_text,
+            #            'Timestamp': dt.now(),
+            #        })
+
+
+
+
 
     except Exception as e:
-        st.error(f"Error processing query {selected_question_index + 1}: {e}")
+        st.error(f"Error processing query: {e}")
+        st.exception(e)  # This will show the full traceback
 
-# Summary/Visualization or further analysis
+# Summary/Visualization section
 st.write("### Summary and Visualization")
 st.write("Additional charts or summary metrics can go here.")

@@ -67,28 +67,26 @@ def log_keyword_search_results(keyword_results_logger, search_results, user_quer
         # Log the record
         keyword_results_logger.record_api_outputs(record)
 
-def log_semantic_search_results(semantic_results_logger, semantic_matches):
+def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer=None):
     """
     Logs the semantic search results to Google Sheets.
 
     Parameters:
     - semantic_results_logger (DataLogger): Instance of DataLogger for semantic search.
     - semantic_matches (pd.DataFrame): DataFrame containing semantic search results.
+    - initial_answer (str, optional): Initial answer from Hay model.
     """
     now = dt.now()  # Current timestamp
 
     for idx, row in semantic_matches.iterrows():
         record = {
             'Timestamp': now,
-            'UserQuery': row['UserQuery'],
-            #'HyDE_Query': row['initial_answer'],  # Assuming 'initial_answer' is stored here
-            'HyDE_Query': initial_answer,  # Assuming 'initial_answer' is stored here
-            'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
-            'SimilarityScore': row['similarities'],
-            'TopSegment': row['TopSegment']
+            'UserQuery': row.get('UserQuery', ''),
+            'HyDE_Query': initial_answer if initial_answer else '',  # Use passed initial_answer
+            'TextID': row.get('text_id', row.get('Unnamed: 0', '')),  # Try both column names
+            'SimilarityScore': row.get('similarities', 0.0),
+            'TopSegment': row.get('TopSegment', '')
         }
-
-        # Log the record
         semantic_results_logger.record_api_outputs(record)
 
 def log_reranking_results(reranking_results_logger, reranked_df, user_query):

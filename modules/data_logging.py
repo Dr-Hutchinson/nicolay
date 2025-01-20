@@ -90,22 +90,29 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches, initi
         semantic_results_logger.record_api_outputs(record)
 
 def log_reranking_results(reranking_results_logger, reranked_df, user_query):
-    if isinstance(reranked_df, pd.DataFrame):
-        now = dt.now()  # Current timestamp
+    """
+    Logs the reranking results to Google Sheets.
 
-        for idx, row in reranked_df.iterrows():
-            record = {
-                'Timestamp': now,
-                'UserQuery': user_query,
-                'Rank': row['Rank'],
-                'SearchType': row['Search Type'],
-                'TextID': row['Text ID'],
-                'KeyQuote': row['Key Quote'],
-                'Relevance_Score': row['Relevance Score']
-            }
-            reranking_results_logger.record_api_outputs(record)
-    else:
-        raise ValueError("reranked_df should be a DataFrame")
+    Parameters:
+    - reranking_results_logger (DataLogger): Instance of DataLogger for reranking.
+    - reranked_df (pd.DataFrame): DataFrame containing reranked results.
+    - user_query (str): Original user query.
+    """
+    now = dt.now()  # Current timestamp
+
+    for idx, row in reranked_df.iterrows():
+        record = {
+            'Timestamp': now,
+            'UserQuery': user_query,
+            'Rank': row.get('Rank', ''),
+            'SearchType': row.get('Search Type', ''),
+            'TextID': row.get('Text ID', ''),
+            'KeyQuote': row.get('Key Quote', ''),
+            'Relevance_Score': row.get('Relevance Score', 0.0)
+        }
+
+        # Log the record
+        reranking_results_logger.record_api_outputs(record)
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict):
     """

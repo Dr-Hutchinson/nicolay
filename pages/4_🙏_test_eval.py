@@ -199,7 +199,8 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         # Get evaluation results
         evaluation_results = evaluator.evaluate_rag_response(
             reranked_results=reranked_results,
-            generated_response=final_answer_text
+            generated_response=final_answer_text,
+            ideal_documents=expected_documents  
         )
 
         # Display evaluation results

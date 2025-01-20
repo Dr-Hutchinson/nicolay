@@ -37,6 +37,7 @@ keyword_results_logger = DataLogger(gc=gc, sheet_name="keyword_search_results")
 nicolay_data_logger = DataLogger(gc=gc, sheet_name="nicolay_data")
 reranking_results_logger = DataLogger(gc=gc, sheet_name="reranking_results")
 semantic_results_logger = DataLogger(gc=gc, sheet_name="semantic_search_results")
+benchmark_logger = DataLogger(gc=gc, sheet_name="benchmark_results")
 
 # Load Prompts into session_state
 load_prompts()
@@ -199,6 +200,9 @@ if user_query and st.button("Run Evaluation"):
                 st.write(f"- {ref}")
 
         # --- 7. Run Selected Evaluations ---
+        evaluation_results = None
+        eval_results = None
+
         if "BLEU/ROUGE Evaluation" in eval_methods:
             st.subheader("BLEU/ROUGE Evaluation Results")
             evaluator = RAGEvaluator()
@@ -223,15 +227,30 @@ if user_query and st.button("Run Evaluation"):
             else:
                 st.error("Unable to generate LLM evaluation results")
 
-        # --- 8. Log final results ---
-        if nicolay_data_logger and final_answer_text:
-            nicolay_data_logger.record_api_outputs({
-                'Benchmark Question': user_query,
-                'Ideal Documents': expected_documents,
-                'Matched Documents': top_reranked_ids,
-                'Nicolay_Final_Answer': final_answer_text,
-                'Timestamp': dt.now(),
-            })
+        # Log benchmark results only if we have evaluation results
+        if evaluation_results or eval_results:
+            log_benchmark_results(
+                benchmark_logger=benchmark_logger,
+                user_query=user_query,
+                expected_documents=expected_documents,
+                bleu_rouge_results=evaluation_results or {},
+                llm_results=eval_results or {},
+                reranked_results=reranked_results
+            )
+
+            # --- 8. Log final results ---
+            #    if nicolay_data_logger and final_answer_text:
+            #        nicolay_data_logger.record_api_outputs({
+            #            'Benchmark Question': user_query,
+            #            'Ideal Documents': expected_documents,
+            #            'Matched Documents': top_reranked_ids,
+            #            'Nicolay_Final_Answer': final_answer_text,
+            #            'Timestamp': dt.now(),
+            #        })
+
+
+
+
 
     except Exception as e:
         st.error(f"Error processing query: {e}")

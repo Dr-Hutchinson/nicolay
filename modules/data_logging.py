@@ -178,3 +178,70 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
 
     # Log the record
     nicolay_data_logger.record_api_outputs(record)
+
+def log_benchmark_results(benchmark_logger, user_query, expected_documents,
+                        bleu_rouge_results, llm_results, reranked_results):
+    """
+    Logs benchmark evaluation results to Google Sheets.
+
+    Parameters:
+    - benchmark_logger (DataLogger): Instance of DataLogger for benchmark results
+    - user_query (str): The user's query
+    - expected_documents (list): List of expected document IDs
+    - bleu_rouge_results (dict): Results from BLEU/ROUGE evaluation
+    - llm_results (dict): Results from LLM evaluation
+    - reranked_results (pd.DataFrame): Reranked search results
+    """
+    # Extract BLEU/ROUGE scores
+    aggregate_scores = bleu_rouge_results.get('aggregate_scores', {})
+    retrieval_metrics = bleu_rouge_results.get('retrieval_metrics', {})
+
+    # Extract LLM evaluation scores
+    eval_scores = llm_results.get('evaluation_scores', {})
+    overall_assessment = llm_results.get('overall_assessment', {})
+
+    # Get top retrieved documents
+    top_retrieved = reranked_results['Text ID'].head(3).tolist() if not reranked_results.empty else []
+
+    # Create benchmark record
+    record = {
+        'Timestamp': dt.now(),
+        'Query': user_query,
+        'ExpectedDocuments': json.dumps(expected_documents),
+        'RetrievedDocuments': json.dumps(top_retrieved),
+
+        # BLEU/ROUGE Metrics
+        'BLEU_Score': aggregate_scores.get('bleu_score', 0),
+        'ROUGE1_Score': aggregate_scores.get('rouge1_score', 0),
+        'ROUGE_L_Score': aggregate_scores.get('rougeL_score', 0),
+
+        # Retrieval Metrics
+        'MRR': retrieval_metrics.get('mrr', 0),
+        'NDCG': retrieval_metrics.get('ndcg', 0),
+        'Precision_at_1': retrieval_metrics.get('P@1', 0),
+        'Precision_at_3': retrieval_metrics.get('P@3', 0),
+        'Recall_at_1': retrieval_metrics.get('R@1', 0),
+        'Recall_at_3': retrieval_metrics.get('R@3', 0),
+
+        # LLM Evaluation Scores
+        'QueryResponse_Score': eval_scores.get('query_response_quality', {}).get('score', 0),
+        'QuoteUsage_Score': eval_scores.get('quote_usage', {}).get('score', 0),
+        'CitationAccuracy_Score': eval_scores.get('citation_accuracy', {}).get('score', 0),
+        'SourceIntegration_Score': eval_scores.get('source_integration', {}).get('score', 0),
+        'HistoricalContext_Score': eval_scores.get('historical_context', {}).get('score', 0),
+        'ResponseStructure_Score': eval_scores.get('response_structure', {}).get('score', 0),
+
+        # Overall LLM Assessment
+        'TotalLLMScore': overall_assessment.get('total_score', 0),
+        'Strengths': json.dumps(overall_assessment.get('strengths', [])),
+        'Weaknesses': json.dumps(overall_assessment.get('weaknesses', [])),
+        'ImprovementPriorities': json.dumps(overall_assessment.get('improvement_priorities', [])),
+
+        # Document Match Statistics
+        'MatchedDocumentCount': len(set(expected_documents) & set(top_retrieved)),
+        'TotalExpectedDocs': len(expected_documents),
+        'TotalRetrievedDocs': len(top_retrieved)
+    }
+
+    # Log the record
+    benchmark_logger.record_api_outputs(record)

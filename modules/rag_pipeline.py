@@ -264,9 +264,9 @@ def run_rag_pipeline(
                 ]
 
                 # Debug output
-                st.write("Sending to Nicolay model:")
-                st.write("Number of reranked results:", len(reranked_records))
-                st.write("Formatted input:", formatted_for_nicolay)
+                #st.write("Sending to Nicolay model:")
+                #st.write("Number of reranked results:", len(reranked_records))
+                #st.write("Formatted input:", formatted_for_nicolay)
 
                 second_model_response = openai_client.chat.completions.create(
                     model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",

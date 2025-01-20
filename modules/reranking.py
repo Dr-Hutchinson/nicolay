@@ -30,7 +30,7 @@ def prepare_documents_for_reranking(combined_df, user_query):
                 "id": str(idx)
             }
 
-            st.write(f"Prepared document {idx}:", doc)  # Debug output
+            #st.write(f"Prepared document {idx}:", doc)  # Debug output
             documents.append(doc)
 
         except Exception as e:
@@ -60,8 +60,8 @@ def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0',
         for rank, result in enumerate(reranked.results, 1):
             try:
                 # Debug the result structure
-                st.write(f"Result {rank} document type: {type(result.document)}")
-                st.write(f"Result {rank} document content: {result.document}")
+                #st.write(f"Result {rank} document type: {type(result.document)}")
+                #st.write(f"Result {rank} document content: {result.document}")
 
                 # Get the document text - handle both string and dict cases
                 if isinstance(result.document, dict):
@@ -87,7 +87,7 @@ def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0',
                         'UserQuery': query
                     })
 
-                    st.write(f"Successfully processed result {rank}")
+                    #st.write(f"Successfully processed result {rank}")
 
             except Exception as e:
                 st.error(f"Error processing reranked result {rank}: {str(e)}")
@@ -97,7 +97,7 @@ def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0',
         # Create DataFrame from results
         if reranked_data:
             df = pd.DataFrame(reranked_data)
-            st.write("Created DataFrame with shape:", df.shape)  # Debug output
+            #st.write("Created DataFrame with shape:", df.shape)  # Debug output
             return df
 
         st.warning("No results were successfully processed")

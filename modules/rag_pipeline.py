@@ -129,8 +129,8 @@ def run_rag_pipeline(
             max_tokens=500
         )
         raw_hay_output = response.choices[0].message.content
-        st.write("**Raw Hay output**:")
-        st.write(raw_hay_output)
+        #st.write("**Raw Hay output**:")
+        #st.write(raw_hay_output)
 
         hay_output = json.loads(raw_hay_output)
         initial_answer = hay_output.get("initial_answer", "")

@@ -145,7 +145,7 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
 
 
         # Add this before accessing the Text ID column
-        st.write("Reranked results columns:", reranked_results.columns.tolist())
+        #st.write("Reranked results columns:", reranked_results.columns.tolist())
 
         # Normalized comparison function
         def normalize_doc_id(doc_id):
@@ -200,20 +200,20 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         evaluation_results = evaluator.evaluate_rag_response(
             reranked_results=reranked_results,
             generated_response=final_answer_text,
-            ideal_documents=expected_documents  
+            ideal_documents=expected_documents
         )
 
         # Display evaluation results
         st.markdown(add_evaluator_to_benchmark(evaluation_results))
 
         # Debug display for Streamlit
-        st.write("### Debug Information")
-        st.write("Reranked Results Columns:", reranked_results.columns.tolist())
-        st.write("Number of Reranked Results:", len(reranked_results))
-        if not reranked_results.empty:
-            st.write("Sample of first reranked result:", reranked_results.iloc[0].to_dict())
-        st.write("Length of Nicolay's response:", len(final_answer_text))
-        st.write("First 200 chars of Nicolay's response:", final_answer_text[:200])
+        #st.write("### Debug Information")
+        #st.write("Reranked Results Columns:", reranked_results.columns.tolist())
+        #st.write("Number of Reranked Results:", len(reranked_results))
+        #if not reranked_results.empty:
+        #    st.write("Sample of first reranked result:", reranked_results.iloc[0].to_dict())
+        #st.write("Length of Nicolay's response:", len(final_answer_text))
+        #st.write("First 200 chars of Nicolay's response:", final_answer_text[:200])
 
 
         # --- 7. Optional: Evaluate Nicolay's response with a separate LLM ---

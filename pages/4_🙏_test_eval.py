@@ -149,9 +149,9 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         # Normalized comparison function
         def normalize_doc_id(doc_id):
             """Normalize document IDs by extracting just the numeric portion."""
-                if isinstance(doc_id, str) and "Text #:" in doc_id:
-                    return doc_id.split("Text #:")[1].strip()
-                return str(doc_id)
+            if isinstance(doc_id, str) and "Text #:" in doc_id:
+                return doc_id.split("Text #:")[1].strip()
+            return str(doc_id)
 
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")

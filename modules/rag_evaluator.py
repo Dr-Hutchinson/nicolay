@@ -3,6 +3,7 @@ from nltk.translate.bleu_score import sentence_bleu
 from rouge_score import rouge_scorer
 import pandas as pd
 import math
+import streamlit as st
 
 class RAGEvaluator:
     def __init__(self):

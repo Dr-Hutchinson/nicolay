@@ -253,12 +253,18 @@ def run_rag_pipeline(
             # Log
             #if semantic_results_logger:
             #    log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
+            # Inside rag_pipeline.py, in the semantic search section:
             if semantic_results_logger:
-                log_semantic_search_results(
-                    semantic_results_logger,
-                    semantic_matches_df,
-                    initial_answer=initial_answer
-                )
+                try:
+                    log_semantic_search_results(
+                        semantic_results_logger,
+                        semantic_matches_df,
+                        initial_answer  # Pass as positional argument
+                    )
+                except Exception as e:
+                    st.error(f"Error logging semantic search results: {str(e)}")
+                    # Optionally, log the error but continue execution
+                    pass
 
 
     # 7. Combine & Deduplicate

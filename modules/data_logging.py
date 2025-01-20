@@ -81,7 +81,8 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches):
         record = {
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
-            'HyDE_Query': row['initial_answer'],  # Assuming 'initial_answer' is stored here
+            #'HyDE_Query': row['initial_answer'],  # Assuming 'initial_answer' is stored here
+            'HyDE_Query': initial_answer,  # Assuming 'initial_answer' is stored here
             'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
             'SimilarityScore': row['similarities'],
             'TopSegment': row['TopSegment']

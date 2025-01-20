@@ -90,29 +90,29 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches):
         # Log the record
         semantic_results_logger.record_api_outputs(record)
 
-def log_reranking_results(reranking_results_logger, reranked_df):
+def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer=None):
     """
-    Logs the reranking results to Google Sheets.
+    Logs the semantic search results to Google Sheets.
 
     Parameters:
-    - reranking_results_logger (DataLogger): Instance of DataLogger for reranking.
-    - reranked_df (pd.DataFrame): DataFrame containing reranked results.
+    - semantic_results_logger (DataLogger): Instance of DataLogger for semantic search.
+    - semantic_matches (pd.DataFrame): DataFrame containing semantic search results.
+    - initial_answer (str, optional): Initial answer from Hay model.
     """
     now = dt.now()  # Current timestamp
 
-    for idx, row in reranked_df.iterrows():
+    for idx, row in semantic_matches.iterrows():
         record = {
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
-            'Rank': row['Rank'],
-            'SearchType': row['Search Type'],
-            'TextID': row['Text ID'],
-            'KeyQuote': row['Key Quote'],
-            'Relevance_Score': row['Relevance Score']
+            'HyDE_Query': initial_answer if initial_answer else row.get('initial_answer', ''),
+            'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
+            'SimilarityScore': row['similarities'],
+            'TopSegment': row['TopSegment']
         }
 
         # Log the record
-        reranking_results_logger.record_api_outputs(record)
+        semantic_results_logger.record_api_outputs(record)
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict):
     """

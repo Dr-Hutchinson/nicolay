@@ -251,8 +251,15 @@ def run_rag_pipeline(
             semantic_matches_df = semantic_results
 
             # Log
+            #if semantic_results_logger:
+            #    log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
             if semantic_results_logger:
-                log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
+                log_semantic_search_results(
+                    semantic_results_logger,
+                    semantic_matches_df,
+                    initial_answer=initial_answer
+                )
+
 
     # 7. Combine & Deduplicate
     combined_df = pd.concat([search_results_df, semantic_matches_df], ignore_index=True)

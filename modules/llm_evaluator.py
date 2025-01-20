@@ -7,7 +7,7 @@ class LLMResponseEvaluator:
         """Initialize evaluator with OpenAI client."""
         self.client = OpenAI(api_key=api_key or st.secrets["openai_api_key"])
 
-    async def evaluate_response(self, query, response, source_texts, ideal_docs):
+    def evaluate_response(self, query, response, source_texts, ideal_docs):
         """Evaluate RAG response using OpenAI."""
         try:
             # Create evaluation prompt
@@ -15,7 +15,7 @@ class LLMResponseEvaluator:
 
             # Make API call to OpenAI
             completion = self.client.chat.completions.create(
-                model="gpt-4o",  # Using GPT-4 for comprehensive evaluation
+                model="gpt-4",  # Using GPT-4 for comprehensive evaluation
                 messages=[
                     {"role": "system", "content": "You are an expert evaluator of RAG (Retrieval Augmented Generation) systems, specializing in historical document analysis and academic writing assessment."},
                     {"role": "user", "content": eval_prompt}
@@ -29,7 +29,7 @@ class LLMResponseEvaluator:
                 eval_results = json.loads(completion.choices[0].message.content)
                 return eval_results
             except json.JSONDecodeError as e:
-                st.write(f"Error parsing JSON response: {e}")
+                print(f"Error parsing JSON response: {e}")
                 print("Raw response:", completion.choices[0].message.content)
                 return None
 

@@ -217,10 +217,11 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         #st.write("First 200 chars of Nicolay's response:", final_answer_text[:200])
 
         # Initialize the evaluator with your OpenAI API key
+        # Initialize the evaluator with your OpenAI API key
         llm_evaluator = LLMResponseEvaluator()
 
         # After getting your RAG response
-        eval_results = await llm_evaluator.evaluate_response(
+        eval_results = llm_evaluator.evaluate_response(
             query=user_query,
             response=final_answer_text,
             source_texts=reranked_results['Key Quote'].tolist(),
@@ -232,7 +233,6 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             st.markdown(llm_evaluator.format_evaluation_results(eval_results))
         else:
             st.error("Unable to generate evaluation results")
-
 
         # --- 8. Log final results, if desired ---
         # For example, in the nicolay_data logger:

@@ -3,7 +3,6 @@ from nltk.translate.bleu_score import sentence_bleu
 from rouge_score import rouge_scorer
 import pandas as pd
 import math
-import streamlit as st
 
 class RAGEvaluator:
     def __init__(self):
@@ -108,9 +107,24 @@ class RAGEvaluator:
         """Evaluate RAG response with both content and retrieval metrics."""
         print("\n=== Starting RAG Response Evaluation ===")
         generated_response = str(generated_response)
-        print(f"Generated response length: {len(generated_response)}")
 
-        # Store individual document scores
+        # Split results by search method
+        if 'Search Type' in reranked_results.columns:
+            keyword_results = reranked_results[reranked_results['Search Type'] == 'Keyword'].copy()
+            semantic_results = reranked_results[reranked_results['Search Type'] == 'Semantic'].copy()
+
+            print(f"\nResults by search method:")
+            print(f"Keyword search results: {len(keyword_results)}")
+            print(f"Semantic search results: {len(semantic_results)}")
+
+            # Calculate retrieval metrics for each method
+            keyword_metrics = self.calculate_retrieval_metrics(keyword_results, ideal_documents) if not keyword_results.empty else {}
+            semantic_metrics = self.calculate_retrieval_metrics(semantic_results, ideal_documents) if not semantic_results.empty else {}
+        else:
+            keyword_metrics = {}
+            semantic_metrics = {}
+
+        # Continue with regular evaluation
         doc_scores = []
         combined_reference_text = []
 
@@ -119,6 +133,7 @@ class RAGEvaluator:
             if 'Key Quote' in row:
                 doc_text = str(row['Key Quote'])
                 doc_id = str(row['Text ID'])
+                search_type = row.get('Search Type', 'Unknown')
 
                 # Calculate individual document scores
                 doc_score = self.evaluate_single_document(
@@ -126,6 +141,7 @@ class RAGEvaluator:
                     generated_response,
                     doc_id
                 )
+                doc_score['search_type'] = search_type  # Add search type to scores
                 doc_scores.append(doc_score)
                 combined_reference_text.append(doc_text)
 
@@ -134,10 +150,8 @@ class RAGEvaluator:
         aggregate_bleu = self.calculate_bleu(combined_text, generated_response)
         aggregate_rouge1, aggregate_rougeL = self.calculate_rouge(combined_text, generated_response)
 
-        # Calculate retrieval metrics if ideal documents are provided
-        retrieval_metrics = {}
-        if ideal_documents is not None:
-            retrieval_metrics = self.calculate_retrieval_metrics(reranked_results, ideal_documents)
+        # Calculate overall retrieval metrics
+        retrieval_metrics = self.calculate_retrieval_metrics(reranked_results, ideal_documents) if ideal_documents is not None else {}
 
         return {
             'aggregate_scores': {
@@ -148,7 +162,11 @@ class RAGEvaluator:
                 'generated_text_length': len(generated_response)
             },
             'individual_scores': doc_scores,
-            'retrieval_metrics': retrieval_metrics
+            'retrieval_metrics': retrieval_metrics,
+            'search_method_comparison': {
+                'keyword': keyword_metrics,
+                'semantic': semantic_metrics
+            }
         }
 
     def calculate_bleu(self, reference_text, generated_text):
@@ -169,12 +187,13 @@ def add_evaluator_to_benchmark(evaluator_results):
     aggregate = evaluator_results['aggregate_scores']
     individual = evaluator_results['individual_scores']
     retrieval = evaluator_results.get('retrieval_metrics', {})
+    search_comparison = evaluator_results.get('search_method_comparison', {})
 
     # Format individual document scores
     doc_scores_text = "\n### Individual Document Scores\n"
     for doc in individual:
         doc_scores_text += f"""
-        Document {doc['doc_id']}:
+        Document {doc['doc_id']} ({doc.get('search_type', 'Unknown')}):
         - BLEU Score: {doc['bleu_score']:.4f}
         - ROUGE-1 Score: {doc['rouge1_score']:.4f}
         - ROUGE-L Score: {doc['rougeL_score']:.4f}
@@ -185,15 +204,37 @@ def add_evaluator_to_benchmark(evaluator_results):
     retrieval_text = ""
     if retrieval:
         retrieval_text = f"""
-        ### Retrieval Precision Metrics
-        - Mean Reciprocal Rank: {retrieval['mrr']:.4f}
-        - NDCG: {retrieval['ndcg']:.4f}
-        - Precision@1: {retrieval['P@1']:.4f}
-        - Precision@3: {retrieval['P@3']:.4f}
-        - Precision@5: {retrieval['P@5']:.4f}
-        - Recall@1: {retrieval['R@1']:.4f}
-        - Recall@3: {retrieval['R@3']:.4f}
-        - Recall@5: {retrieval['R@5']:.4f}
+        ### Overall Retrieval Precision Metrics
+        - Mean Reciprocal Rank: {retrieval.get('mrr', 0):.4f}
+        - NDCG: {retrieval.get('ndcg', 0):.4f}
+        - Precision@1: {retrieval.get('P@1', 0):.4f}
+        - Precision@3: {retrieval.get('P@3', 0):.4f}
+        - Precision@5: {retrieval.get('P@5', 0):.4f}
+        - Recall@1: {retrieval.get('R@1', 0):.4f}
+        - Recall@3: {retrieval.get('R@3', 0):.4f}
+        - Recall@5: {retrieval.get('R@5', 0):.4f}
+        """
+
+    # Format search method comparison
+    search_comparison_text = ""
+    if search_comparison:
+        keyword = search_comparison.get('keyword', {})
+        semantic = search_comparison.get('semantic', {})
+
+        search_comparison_text = f"""
+        ### Search Method Comparison
+
+        Keyword Search Metrics:
+        - MRR: {keyword.get('mrr', 0):.4f}
+        - NDCG: {keyword.get('ndcg', 0):.4f}
+        - P@3: {keyword.get('P@3', 0):.4f}
+        - R@3: {keyword.get('R@3', 0):.4f}
+
+        Semantic Search Metrics:
+        - MRR: {semantic.get('mrr', 0):.4f}
+        - NDCG: {semantic.get('ndcg', 0):.4f}
+        - P@3: {semantic.get('P@3', 0):.4f}
+        - R@3: {semantic.get('R@3', 0):.4f}
         """
 
     return f"""
@@ -207,4 +248,5 @@ def add_evaluator_to_benchmark(evaluator_results):
 
     {doc_scores_text}
     {retrieval_text}
+    {search_comparison_text}
     """

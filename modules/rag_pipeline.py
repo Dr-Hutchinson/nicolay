@@ -1,311 +1,252 @@
-# modules/rag_pipeline.py
-
-import json
-import numpy as np
+import nltk
+from nltk.translate.bleu_score import sentence_bleu
+from rouge_score import rouge_scorer
 import pandas as pd
-import streamlit as st
-from datetime import datetime as dt
-from openai import OpenAI
-import cohere
-from concurrent.futures import ThreadPoolExecutor
-import re
-import time
+import math
 
-# Import all necessary modules
-from modules.data_logging import (
-    log_keyword_search_results,
-    log_semantic_search_results,
-    log_reranking_results,
-    log_nicolay_model_output,
-    DataLogger
-)
+class RAGEvaluator:
+    def __init__(self):
+        """Initialize the RAG evaluator with ROUGE scorer."""
+        self.rouge_scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+        self.k_values = [1, 3, 5]  # Standard cutoff points for precision/recall
 
-from modules.data_utils import (
-    load_lincoln_speech_corpus,
-    load_voyant_word_counts,
-    load_lincoln_index_embedded
-)
+    def evaluate_single_document(self, reference_text, generated_text, doc_id):
+        """Evaluate BLEU and ROUGE scores for a single document."""
+        bleu = self.calculate_bleu(reference_text, generated_text)
+        rouge1, rougeL = self.calculate_rouge(reference_text, generated_text)
 
-from modules.misc_helpers import (
-    remove_duplicates,
-    highlight_key_quote
-)
-
-from modules.prompt_loader import load_prompts
-from modules.keyword_search import search_with_dynamic_weights_expanded
-from modules.semantic_search import (
-    search_text,
-    compare_segments_with_query_parallel
-)
-from modules.reranking import (
-    prepare_documents_for_reranking,
-    rerank_results,
-    format_reranked_results_for_model_input
-)
-
-def extract_full_text(combined_text):
-    markers = ["Full Text:\n", "Full Text: \n", "Full Text:"]
-    if isinstance(combined_text, str):
-        for marker in markers:
-            marker_index = combined_text.find(marker)
-            if marker_index != -1:
-                return combined_text[marker_index + len(marker):].strip()
-        return ""
-    return ""
-
-def segment_text(text, segment_size=100, overlap=50):
-    words = text.split()
-    segments = []
-    for i in range(0, len(words), segment_size - overlap):
-        segment = words[i:i + segment_size]
-        segments.append(' '.join(segment))
-    return segments
-
-def run_rag_pipeline(
-    user_query,
-    perform_keyword_search=True,
-    perform_semantic_search=True,
-    perform_reranking=True,
-    hays_data_logger=None,
-    keyword_results_logger=None,
-    semantic_results_logger=None,
-    reranking_results_logger=None,
-    nicolay_data_logger=None,
-    gc=None,
-    openai_api_key=None,
-    cohere_api_key=None,
-    top_n_results=5
-):
-    try:
-        # 1. Load Prompts
-        load_prompts()
-        keyword_prompt = st.session_state["keyword_model_system_prompt"]
-        response_prompt = st.session_state["response_model_system_prompt"]
-
-        # 2. Initialize Clients
-        openai_client = OpenAI(api_key=openai_api_key or st.secrets["openai_api_key"])
-        cohere_client = cohere.Client(api_key=cohere_api_key or st.secrets["cohere_api_key"])
-
-        # 3. Load Data
-        lincoln_data_df = load_lincoln_speech_corpus()
-        voyant_data_df = load_voyant_word_counts()
-        lincoln_index_df = load_lincoln_index_embedded()
-
-        lincoln_data = lincoln_data_df.to_dict("records")
-        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-
-        # Process Voyant data
-        if not voyant_data_df.empty and "corpusTerms" in voyant_data_df.columns:
-            corpus_terms_json = voyant_data_df.at[0, "corpusTerms"]
-            corpus_terms = (json.loads(corpus_terms_json) if isinstance(corpus_terms_json, str)
-                          else corpus_terms_json)["terms"]
-        else:
-            st.error("No corpusTerms found in voyant_data_df.")
-            corpus_terms = []
-
-        # Prepare Lincoln index
-        lincoln_index_df["embedding"] = lincoln_index_df["embedding"].apply(
-            lambda x: list(map(float, x.strip("[]").split(","))) if isinstance(x, str) else []
-        )
-        lincoln_index_df["full_text"] = lincoln_index_df["combined"].apply(extract_full_text)
-
-        def get_source_and_summary(text_id_str):
-            entry = lincoln_dict.get(text_id_str, {})
-            return entry.get("source", ""), entry.get("summary", "")
-
-        lincoln_index_df["source"], lincoln_index_df["summary"] = zip(
-            *lincoln_index_df["text_id"].apply(get_source_and_summary)
-        )
-
-        # 4. Call Hay Model
-        messages_for_model = [
-            {"role": "system", "content": keyword_prompt},
-            {"role": "user", "content": user_query}
-        ]
-        response = openai_client.chat.completions.create(
-            model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
-            messages=messages_for_model,
-            temperature=0,
-            max_tokens=500
-        )
-        raw_hay_output = response.choices[0].message.content
-        #st.write("**Raw Hay output**:")
-        #st.write(raw_hay_output)
-
-        hay_output = json.loads(raw_hay_output)
-        initial_answer = hay_output.get("initial_answer", "")
-        model_weighted_keywords = hay_output.get("weighted_keywords", {})
-        model_year_keywords = hay_output.get("year_keywords", [])
-        model_text_keywords = hay_output.get("text_keywords", [])
-
-        if hays_data_logger:
-            hays_data_logger.record_api_outputs({
-                "query": user_query,
-                "initial_answer": initial_answer,
-                "weighted_keywords": model_weighted_keywords,
-                "year_keywords": model_year_keywords,
-                "text_keywords": model_text_keywords,
-                "full_output": raw_hay_output,
-                "Timestamp": dt.now()
-            })
-
-        # 5. Keyword Search
-        search_results_df = pd.DataFrame()
-        if perform_keyword_search and corpus_terms:
-            results_list = search_with_dynamic_weights_expanded(
-                user_keywords=model_weighted_keywords,
-                corpus_terms={"terms": corpus_terms},
-                data=lincoln_data,
-                year_keywords=model_year_keywords,
-                text_keywords=model_text_keywords,
-                top_n_results=top_n_results
-            )
-            search_results_df = pd.DataFrame(results_list)
-            if "quote" in search_results_df.columns:
-                search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
-
-            if keyword_results_logger and not search_results_df.empty:
-                log_keyword_search_results(
-                    keyword_results_logger,
-                    search_results_df,
-                    user_query,
-                    initial_answer,
-                    model_weighted_keywords,
-                    model_year_keywords,
-                    model_text_keywords
-                )
-
-        # 6. Semantic Search
-        semantic_matches_df = pd.DataFrame()
-        if perform_semantic_search and not lincoln_index_df.empty:
-            semantic_results, user_query_embedding = search_text(
-                lincoln_index_df,
-                user_query + initial_answer,
-                client=openai_client,
-                n=top_n_results
-            )
-
-            if not semantic_results.empty:
-                top_segments = []
-                for idx, row in semantic_results.iterrows():
-                    segments = segment_text(row["full_text"], segment_size=300)
-                    segment_scores = compare_segments_with_query_parallel(
-                        segments,
-                        user_query_embedding,
-                        openai_client
-                    )
-                    best_segment = max(segment_scores, key=lambda x: x[1]) if segment_scores else ("", 0)
-                    top_segments.append(best_segment[0])
-
-                semantic_results["TopSegment"] = top_segments
-                if "Unnamed: 0" in semantic_results.columns:
-                    semantic_results.rename(columns={"Unnamed: 0": "text_id"}, inplace=True)
-                semantic_matches_df = semantic_results
-
-                if semantic_results_logger:
-                    try:
-                        log_semantic_search_results(
-                            semantic_results_logger,
-                            semantic_matches_df,
-                            initial_answer
-                        )
-                    except Exception as e:
-                        st.error(f"Error logging semantic search results: {str(e)}")
-
-        # 7. Combine Results & Rerank
-        # In rag_pipeline.py
-        # 7. Combine Results & Rerank
-        combined_df = pd.concat([search_results_df, semantic_matches_df])
-        combined_df = combined_df.drop_duplicates(subset=["text_id"]) if not combined_df.empty else combined_df
-
-        reranked_df = pd.DataFrame()
-        if perform_reranking and not combined_df.empty:
-            try:
-                # Prepare documents using the new function from reranking.py
-                documents_for_cohere = prepare_documents_for_reranking(combined_df, user_query)
-
-                # Use the new reranking function
-                reranked_df = rerank_results(
-                    query=user_query,
-                    documents=documents_for_cohere,
-                    cohere_client=cohere_client
-                )
-
-                if not reranked_df.empty and reranking_results_logger:
-                    log_reranking_results(reranking_results_logger, reranked_df, user_query)
-
-            except Exception as e:
-                st.error(f"Error in reranking: {str(e)}")
-                st.exception(e)  # Show full traceback
-                reranked_df = pd.DataFrame()  # Ensure we have an empty DataFrame on error
-
-        # 8. Nicolay Model
-        # In rag_pipeline.py, modify the Nicolay model section:
-
-        # 9. Final "Nicolay" model call
-        nicolay_output = {}
-        if perform_reranking and not reranked_df.empty:
-            try:
-                # Convert reranked_df to records for formatting if needed
-                reranked_records = reranked_df.to_dict('records') if isinstance(reranked_df, pd.DataFrame) else []
-
-                # Format top 3 for the second model
-                formatted_for_nicolay = format_reranked_results_for_model_input(reranked_records)
-
-                # Build your message
-                nicolay_messages = [
-                    {"role": "system", "content": response_prompt},
-                    {
-                        "role": "user",
-                        "content": f"User Query: {user_query}\n\n"
-                                   f"Initial Answer: {initial_answer}\n\n"
-                                   f"{formatted_for_nicolay}"
-                    }
-                ]
-
-                # Debug output
-                #st.write("Sending to Nicolay model:")
-                #st.write("Number of reranked results:", len(reranked_records))
-                #st.write("Formatted input:", formatted_for_nicolay)
-
-                second_model_response = openai_client.chat.completions.create(
-                    model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
-                    messages=nicolay_messages,
-                    temperature=0,
-                    max_tokens=2000
-                )
-
-                raw_nicolay = second_model_response.choices[0].message.content
-                try:
-                    nicolay_output = json.loads(raw_nicolay)
-
-                    if nicolay_data_logger and nicolay_output:
-                        highlight_success_dict = {}
-                        log_nicolay_model_output(
-                            nicolay_data_logger,
-                            model_output=nicolay_output,
-                            user_query=user_query,
-                            highlight_success_dict=highlight_success_dict
-                        )
-
-                except json.JSONDecodeError as e:
-                    st.error(f"Nicolay model output was not valid JSON: {str(e)}")
-                    st.write("Raw output:", raw_nicolay)
-
-            except Exception as e:
-                st.error(f"Error in Nicolay model processing: {str(e)}")
-                st.exception(e)
-
-        # Return results
         return {
-            "hay_output": hay_output,
-            "initial_answer": initial_answer,
-            "search_results": search_results_df,
-            "semantic_results": semantic_matches_df,
-            "reranked_results": reranked_df,
-            "nicolay_output": nicolay_output,
+            'doc_id': doc_id,
+            'text_length': len(reference_text),
+            'bleu_score': bleu,
+            'rouge1_score': rouge1,
+            'rougeL_score': rougeL
         }
 
-    except Exception as e:
-        st.error(f"Pipeline error: {str(e)}")
-        return {}
+    def normalize_doc_id(self, doc_id):
+        """Normalize document IDs by removing 'Text #: ' prefix and stripping whitespace."""
+        doc_id = str(doc_id).strip()
+        return doc_id.replace('Text #: ', '') if 'Text #: ' in doc_id else doc_id
+
+    def calculate_retrieval_metrics(self, reranked_results, ideal_documents):
+        """Calculate retrieval precision metrics."""
+        retrieved_docs = reranked_results['Text ID'].tolist()
+
+        # Debug print
+        print("\nRetrieval Metrics Debugging:")
+        print(f"Retrieved documents (before normalization): {retrieved_docs}")
+        print(f"Ideal documents (before normalization): {ideal_documents}")
+
+        # Normalize document IDs for comparison
+        retrieved_docs = [self.normalize_doc_id(doc) for doc in retrieved_docs]
+        ideal_documents = [self.normalize_doc_id(doc) for doc in ideal_documents]
+
+        print(f"After normalization:")
+        print(f"Retrieved documents: {retrieved_docs}")
+        print(f"Ideal documents: {ideal_documents}")
+
+        # Calculate MRR
+        mrr = self.calculate_mrr(ideal_documents, retrieved_docs)
+
+        # Calculate Precision@k and Recall@k for different k values
+        precision_recall = {}
+        for k in self.k_values:
+            precision_recall[f'P@{k}'] = self.precision_at_k(ideal_documents, retrieved_docs, k)
+            precision_recall[f'R@{k}'] = self.recall_at_k(ideal_documents, retrieved_docs, k)
+
+        # Calculate nDCG
+        ndcg = self.calculate_ndcg(ideal_documents, retrieved_docs)
+
+        return {
+            'mrr': mrr,
+            'ndcg': ndcg,
+            **precision_recall
+        }
+
+    def calculate_mrr(self, ideal_docs, retrieved_docs):
+        """Calculate Mean Reciprocal Rank."""
+        for i, doc_id in enumerate(retrieved_docs, 1):
+            if doc_id in ideal_docs:
+                return 1.0 / i
+        return 0.0
+
+    def calculate_ndcg(self, ideal_docs, retrieved_docs):
+        """Calculate normalized DCG."""
+        def dcg(docs, scores):
+            return sum(rel / math.log2(i + 2)
+                      for i, (doc, rel) in enumerate(zip(docs, scores)))
+
+        relevance = [1 if doc in ideal_docs else 0
+                    for doc in retrieved_docs]
+        ideal_relevance = sorted(relevance, reverse=True)
+
+        dcg_actual = dcg(retrieved_docs, relevance)
+        dcg_ideal = dcg(retrieved_docs, ideal_relevance)
+
+        return dcg_actual / dcg_ideal if dcg_ideal != 0 else 0
+
+    def precision_at_k(self, ideal_docs, retrieved_docs, k):
+        """Calculate Precision@k."""
+        if not retrieved_docs or k <= 0:
+            return 0.0
+
+        top_k = retrieved_docs[:k]
+        relevant_in_k = sum(1 for doc in top_k if doc in ideal_docs)
+        return relevant_in_k / k
+
+    def recall_at_k(self, ideal_docs, retrieved_docs, k):
+        """Calculate Recall@k."""
+        if not ideal_docs or not retrieved_docs or k <= 0:
+            return 0.0
+
+        top_k = retrieved_docs[:k]
+        relevant_in_k = sum(1 for doc in top_k if doc in ideal_docs)
+        return relevant_in_k / len(ideal_docs)
+
+    def evaluate_rag_response(self, reranked_results, generated_response, ideal_documents=None):
+        """Evaluate RAG response with both content and retrieval metrics."""
+        print("\n=== Starting RAG Response Evaluation ===")
+        generated_response = str(generated_response)
+
+        # Split results by search method
+        if 'Search Type' in reranked_results.columns:
+            keyword_results = reranked_results[reranked_results['Search Type'] == 'Keyword'].copy()
+            semantic_results = reranked_results[reranked_results['Search Type'] == 'Semantic'].copy()
+
+            print(f"\nResults by search method:")
+            print(f"Keyword search results: {len(keyword_results)}")
+            print(f"Semantic search results: {len(semantic_results)}")
+
+            # Calculate retrieval metrics for each method
+            keyword_metrics = self.calculate_retrieval_metrics(keyword_results, ideal_documents) if not keyword_results.empty else {}
+            semantic_metrics = self.calculate_retrieval_metrics(semantic_results, ideal_documents) if not semantic_results.empty else {}
+        else:
+            keyword_metrics = {}
+            semantic_metrics = {}
+
+        # Continue with regular evaluation
+        doc_scores = []
+        combined_reference_text = []
+
+        # Process each document individually
+        for idx, row in reranked_results.head(3).iterrows():
+            if 'Key Quote' in row:
+                doc_text = str(row['Key Quote'])
+                doc_id = str(row['Text ID'])
+                search_type = row.get('Search Type', 'Unknown')
+
+                # Calculate individual document scores
+                doc_score = self.evaluate_single_document(
+                    doc_text,
+                    generated_response,
+                    doc_id
+                )
+                doc_score['search_type'] = search_type  # Add search type to scores
+                doc_scores.append(doc_score)
+                combined_reference_text.append(doc_text)
+
+        # Calculate aggregate content scores
+        combined_text = ' '.join(combined_reference_text)
+        aggregate_bleu = self.calculate_bleu(combined_text, generated_response)
+        aggregate_rouge1, aggregate_rougeL = self.calculate_rouge(combined_text, generated_response)
+
+        # Calculate overall retrieval metrics
+        retrieval_metrics = self.calculate_retrieval_metrics(reranked_results, ideal_documents) if ideal_documents is not None else {}
+
+        return {
+            'aggregate_scores': {
+                'bleu_score': aggregate_bleu,
+                'rouge1_score': aggregate_rouge1,
+                'rougeL_score': aggregate_rougeL,
+                'reference_text_length': len(combined_text),
+                'generated_text_length': len(generated_response)
+            },
+            'individual_scores': doc_scores,
+            'retrieval_metrics': retrieval_metrics,
+            'search_method_comparison': {
+                'keyword': keyword_metrics,
+                'semantic': semantic_metrics
+            }
+        }
+
+    def calculate_bleu(self, reference_text, generated_text):
+        """Calculate BLEU score between reference and generated text."""
+        if not reference_text or not generated_text:
+            return 0.0
+        return sentence_bleu([reference_text.split()], generated_text.split())
+
+    def calculate_rouge(self, reference_text, generated_text):
+        """Calculate ROUGE scores between reference and generated text."""
+        if not reference_text or not generated_text:
+            return (0.0, 0.0)
+        scores = self.rouge_scorer.score(reference_text, generated_text)
+        return (scores['rouge1'].fmeasure, scores['rougeL'].fmeasure)
+
+def add_evaluator_to_benchmark(evaluator_results):
+    """Create a formatted string of evaluation results for Streamlit display."""
+    aggregate = evaluator_results['aggregate_scores']
+    individual = evaluator_results['individual_scores']
+    retrieval = evaluator_results.get('retrieval_metrics', {})
+    search_comparison = evaluator_results.get('search_method_comparison', {})
+
+    # Format individual document scores
+    doc_scores_text = "\n### Individual Document Scores\n"
+    for doc in individual:
+        doc_scores_text += f"""
+        Document {doc['doc_id']} ({doc.get('search_type', 'Unknown')}):
+        - BLEU Score: {doc['bleu_score']:.4f}
+        - ROUGE-1 Score: {doc['rouge1_score']:.4f}
+        - ROUGE-L Score: {doc['rougeL_score']:.4f}
+        - Text Length: {doc['text_length']} characters
+        """
+
+    # Format retrieval metrics if available
+    retrieval_text = ""
+    if retrieval:
+        retrieval_text = f"""
+        ### Overall Retrieval Precision Metrics
+        - Mean Reciprocal Rank: {retrieval.get('mrr', 0):.4f}
+        - NDCG: {retrieval.get('ndcg', 0):.4f}
+        - Precision@1: {retrieval.get('P@1', 0):.4f}
+        - Precision@3: {retrieval.get('P@3', 0):.4f}
+        - Precision@5: {retrieval.get('P@5', 0):.4f}
+        - Recall@1: {retrieval.get('R@1', 0):.4f}
+        - Recall@3: {retrieval.get('R@3', 0):.4f}
+        - Recall@5: {retrieval.get('R@5', 0):.4f}
+        """
+
+    # Format search method comparison
+    search_comparison_text = ""
+    if search_comparison:
+        keyword = search_comparison.get('keyword', {})
+        semantic = search_comparison.get('semantic', {})
+
+        search_comparison_text = f"""
+        ### Search Method Comparison
+
+        Keyword Search Metrics:
+        - MRR: {keyword.get('mrr', 0):.4f}
+        - NDCG: {keyword.get('ndcg', 0):.4f}
+        - P@3: {keyword.get('P@3', 0):.4f}
+        - R@3: {keyword.get('R@3', 0):.4f}
+
+        Semantic Search Metrics:
+        - MRR: {semantic.get('mrr', 0):.4f}
+        - NDCG: {semantic.get('ndcg', 0):.4f}
+        - P@3: {semantic.get('P@3', 0):.4f}
+        - R@3: {semantic.get('R@3', 0):.4f}
+        """
+
+    return f"""
+    ### Aggregate RAG Response Evaluation Metrics
+    - BLEU Score: {aggregate['bleu_score']:.4f}
+    - ROUGE-1 Score: {aggregate['rouge1_score']:.4f}
+    - ROUGE-L Score: {aggregate['rougeL_score']:.4f}
+
+    Reference text length: {aggregate['reference_text_length']} characters
+    Generated text length: {aggregate['generated_text_length']} characters
+
+    {doc_scores_text}
+    {retrieval_text}
+    {search_comparison_text}
+    """

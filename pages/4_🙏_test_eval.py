@@ -19,7 +19,7 @@ from modules.semantic_search import semantic_search
 from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
-from modules.rag_evalutor import RAGEvaluator
+from modules.rag_evaluator import RAGEvaluator
 
 # If you want to suppress debug messages globally, uncomment:
 # logging.basicConfig(level=logging.WARNING)

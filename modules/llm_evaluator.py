@@ -15,16 +15,15 @@ class LLMResponseEvaluator:
 
             # Make API call to OpenAI
             completion = self.client.chat.completions.create(
-                model="gpt-4",  # Using GPT-4 for comprehensive evaluation
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are an expert evaluator of RAG (Retrieval Augmented Generation) systems, specializing in historical document analysis and academic writing assessment."},
+                    {"role": "system", "content": "You are an expert evaluator of RAG systems, specializing in historical document analysis and academic writing assessment."},
                     {"role": "user", "content": eval_prompt}
                 ],
-                temperature=0.3,  # Lower temperature for more consistent evaluation
+                temperature=0.3,
                 max_tokens=2000
             )
 
-            # Parse response
             try:
                 eval_results = json.loads(completion.choices[0].message.content)
                 return eval_results
@@ -43,97 +42,80 @@ class LLMResponseEvaluator:
         formatted_sources = "\n\n".join([f"Source {i+1}:\n{text}"
                                        for i, text in enumerate(source_texts)])
 
-        # Define JSON template separately
-        json_template = '''{
-            "evaluation_scores": {
-                "query_response_quality": {"score": X, "examples": [], "suggestions": []},
-                "quote_usage": {"score": X, "examples": [], "suggestions": []},
-                "citation_accuracy": {"score": X, "examples": [], "suggestions": []},
-                "source_integration": {"score": X, "examples": [], "suggestions": []},
-                "historical_context": {"score": X, "examples": [], "suggestions": []},
-                "response_structure": {"score": X, "examples": [], "suggestions": []}
-            },
-            "analysis": {
-                "hallucinations": [],
-                "missed_opportunities": [],
-                "suggested_contexts": []
-            },
-            "overall_assessment": {
-                "total_score": X,
-                "strengths": [],
-                "weaknesses": [],
-                "improvement_priorities": []
-            }
-        }'''
+        evaluation_criteria = """
+1. Query Response Quality (Score 1-5):
+- Does the response directly answer the query?
+- Is the information historically accurate and supported by sources?
+- Is the response comprehensive and well-organized?
 
-        return f"""
-        Evaluate this RAG (Retrieval Augmented Generation) response based on the following information:
+2. Quote Usage & Accuracy (Score 1-5):
+- Are quotes accurately reproduced from source texts?
+- Are the selected quotes relevant and impactful?
+- Do quotes effectively support the response's claims?
 
-        USER QUERY: {query}
+3. Citation Accuracy (Score 1-5):
+- Are all quotes properly cited?
+- Do citations match the correct source documents?
+- Are citations formatted consistently?
 
-        RESPONSE TO EVALUATE:
-        {response}
+4. Source Integration (Score 1-5):
+- How well are multiple sources synthesized?
+- Is there a logical flow between different sources?
+- Is context preserved when combining sources?
 
-        SOURCE TEXTS USED:
-        {formatted_sources}
+5. Historical Context (Score 1-5):
+- Is appropriate historical context provided?
+- Are temporal relationships clear?
+- Are historical interpretations accurate?
 
-        EVALUATION CRITERIA:
+6. Response Structure (Score 1-5):
+- Is the response well-organized?
+- Is there a clear progression of ideas?
+- Are transitions between topics smooth?"""
 
-        1. Query Response Quality (Score 1-5):
-        - Does the response directly answer the query?
-        - Is the information historically accurate and supported by sources?
-        - Is the response comprehensive and well-organized?
+        json_format = """
+{
+    "evaluation_scores": {
+        "query_response_quality": {"score": X, "examples": [], "suggestions": []},
+        "quote_usage": {"score": X, "examples": [], "suggestions": []},
+        "citation_accuracy": {"score": X, "examples": [], "suggestions": []},
+        "source_integration": {"score": X, "examples": [], "suggestions": []},
+        "historical_context": {"score": X, "examples": [], "suggestions": []},
+        "response_structure": {"score": X, "examples": [], "suggestions": []}
+    },
+    "analysis": {
+        "hallucinations": [],
+        "missed_opportunities": [],
+        "suggested_contexts": []
+    },
+    "overall_assessment": {
+        "total_score": X,
+        "strengths": [],
+        "weaknesses": [],
+        "improvement_priorities": []
+    }
+}"""
 
-        2. Quote Usage & Accuracy (Score 1-5):
-        - Are quotes accurately reproduced from source texts?
-        - Are the selected quotes relevant and impactful?
-        - Do quotes effectively support the response's claims?
+        prompt = f"""
+Evaluate this RAG (Retrieval Augmented Generation) response based on the following information:
 
-        3. Citation Accuracy (Score 1-5):
-        - Are all quotes properly cited?
-        - Do citations match the correct source documents?
-        - Are citations formatted consistently?
+USER QUERY: {query}
 
-        4. Source Integration (Score 1-5):
-        - How well are multiple sources synthesized?
-        - Is there a logical flow between different sources?
-        - Is context preserved when combining sources?
+RESPONSE TO EVALUATE:
+{response}
 
-        5. Historical Context (Score 1-5):
-        - Is appropriate historical context provided?
-        - Are temporal relationships clear?
-        - Are historical interpretations accurate?
+SOURCE TEXTS USED:
+{formatted_sources}
 
-        6. Response Structure (Score 1-5):
-        - Is the response well-organized?
-        - Is there a clear progression of ideas?
-        - Are transitions between topics smooth?
+EVALUATION CRITERIA:
+{evaluation_criteria}
 
-        Provide your evaluation in the following JSON format exactly:
-        {
-            "evaluation_scores": {
-                "query_response_quality": {"score": X, "examples": [], "suggestions": []},
-                "quote_usage": {"score": X, "examples": [], "suggestions": []},
-                "citation_accuracy": {"score": X, "examples": [], "suggestions": []},
-                "source_integration": {"score": X, "examples": [], "suggestions": []},
-                "historical_context": {"score": X, "examples": [], "suggestions": []},
-                "response_structure": {"score": X, "examples": [], "suggestions": []}
-            },
-            "analysis": {
-                "hallucinations": [],
-                "missed_opportunities": [],
-                "suggested_contexts": []
-            },
-            "overall_assessment": {
-                "total_score": X,
-                "strengths": [],
-                "weaknesses": [],
-                "improvement_priorities": []
-            }
-        }
+Provide your evaluation in the following JSON format exactly:
+{json_format}
 
-        Ensure your response is valid JSON and includes specific examples for each criterion.
-        """
+Ensure your response is valid JSON and includes specific examples for each criterion."""
+
+        return prompt
 
     def format_evaluation_results(self, eval_results):
         """Format LLM evaluation results for display."""

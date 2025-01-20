@@ -10,7 +10,7 @@ import logging
 from modules.rag_pipeline import run_rag_pipeline
 
 # Logging Modules
-from modules.data_logging import DataLogger
+from modules.data_logging import DataLogger, log_benchmark_results
 
 # Possibly still need these imports if you do advanced steps:
 from modules.semantic_search import semantic_search

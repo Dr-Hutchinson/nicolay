@@ -20,6 +20,7 @@ from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
+from modules.llm_evaluator import LLMResponseEvaluator
 
 # If you want to suppress debug messages globally, uncomment:
 # logging.basicConfig(level=logging.WARNING)
@@ -215,16 +216,23 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         #st.write("Length of Nicolay's response:", len(final_answer_text))
         #st.write("First 200 chars of Nicolay's response:", final_answer_text[:200])
 
+        # Initialize the evaluator with your OpenAI API key
+        llm_evaluator = LLMResponseEvaluator()
 
-        # --- 7. Optional: Evaluate Nicolay's response with a separate LLM ---
-        # You can replicate the old approach if you want:
-        #"""
-        #evaluation_prompt = st.session_state['response_model_system_prompt']
-        # Suppose you have a function that does a final model check:
-        # llm_evaluation = evaluate_nicolay_answer(openai_api_key, user_query, initial_answer, final_answer_text)
-        # st.write("### LLM Evaluation of Nicolay's Response")
-        # st.json(llm_evaluation)
-        #"""
+        # After getting your RAG response
+        eval_results = await llm_evaluator.evaluate_response(
+            query=user_query,
+            response=final_answer_text,
+            source_texts=reranked_results['Key Quote'].tolist(),
+            ideal_docs=expected_documents
+        )
+
+        # Display the evaluation results
+        if eval_results:
+            st.markdown(llm_evaluator.format_evaluation_results(eval_results))
+        else:
+            st.error("Unable to generate evaluation results")
+
 
         # --- 8. Log final results, if desired ---
         # For example, in the nicolay_data logger:

@@ -100,14 +100,6 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
             nicolay_data_logger=nicolay_data_logger,
             reranking_results_logger=reranking_results_logger,
             semantic_results_logger=semantic_results_logger,
-            # Provide the file paths or read from st.secrets if needed
-            #keyword_json_path='data/voyant_word_counts.json',
-            #lincoln_speeches_json='data/lincoln_speech_corpus.json',
-            #lincoln_embedded_csv='lincoln_index_embedded.csv',
-            # If you want to pass your keys explicitly:
-            # openai_api_key=openai_api_key,
-            # cohere_api_key=cohere_api_key,
-            #gc=gc  # if you want GSheets access in the pipeline
         )
 
         # --- 2. Unpack the pipeline results ---
@@ -150,11 +142,32 @@ if selected_question_index is not None and st.button("Run Benchmark Question"):
         else:
             st.write("No reranked results found.")
 
+
+        # Add this before the matching calculation
+        st.write("Expected documents types:", [type(doc) for doc in expected_documents])
+        st.write("Top reranked IDs types:", [type(id) for id in top_reranked_ids])
+        st.write("Expected documents:", expected_documents)
+        st.write("Top reranked IDs:", top_reranked_ids)
+
+        # Add this before accessing the Text ID column
+        st.write("Reranked results columns:", reranked_results.columns.tolist())
+
+        # Normalized comparison function
+        def normalize_doc_id(doc_id):
+            # Remove any non-numeric characters and convert to string
+            return str(''.join(filter(str.isdigit, str(doc_id))))
+
+        # Modified matching calculation
+        #normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
+        #normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
+        #matching_expected = len(set(normalized_expected) & set(normalized_reranked))
+
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")
         top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
         matching_expected = len(set(expected_documents) & set(top_reranked_ids))
         st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
+
 
         # --- 6. Display Nicolay's Final Response ---
         # nicolay_output should be a dict with something like:

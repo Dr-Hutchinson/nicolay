@@ -213,41 +213,31 @@ def run_rag_pipeline(
                         st.error(f"Error logging semantic search results: {str(e)}")
 
         # 7. Combine Results & Rerank
+        # In rag_pipeline.py
+        # 7. Combine Results & Rerank
         combined_df = pd.concat([search_results_df, semantic_matches_df])
         combined_df = combined_df.drop_duplicates(subset=["text_id"]) if not combined_df.empty else combined_df
 
         reranked_df = pd.DataFrame()
-        # In the reranking section of run_rag_pipeline
         if perform_reranking and not combined_df.empty:
             try:
-                st.write("Preparing documents for reranking...")
-                st.write(f"Combined DataFrame shape: {combined_df.shape}")
-                
-                # Debug combined_df
-                st.write("Sample of combined_df:")
-                st.write(combined_df.head())
-
+                # Prepare documents using the new function from reranking.py
                 documents_for_cohere = prepare_documents_for_reranking(combined_df, user_query)
 
-                st.write(f"Prepared {len(documents_for_cohere)} documents for reranking")
-
-                # Debug document format
-                st.write("Sample prepared document:")
-                if documents_for_cohere:
-                    st.write(documents_for_cohere[0])
-
+                # Use the new reranking function
                 reranked_df = rerank_results(
                     query=user_query,
                     documents=documents_for_cohere,
                     cohere_client=cohere_client
                 )
 
-                if reranking_results_logger and not reranked_df.empty:
-                    log_reranking_results(reranking_results_logger, reranked_df, user_query)
+                if not reranked_df.empty and reranking_results_logger:
+                    log_reranking_results(reranking_results_logger, reranked_df)
 
             except Exception as e:
                 st.error(f"Error in reranking: {str(e)}")
-                st.exception(e)  # This will show the full traceback
+                st.exception(e)  # Show full traceback
+                reranked_df = pd.DataFrame()  # Ensure we have an empty DataFrame on error
 
         # 8. Nicolay Model
         nicolay_output = {}

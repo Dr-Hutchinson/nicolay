@@ -15,7 +15,7 @@ class LLMResponseEvaluator:
 
             # Make API call to OpenAI
             completion = self.client.chat.completions.create(
-                model="gpt-4",  # Using GPT-4 for comprehensive evaluation
+                model="gpt-4o",  # Using GPT-4 for comprehensive evaluation
                 messages=[
                     {"role": "system", "content": "You are an expert evaluator of RAG (Retrieval Augmented Generation) systems, specializing in historical document analysis and academic writing assessment."},
                     {"role": "user", "content": eval_prompt}

@@ -57,55 +57,34 @@ query_method = st.radio(
 # Variable to store query and expected documents
 user_query = None
 expected_documents = None
-question_category = None
 
 # Query Input Section
 if query_method == "Benchmark Questions":
+    # Load Benchmark Questions from Google Sheets
     try:
         benchmark_sheet = gc.open("benchmark_questions").sheet1
         benchmark_data = pd.DataFrame(benchmark_sheet.get_all_records())
-
-        # Ensure required columns exist
-        required_columns = ['question', 'ideal_documents', 'category']
-        missing_columns = [col for col in required_columns if col not in benchmark_data.columns]
-        if missing_columns:
-            st.error(f"Missing required columns in benchmark data: {missing_columns}")
-            benchmark_data = pd.DataFrame()
-        else:
-            st.success("Benchmark questions loaded successfully.")
+        st.success("Benchmark questions loaded successfully.")
     except Exception as e:
         st.error(f"Error loading benchmark questions: {e}")
         benchmark_data = pd.DataFrame()
 
-    # Preprocess the benchmark data
-    if not benchmark_data.empty:
-        # Process ideal_documents column
+    # Preprocess the 'ideal_documents' column
+    if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
         benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
             lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
         )
 
-        # Ensure category is lowercase and standardized
-        benchmark_data["category"] = benchmark_data["category"].str.lower().str.replace(" ", "_")
-
-        # Validate categories
-        valid_categories = ['factual_retrieval', 'analysis', 'comparative_analysis', 'synthesis']
-        invalid_categories = benchmark_data[~benchmark_data["category"].isin(valid_categories)]
-        if not invalid_categories.empty:
-            st.warning(f"Found invalid categories: {invalid_categories['category'].unique()}")
-
-        # Add dropdown to select a benchmark question
+    # Add dropdown to select a benchmark question
+    if not benchmark_data.empty:
         selected_question_index = st.selectbox(
             "Select a Benchmark Question:",
             options=range(len(benchmark_data)),
-            format_func=lambda idx: f"{idx + 1} [{benchmark_data.iloc[idx]['category']}]: {benchmark_data.iloc[idx]['question']}"
+            format_func=lambda idx: f"{idx + 1}: {benchmark_data.iloc[idx]['question']}"
         )
         if selected_question_index is not None:
             user_query = benchmark_data.iloc[selected_question_index]["question"]
             expected_documents = benchmark_data.iloc[selected_question_index]["ideal_documents"]
-            question_category = benchmark_data.iloc[selected_question_index]["category"]
-
-            # Display selected question details
-            st.write(f"**Selected Question Category:** {question_category}")
     else:
         st.warning("No benchmark data available.")
 
@@ -120,12 +99,6 @@ else:
         expected_documents = [doc.strip() for doc in expected_docs_input.split(",")]
     else:
         expected_documents = []
-
-    # Add category selection for custom queries
-    question_category = st.selectbox(
-        "Select Question Category:",
-        ['factual_retrieval', 'analysis', 'comparative_analysis', 'synthesis']
-    )
 
 # Evaluation Method Selection
 st.subheader("Evaluation Options")
@@ -215,6 +188,7 @@ if user_query and st.button("Run Evaluation"):
             for ref in references:
                 st.write(f"- {ref}")
 
+
         # --- 5. Compare to Benchmark ---
         st.write("### Benchmark Analysis")
         top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
@@ -247,14 +221,10 @@ if user_query and st.button("Run Evaluation"):
                 query=user_query,
                 response=final_answer_text,
                 source_texts=reranked_results['Key Quote'].tolist(),
-                ideal_docs=expected_documents,
-                category=question_category
+                ideal_docs=expected_documents
             )
             if eval_results:
-                st.markdown(llm_evaluator.format_category_specific_results(
-                    eval_results,
-                    category=question_category
-                ))
+                st.markdown(llm_evaluator.format_evaluation_results(eval_results))
             else:
                 st.error("Unable to generate LLM evaluation results")
 
@@ -266,9 +236,22 @@ if user_query and st.button("Run Evaluation"):
                 expected_documents=expected_documents,
                 bleu_rouge_results=evaluation_results or {},
                 llm_results=eval_results or {},
-                reranked_results=reranked_results,
-                question_category=question_category
+                reranked_results=reranked_results
             )
+
+            # --- 8. Log final results ---
+            #    if nicolay_data_logger and final_answer_text:
+            #        nicolay_data_logger.record_api_outputs({
+            #            'Benchmark Question': user_query,
+            #            'Ideal Documents': expected_documents,
+            #            'Matched Documents': top_reranked_ids,
+            #            'Nicolay_Final_Answer': final_answer_text,
+            #            'Timestamp': dt.now(),
+            #        })
+
+
+
+
 
     except Exception as e:
         st.error(f"Error processing query: {e}")

@@ -242,7 +242,7 @@ if user_query and st.button("Run Evaluation"):
 
         if "LLM-based Evaluation" in eval_methods:
             st.subheader("LLM Evaluation Results")
-            llm_evaluator = LLMResponseEvaluator()
+            llm_evaluator = LLMEvaluator()
             eval_results = llm_evaluator.evaluate_response(
                 query=user_query,
                 response=final_answer_text,

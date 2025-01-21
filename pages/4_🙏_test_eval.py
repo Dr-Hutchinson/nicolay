@@ -18,7 +18,7 @@ from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
-from modules.llm_evaluator import LLMResponseEvaluator
+from modules.llm_evaluator import LLMEvaluator
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")

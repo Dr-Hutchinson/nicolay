@@ -266,8 +266,8 @@ if user_query and st.button("Run Evaluation"):
                 expected_documents=expected_documents,
                 bleu_rouge_results=evaluation_results or {},
                 llm_results=eval_results or {},
-                reranked_results=reranked_results,
-                question_category=question_category
+                reranked_results=reranked_results
+                #question_category=question_category
             )
 
     except Exception as e:

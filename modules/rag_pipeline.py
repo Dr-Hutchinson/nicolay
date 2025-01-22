@@ -332,6 +332,7 @@ def run_rag_pipeline(
             "initial_answer": initial_answer,
             "search_results": search_results_df,
             "semantic_results": semantic_matches_df,
+            "colbert_results": colbert_matches_df,
             "reranked_results": reranked_df,
             "nicolay_output": nicolay_output,
         }

@@ -115,7 +115,7 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
         # Log the record
         reranking_results_logger.record_api_outputs(record)
 
-def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict):
+def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict, initial_answer):
     """
     Logs the Nicolay model output to Google Sheets.
 
@@ -162,7 +162,7 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'Timestamp': dt.now(),
         'UserQuery': user_query,
         #'Initial_Answer': model_output.get("InitialAnswer", "No initial answer available."),
-        'Initial_Answer': model_output.get("Initial Answer Review", {}).get("initial_answer", "No initial answer available."),
+        'Initial_Answer': initial_answer,
         'FinalAnswer': final_answer_text,
         'References': references,
         'QueryIntent': query_intent,

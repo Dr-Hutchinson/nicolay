@@ -16,7 +16,11 @@ def prepare_documents_for_reranking(combined_df, user_query):
             # Determine search type
             #search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
             # In prepare_documents_for_reranking
-            search_type = row.get("search_type", "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic")    
+            #search_type = row.get("search_type", "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic")
+
+            search_type = row.get("search_type", "Unknown")
+            if pd.isna(search_type):
+                search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
 
             # Get text components
             text_id = str(row.get("text_id", "")).strip()

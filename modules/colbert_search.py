@@ -19,27 +19,20 @@ class ColBERTSearcher:
         self.model = RAGPretrainedModel.from_index(self.index_path)
 
     def search(self, query, k=5):
-        if not self.model:
-            self.load_index()
-
         try:
             results = self.model.search(query=query, k=k)
             processed_results = []
             for result in results:
                 doc_id = result['document_id'].replace('Text #: ', '')
-
-                # Get source and summary from lincoln_dict
                 lincoln_data = self.lincoln_dict.get(doc_id, {})
-                source = lincoln_data.get('source', '')
-                summary = lincoln_data.get('summary', '')
 
                 processed_results.append({
-                    "text_id": f"Text #: {doc_id}",
+                    "text_id": result['document_id'],
                     "colbert_score": float(result['score']),
                     "TopSegment": result['content'],
-                    "source": source,
-                    "summary": summary,
-                    "search_type": "ColBERT"
+                    "source": lincoln_data.get('source', ''),
+                    "summary": lincoln_data.get('summary', ''),
+                    "search_type": "ColBERT"  # Explicit search type
                 })
             return pd.DataFrame(processed_results)
         except Exception as e:

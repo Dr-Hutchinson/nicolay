@@ -286,7 +286,8 @@ def run_rag_pipeline(
                             nicolay_data_logger,
                             model_output=nicolay_output,
                             user_query=user_query,
-                            highlight_success_dict=highlight_success_dict
+                            highlight_success_dict=highlight_success_dict,
+                            initial_answer=initial_answer
                         )
 
                 except json.JSONDecodeError as e:

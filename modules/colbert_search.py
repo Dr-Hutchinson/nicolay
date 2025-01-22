@@ -24,27 +24,40 @@ class ColBERTSearcher:
        self.model = RAGPretrainedModel.from_index(self.index_path)
 
    def search(self, query, k=5):
-       if not self.model:
-           self.load_index()
+    if not self.model:
+        self.load_index()
 
-       try:
-           results = self.model.search(query=query, k=k)
-           processed_results = []
+    try:
+        results = self.model.search(query=query, k=k)
+        processed_results = []
 
-           for result in results:
-               lincoln_data = self.lincoln_dict.get(result['document_id'], {})
+        st.write("\nDebugging ColBERT Search:")
+        st.write(f"lincoln_dict keys: {list(self.lincoln_dict.keys())[:5]}")
 
-               processed_results.append({
-                   "text_id": result['document_id'],
-                   "colbert_score": float(result['score']),
-                   "TopSegment": result['content'],
-                   "source": lincoln_data.get('source', ''),
-                   "summary": lincoln_data.get('summary', ''),
-                   "search_type": "ColBERT"
-               })
+        for result in results:
+            doc_id = result['document_id']
+            st.write(f"\nProcessing document: {doc_id}")
+            st.write(f"Looking up in lincoln_dict: {doc_id}")
+            st.write(f"Found in lincoln_dict: {doc_id in self.lincoln_dict}")
+            lincoln_data = self.lincoln_dict.get(doc_id, {})
+            st.write(f"Lincoln data retrieved: {lincoln_data}")
 
-           return pd.DataFrame(processed_results)
+            entry = {
+                "text_id": doc_id,
+                "colbert_score": float(result['score']),
+                "TopSegment": result['content'],
+                "source": lincoln_data.get('source', ''),
+                "summary": lincoln_data.get('summary', ''),
+                "search_type": "ColBERT"
+            }
+            st.write(f"Processed entry: {entry}")
+            processed_results.append(entry)
 
-       except Exception as e:
-           st.write(f"ColBERT search error: {str(e)}")
-           return pd.DataFrame()
+        df = pd.DataFrame(processed_results)
+        st.write(f"\nFinal DataFrame columns: {df.columns}")
+        st.write(f"Final DataFrame shape: {df.shape}")
+        return df
+
+    except Exception as e:
+        st.write(f"ColBERT search error: {str(e)}")
+        return pd.DataFrame()

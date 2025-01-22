@@ -252,8 +252,8 @@ if user_query and st.button("Run Evaluation"):
             )
             if eval_results:
                 st.markdown(llm_evaluator.format_evaluation_results(
-                    eval_results,
-                    category=question_category
+                    eval_results
+                    #category=question_category
                 ))
             else:
                 st.error("Unable to generate LLM evaluation results")

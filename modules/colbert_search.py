@@ -20,21 +20,22 @@ class ColBERTSearcher:
         if not self.model:
             self.load_index()
 
-        results = self.model.search(query=query, k=k)
-        
-        processed_results = []
-        for result in results:
-            # Add error handling and data validation
-            try:
+        try:
+            results = self.model.search(query=query, k=k)
+            print(f"ColBERT raw results: {results}")  # Debug output
+
+            processed_results = []
+            for result in results:
                 processed_results.append({
-                    "text_id": result.get("pid", result.get("document_id", "Unknown")),  # Handle both possible keys
-                    "colbert_score": result.get("score", 0.0),
-                    "TopSegment": result.get("content", result.get("passage", "")),  # Handle both possible keys
+                    "text_id": f"Text #: {result['pid']}",  # Match format with other searches
+                    "colbert_score": float(result['score']),
+                    "TopSegment": result['text'],
                     "search_type": "ColBERT"
                 })
-            except Exception as e:
-                continue
 
-        return pd.DataFrame(processed_results)
+            return pd.DataFrame(processed_results)
+        except Exception as e:
+            print(f"ColBERT search error: {str(e)}")  # Debug output
+            return pd.DataFrame()
 
 # End colbert_search.py

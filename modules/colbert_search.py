@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 import pandas as pd
 import os
 from modules.data_utils import load_lincoln_speech_corpus
-from streamlit as st
+import streamlit as st
 
 class ColBERTSearcher:
    def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):

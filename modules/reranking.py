@@ -6,20 +6,13 @@ import streamlit as st
 
 # In reranking.py
 def prepare_documents_for_reranking(combined_df, user_query):
-    st.write("Combined DataFrame columns:", combined_df.columns)
-    st.write("Sample row from ColBERT:", combined_df[combined_df['search_type'] == 'ColBERT'].iloc[0] if not combined_df[combined_df['search_type'] == 'ColBERT'].empty else "No ColBERT results")
-
+    
     documents = []
     for idx, row in combined_df.iterrows():
         try:
             search_type = row.get("search_type", "Unknown")
             if pd.isna(search_type):
                 search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
-
-            # Add debug st.writes
-            st.write(f"\nProcessing row {idx}:")
-            st.write(f"Search type: {search_type}")
-            st.write(f"Summary: {row.get('summary', '')}")
 
             text_id = str(row.get("text_id", "")).strip()
             summary = str(row.get("summary", ""))[:200].strip()

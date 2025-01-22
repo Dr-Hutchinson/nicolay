@@ -6,7 +6,7 @@ import pandas as pd
 import os
 
 class ColBERTSearcher:
-    def __init__(self, index_path="data/lincoln_colbert_index"):
+    def __init__(self, index_path="data/LincolnCorpus_1"):
         self.index_path = index_path
         self.model = None
         self.encoder = SentenceTransformer("all-MiniLM-L6-v2")

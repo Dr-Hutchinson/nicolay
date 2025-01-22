@@ -251,7 +251,7 @@ if user_query and st.button("Run Evaluation"):
                 category=question_category
             )
             if eval_results:
-                st.markdown(llm_evaluator.format_category_specific_results(
+                st.markdown(llm_evaluator.format_evaluation_results(
                     eval_results,
                     category=question_category
                 ))

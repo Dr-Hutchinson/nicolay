@@ -78,11 +78,18 @@ if query_method == "Benchmark Questions":
         benchmark_data = pd.DataFrame()
 
     # Preprocess the benchmark data
-    if not benchmark_data.empty:
+    #if not benchmark_data.empty:
         # Process ideal_documents column
+    #    benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
+    #        lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+    #    )
+
+    # Update this section in the benchmark data preprocessing
+    if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
         benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
-            lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
+            lambda x: [doc.strip() for doc in str(x).split(",") if doc.strip()]  # Added str() and filtering empty strings
         )
+
 
         # Ensure category is lowercase and standardized
         benchmark_data["category"] = benchmark_data["category"].str.lower().str.replace(" ", "_")

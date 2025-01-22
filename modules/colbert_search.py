@@ -19,9 +19,10 @@ class ColBERTSearcher:
     def search(self, query, k=5):
         if not self.model:
             self.load_index()
-            
+
         try:
             results = self.model.search(query=query, k=k)
+            st.write(f"ColBERT raw results: {results}")  # Debug output
             processed_results = []
             for result in results:
                 processed_results.append({

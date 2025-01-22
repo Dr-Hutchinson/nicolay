@@ -21,15 +21,19 @@ class ColBERTSearcher:
             self.load_index()
 
         results = self.model.search(query=query, k=k)
-
+        
         processed_results = []
         for result in results:
-            processed_results.append({
-                "text_id": result["document_id"],
-                "colbert_score": result["score"],
-                "TopSegment": result["text"],  # Using same field name as semantic search
-                "search_type": "ColBERT"
-            })
+            # Add error handling and data validation
+            try:
+                processed_results.append({
+                    "text_id": result.get("pid", result.get("document_id", "Unknown")),  # Handle both possible keys
+                    "colbert_score": result.get("score", 0.0),
+                    "TopSegment": result.get("content", result.get("passage", "")),  # Handle both possible keys
+                    "search_type": "ColBERT"
+                })
+            except Exception as e:
+                continue
 
         return pd.DataFrame(processed_results)
 

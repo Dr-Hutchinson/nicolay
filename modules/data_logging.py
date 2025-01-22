@@ -162,7 +162,7 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'Timestamp': dt.now(),
         'UserQuery': user_query,
         #'Initial_Answer': model_output.get("InitialAnswer", "No initial answer available."),
-        'Initial_Answer': model_output.get("initial_answer", "No initial answer available."),  # Changed from "InitialAnswer"
+        'Initial_Answer': model_output.get("Initial Answer Review", {}).get("initial_answer", "No initial answer available."),
         'FinalAnswer': final_answer_text,
         'References': references,
         'QueryIntent': query_intent,

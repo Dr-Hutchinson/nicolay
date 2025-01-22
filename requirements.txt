@@ -7,4 +7,4 @@ streamlit==1.29.0
 msgpack==1.0.8
 pyarrow==16.1.0
 rouge-score==0.1.2
-colbert-ai==0.2.21
+RAGatouille==0.0.8

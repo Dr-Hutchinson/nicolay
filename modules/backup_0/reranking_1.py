@@ -6,24 +6,38 @@ import streamlit as st
 
 # In reranking.py
 def prepare_documents_for_reranking(combined_df, user_query):
+    """
+    Prepares documents for Cohere's reranking with simpler format.
+    """
     documents = []
+
     for idx, row in combined_df.iterrows():
         try:
+            # Determine search type
+            #search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
+            # In prepare_documents_for_reranking
+            #search_type = row.get("search_type", "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic")
+
             search_type = row.get("search_type", "Unknown")
             if pd.isna(search_type):
                 search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
 
+            # Get text components
             text_id = str(row.get("text_id", "")).strip()
             summary = str(row.get("summary", ""))[:200].strip()
+            quote = str(row.get("key_quote" if search_type == "Keyword" else "TopSegment", "")).strip()
 
-            # Handle different search types' quote fields
-            if search_type == "ColBERT":
-                quote = str(row.get("TopSegment", "")).strip()
-            else:
-                quote = str(row.get("key_quote" if search_type == "Keyword" else "TopSegment", "")).strip()
-
+            # Create formatted text
             formatted_text = f"{search_type}|{text_id}|{summary}|{quote}"
-            documents.append({"text": formatted_text, "id": str(idx)})
+
+            # Add to documents list
+            doc = {
+                "text": formatted_text,
+                "id": str(idx)
+            }
+
+            #st.write(f"Prepared document {idx}:", doc)  # Debug output
+            documents.append(doc)
 
         except Exception as e:
             st.error(f"Error preparing document {idx}: {str(e)}")

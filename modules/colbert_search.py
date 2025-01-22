@@ -20,7 +20,7 @@ class ColBERTSearcher:
         else:
             self.lincoln_dict = lincoln_dict
 
-       st.write(f"Initialized lincoln_dict keys: {list(self.lincoln_dict.keys())[:5]}")
+       #st.write(f"Initialized lincoln_dict keys: {list(self.lincoln_dict.keys())[:5]}")
 
    def load_index(self):
        if not os.path.exists(self.index_path):

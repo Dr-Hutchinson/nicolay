@@ -4,7 +4,7 @@ import pygsheets
 import pandas as pd
 from datetime import datetime as dt
 import json
-from streamlit as st
+import streamlit as st
 
 class DataLogger:
     def __init__(self, gc, sheet_name):

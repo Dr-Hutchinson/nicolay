@@ -22,7 +22,7 @@ class ColBERTSearcher:
 
         try:
             results = self.model.search(query=query, k=k)
-            print(f"ColBERT raw results: {results}")  # Debug output
+            st.write(f"ColBERT raw results: {results}")  # Debug output
 
             processed_results = []
             for result in results:

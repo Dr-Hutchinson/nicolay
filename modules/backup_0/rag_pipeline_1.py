@@ -43,9 +43,6 @@ from modules.reranking import (
     format_reranked_results_for_model_input
 )
 
-from modules.colbert_search import ColBERTSearcher
-
-
 def extract_full_text(combined_text):
     markers = ["Full Text:\n", "Full Text: \n", "Full Text:"]
     if isinstance(combined_text, str):
@@ -68,7 +65,6 @@ def run_rag_pipeline(
     user_query,
     perform_keyword_search=True,
     perform_semantic_search=True,
-    perform_colbert_search=True,
     perform_reranking=True,
     hays_data_logger=None,
     keyword_results_logger=None,
@@ -97,12 +93,6 @@ def run_rag_pipeline(
 
         lincoln_data = lincoln_data_df.to_dict("records")
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-
-        colbert_searcher = ColBERTSearcher()
-        try:
-            colbert_searcher.load_index()  # This will raise FileNotFoundError if index is missing
-        except FileNotFoundError:
-            st.error("ColBERT index not found in data directory")
 
         # Process Voyant data
         if not voyant_data_df.empty and "corpusTerms" in voyant_data_df.columns:
@@ -223,28 +213,10 @@ def run_rag_pipeline(
                     except Exception as e:
                         st.error(f"Error logging semantic search results: {str(e)}")
 
-
-        #
-        colbert_matches_df = pd.DataFrame()
-        if perform_colbert_search:
-            try:
-                colbert_matches_df = colbert_searcher.search(
-                    user_query,
-                    k=top_n_results
-                )
-            except Exception as e:
-                st.error(f"Error in ColBERT search: {str(e)}")
-
         # 7. Combine Results & Rerank
         # In rag_pipeline.py
         # 7. Combine Results & Rerank
-        #combined_df = pd.concat([search_results_df, semantic_matches_df])
-        combined_df = pd.concat([
-            search_results_df,
-            semantic_matches_df,
-            colbert_matches_df
-        ])
-
+        combined_df = pd.concat([search_results_df, semantic_matches_df])
         combined_df = combined_df.drop_duplicates(subset=["text_id"]) if not combined_df.empty else combined_df
 
         reranked_df = pd.DataFrame()

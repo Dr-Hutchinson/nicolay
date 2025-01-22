@@ -19,7 +19,6 @@ from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
-from modules.colbert_search import ColBERTSearcher
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
@@ -149,15 +148,11 @@ if user_query and st.button("Run Evaluation"):
     st.write(f"Query: {user_query}")
 
     try:
-
-        colbert_searcher = ColBERTSearcher()
-
         # --- 1. Execute the RAG Pipeline ---
         pipeline_results = run_rag_pipeline(
             user_query=user_query,
             perform_keyword_search=True,
             perform_semantic_search=True,
-            perform_colbert_search=True,
             perform_reranking=True,
             hays_data_logger=hays_data_logger,
             keyword_results_logger=keyword_results_logger,
@@ -199,14 +194,6 @@ if user_query and st.button("Run Evaluation"):
             st.dataframe(semantic_matches)
         else:
             st.write("No semantic search results found.")
-
-        st.write("### ColBERT Search Results")
-        colbert_results = pipeline_results.get("colbert_results", pd.DataFrame())
-        if not colbert_results.empty:
-            st.dataframe(colbert_results)
-        else:
-            st.write("No ColBERT search results found.")
-
 
         st.write("### Reranked Results")
         if not reranked_results.empty:

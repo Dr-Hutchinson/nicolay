@@ -1,5 +1,6 @@
 # modules/colbert_search.py
 
+from modules.data_utils import load_lincoln_speech_corpus
 from ragatouille import RAGPretrainedModel
 from sentence_transformers import SentenceTransformer
 import pandas as pd
@@ -12,6 +13,16 @@ class ColBERTSearcher:
        self.model = None
        self.lincoln_dict = lincoln_dict or {}
        self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
+
+       # Ensure lincoln_dict is properly initialized
+        if lincoln_dict is None:
+
+            lincoln_data_df = load_lincoln_speech_corpus()
+            lincoln_data = lincoln_data_df.to_dict("records")
+            self.lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+        else:
+            self.lincoln_dict = lincoln_dict
+
        st.write(f"Sample lincoln_dict keys: {list(self.lincoln_dict.keys())[:5]}")
 
    def load_index(self):

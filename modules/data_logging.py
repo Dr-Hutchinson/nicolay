@@ -178,6 +178,7 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
     record.update(match_data)
 
     # Log the record
+    st.write("Model output keys:", model_output.keys())
     nicolay_data_logger.record_api_outputs(record)
 
 def log_benchmark_results(benchmark_logger, user_query, expected_documents,

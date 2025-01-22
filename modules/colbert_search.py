@@ -23,8 +23,12 @@ class ColBERTSearcher:
             results = self.model.search(query=query, k=k)
             processed_results = []
             for result in results:
-                doc_id = result['document_id'].replace('Text #: ', '')
+                # Strip 'Text #: ' and any whitespace
+                doc_id = result['document_id'].replace('Text #: ', '').strip()
                 lincoln_data = self.lincoln_dict.get(doc_id, {})
+
+                # Add debug print
+                print(f"Doc ID: {doc_id}, Found in lincoln_dict: {doc_id in self.lincoln_dict}")
 
                 processed_results.append({
                     "text_id": result['document_id'],
@@ -32,7 +36,7 @@ class ColBERTSearcher:
                     "TopSegment": result['content'],
                     "source": lincoln_data.get('source', ''),
                     "summary": lincoln_data.get('summary', ''),
-                    "search_type": "ColBERT"  # Explicit search type
+                    "search_type": "ColBERT"
                 })
             return pd.DataFrame(processed_results)
         except Exception as e:

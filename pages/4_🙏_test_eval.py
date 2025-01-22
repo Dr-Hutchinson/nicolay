@@ -21,6 +21,12 @@ from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
 from modules.colbert_search import ColBERTSearcher
 
+from modules.data_utils import (
+    load_lincoln_speech_corpus,
+    load_voyant_word_counts,
+    load_lincoln_index_embedded
+)
+
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 st.title("RAG Benchmarking and Evaluation Module")
@@ -150,7 +156,14 @@ if user_query and st.button("Run Evaluation"):
 
     try:
 
-        colbert_searcher = ColBERTSearcher()
+        lincoln_data_df = load_lincoln_speech_corpus()
+        lincoln_data = lincoln_data_df.to_dict("records")
+        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+
+        # Initialize with dict
+        colbert_searcher = ColBERTSearcher(lincoln_dict=lincoln_dict)
+
+        #colbert_searcher = ColBERTSearcher()
 
         # --- 1. Execute the RAG Pipeline ---
         pipeline_results = run_rag_pipeline(

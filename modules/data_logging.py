@@ -131,9 +131,9 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
 
     # Match Analysis
     match_analysis = model_output.get("Match Analysis", {})
-    match_1 = json.dumps(match_analysis.get("Match 1", {}))
-    match_2 = json.dumps(match_analysis.get("Match 2", {}))
-    match_3 = json.dumps(match_analysis.get("Match 3", {}))
+    match_1 = json.dumps(match_analysis.get("RerankedMatch1", {}))
+    match_2 = json.dumps(match_analysis.get("RerankedMatch2", {}))
+    match_3 = json.dumps(match_analysis.get("RerankedMatch3", {}))
 
     # Meta Analysis
     meta_analysis = model_output.get("Meta Analysis", {})

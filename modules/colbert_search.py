@@ -6,17 +6,18 @@ from modules.data_utils import load_lincoln_speech_corpus
 import streamlit as st
 
 class ColBERTSearcher:
-   def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):
-       self.index_path = index_path
-       self.model = None
-       self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
+    def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):
+        self.index_path = index_path
+        self.model = None
+        self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
-       if lincoln_dict is None:
-           lincoln_data_df = load_lincoln_speech_corpus()
-           lincoln_data = lincoln_data_df.to_dict("records")
-           self.lincoln_dict = {f"Text #: {item['text_id']}": item for item in lincoln_data}
-       else:
-           self.lincoln_dict = lincoln_dict
+        if lincoln_dict is None:
+            lincoln_data_df = load_lincoln_speech_corpus()
+            lincoln_data = lincoln_data_df.to_dict("records")
+            # Fix the key format
+            self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
+        else:
+            self.lincoln_dict = lincoln_dict
 
    def load_index(self):
        if not os.path.exists(self.index_path):
@@ -24,40 +25,28 @@ class ColBERTSearcher:
        self.model = RAGPretrainedModel.from_index(self.index_path)
 
    def search(self, query, k=5):
-    if not self.model:
-        self.load_index()
+        if not self.model:
+            self.load_index()
 
-    try:
-        results = self.model.search(query=query, k=k)
-        processed_results = []
+        try:
+            results = self.model.search(query=query, k=k)
+            processed_results = []
 
-        st.write("\nDebugging ColBERT Search:")
-        st.write(f"lincoln_dict keys: {list(self.lincoln_dict.keys())[:5]}")
+            for result in results:
+                doc_id = result['document_id'].replace('Text #: ', '')
+                lincoln_data = self.lincoln_dict.get(doc_id, {})
 
-        for result in results:
-            doc_id = result['document_id']
-            st.write(f"\nProcessing document: {doc_id}")
-            st.write(f"Looking up in lincoln_dict: {doc_id}")
-            st.write(f"Found in lincoln_dict: {doc_id in self.lincoln_dict}")
-            lincoln_data = self.lincoln_dict.get(doc_id, {})
-            st.write(f"Lincoln data retrieved: {lincoln_data}")
+                processed_results.append({
+                    "text_id": result['document_id'],
+                    "colbert_score": float(result['score']),
+                    "TopSegment": result['content'],
+                    "source": lincoln_data.get('source', ''),
+                    "summary": lincoln_data.get('summary', ''),
+                    "search_type": "ColBERT"
+                })
 
-            entry = {
-                "text_id": doc_id,
-                "colbert_score": float(result['score']),
-                "TopSegment": result['content'],
-                "source": lincoln_data.get('source', ''),
-                "summary": lincoln_data.get('summary', ''),
-                "search_type": "ColBERT"
-            }
-            st.write(f"Processed entry: {entry}")
-            processed_results.append(entry)
+            return pd.DataFrame(processed_results)
 
-        df = pd.DataFrame(processed_results)
-        st.write(f"\nFinal DataFrame columns: {df.columns}")
-        st.write(f"Final DataFrame shape: {df.shape}")
-        return df
-
-    except Exception as e:
-        st.write(f"ColBERT search error: {str(e)}")
-        return pd.DataFrame()
+        except Exception as e:
+            print(f"ColBERT search error: {str(e)}")
+            return pd.DataFrame()

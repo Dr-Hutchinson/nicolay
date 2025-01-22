@@ -7,10 +7,10 @@ import os
 import streamlit as st
 
 class ColBERTSearcher:
-    def __init__(self, index_path="data/LincolnCorpus_1"):
+    def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):
         self.index_path = index_path
         self.model = None
-        self.lincoln_dict = lincoln_dict
+        self.lincoln_dict = lincoln_dict or {}
         self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
     def load_index(self):

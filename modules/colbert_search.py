@@ -22,16 +22,21 @@ class ColBERTSearcher:
 
         try:
             results = self.model.search(query=query, k=k)
-            st.write(f"ColBERT raw results: {results}")  # Debug output
             processed_results = []
             for result in results:
+                # Extract document ID from string format
+                doc_id = result['document_id'].replace('Text #: ', '')
                 processed_results.append({
-                    "text_id": result['document_id'],  # Changed from pid to document_id
+                    "text_id": f"Text #: {doc_id}",
                     "colbert_score": float(result['score']),
-                    "TopSegment": result['content'],   # Changed from text to content
+                    "TopSegment": result['content'],
+                    "source": "",  # Add if available
+                    "summary": "",  # Add if available
                     "search_type": "ColBERT"
                 })
-            return pd.DataFrame(processed_results)
+            df = pd.DataFrame(processed_results)
+            print(f"Processed ColBERT results: {df.shape}")
+            return df
         except Exception as e:
             print(f"ColBERT search error: {str(e)}")
             return pd.DataFrame()

@@ -116,52 +116,37 @@ def log_reranking_results(reranking_results_logger, reranked_df, user_query):
         reranking_results_logger.record_api_outputs(record)
 
 def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict, initial_answer):
-    """
-    Logs the Nicolay model output to Google Sheets.
-
-    Parameters:
-    - nicolay_data_logger (DataLogger): Instance of DataLogger for Nicolay model.
-    - model_output (dict): Dictionary containing Nicolay model output.
-    - user_query (str): The user's search query.
-    - highlight_success_dict (dict): Dictionary indicating highlight success for each match.
-    """
-    # Extract key information from model output
     final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
     references = ", ".join(model_output.get("FinalAnswer", {}).get("References", []))
 
-    # User query analysis
-    query_intent = model_output.get("User Query Analysis", {}).get("Query Intent", "")
-    historical_context = model_output.get("User Query Analysis", {}).get("Historical Context", "")
+    # User Query Analysis
+    user_query_analysis = model_output.get("User Query Analysis", {})
+    query_intent = user_query_analysis.get("Query Intent", "")
+    historical_context = user_query_analysis.get("Historical Context", "")
 
-    # Initial answer review
-    answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
-    quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
+    # Initial Answer Review
+    initial_review = model_output.get("Initial Answer Review", {})
+    answer_evaluation = initial_review.get("Answer Evaluation", "")
+    quote_integration = initial_review.get("Quote Integration Points", "")
 
-    # Response effectiveness and suggestions
-    response_effectiveness = model_output.get("Model Feedback", {}).get("Response Effectiveness", "")
-    suggestions_for_improvement = model_output.get("Model Feedback", {}).get("Suggestions for Improvement", "")
-
-    # Match analysis - concatenating details of each match into single strings
+    # Match Analysis
     match_analysis = model_output.get("Match Analysis", {})
-    match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
-    match_data = {}
+    match_1 = json.dumps(match_analysis.get("Match 1", {}))
+    match_2 = json.dumps(match_analysis.get("Match 2", {}))
+    match_3 = json.dumps(match_analysis.get("Match 3", {}))
 
-    for match_key, match_details in match_analysis.items():
-        match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
-        match_data[match_key] = "; ".join(match_info)  # Concatenate with a separator
+    # Meta Analysis
+    meta_analysis = model_output.get("Meta Analysis", {})
+    synthesis = meta_analysis.get("Synthesis", "")
 
-        # Add highlight success information for each match
-        match_data[f'{match_key}_HighlightSuccess'] = highlight_success_dict.get(match_key, False)
+    # Model Feedback
+    model_feedback = model_output.get("Model Feedback", {})
+    response_effectiveness = model_feedback.get("Response Effectiveness", "")
+    suggestions = model_feedback.get("Suggestions for Improvement", "")
 
-    # Meta analysis
-    meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
-    meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
-
-    # Construct a record for logging
     record = {
         'Timestamp': dt.now(),
         'UserQuery': user_query,
-        #'Initial_Answer': model_output.get("InitialAnswer", "No initial answer available."),
         'Initial_Answer': initial_answer,
         'FinalAnswer': final_answer_text,
         'References': references,
@@ -169,17 +154,15 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'HistoricalContext': historical_context,
         'AnswerEvaluation': answer_evaluation,
         'QuoteIntegration': quote_integration,
-        'MetaStrategy': json.dumps(meta_strategy),  # Convert dictionary to JSON string
-        'MetaSynthesis': meta_synthesis,
+        'Match1Analysis': match_1,
+        'Match2Analysis': match_2,
+        'Match3Analysis': match_3,
+        'MetaAnalysis': json.dumps(meta_analysis),
+        'Synthesis': synthesis,
         'ResponseEffectiveness': response_effectiveness,
-        'Suggestions': suggestions_for_improvement
+        'SuggestionsImprovement': suggestions
     }
 
-    # Add match data to the record
-    record.update(match_data)
-
-    # Log the record
-    st.write("Model output keys:", model_output.keys())
     nicolay_data_logger.record_api_outputs(record)
 
 def log_benchmark_results(benchmark_logger, user_query, expected_documents,

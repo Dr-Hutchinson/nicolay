@@ -13,12 +13,12 @@ class ColBERTSearcher:
 
         if lincoln_dict is None:
             lincoln_data_df = load_lincoln_speech_corpus()
-            st.write("Sample from lincoln_data_df:")
-            st.write(lincoln_data_df.head())
+            print("Sample from lincoln_data_df:")
+            print(lincoln_data_df.head())
             lincoln_data = lincoln_data_df.to_dict("records")
             self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
-            st.write("Sample keys from self.lincoln_dict:", list(self.lincoln_dict.keys())[:5])
-            st.write("Sample value from self.lincoln_dict:", next(iter(self.lincoln_dict.values())))
+            print("Sample keys from self.lincoln_dict:", list(self.lincoln_dict.keys())[:5])
+            print("Sample value from self.lincoln_dict:", next(iter(self.lincoln_dict.values())))
         else:
             self.lincoln_dict = lincoln_dict
 
@@ -51,5 +51,5 @@ class ColBERTSearcher:
            return pd.DataFrame(processed_results)
 
        except Exception as e:
-           st.write(f"ColBERT search error: {str(e)}")
+           print(f"ColBERT search error: {str(e)}")
            return pd.DataFrame()

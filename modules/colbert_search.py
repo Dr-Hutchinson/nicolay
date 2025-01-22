@@ -10,6 +10,7 @@ class ColBERTSearcher:
     def __init__(self, index_path="data/LincolnCorpus_1"):
         self.index_path = index_path
         self.model = None
+        self.lincoln_dict = lincoln_dict
         self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
     def load_index(self):
@@ -25,19 +26,22 @@ class ColBERTSearcher:
             results = self.model.search(query=query, k=k)
             processed_results = []
             for result in results:
-                # Extract document ID from string format
                 doc_id = result['document_id'].replace('Text #: ', '')
+
+                # Get source and summary from lincoln_dict
+                lincoln_data = self.lincoln_dict.get(doc_id, {})
+                source = lincoln_data.get('source', '')
+                summary = lincoln_data.get('summary', '')
+
                 processed_results.append({
                     "text_id": f"Text #: {doc_id}",
                     "colbert_score": float(result['score']),
                     "TopSegment": result['content'],
-                    "source": "",  # Add if available
-                    "summary": "",  # Add if available
+                    "source": source,
+                    "summary": summary,
                     "search_type": "ColBERT"
                 })
-            df = pd.DataFrame(processed_results)
-            print(f"Processed ColBERT results: {df.shape}")
-            return df
+            return pd.DataFrame(processed_results)
         except Exception as e:
             print(f"ColBERT search error: {str(e)}")
             return pd.DataFrame()

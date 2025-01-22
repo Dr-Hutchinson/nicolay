@@ -14,7 +14,9 @@ def prepare_documents_for_reranking(combined_df, user_query):
     for idx, row in combined_df.iterrows():
         try:
             # Determine search type
-            search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
+            #search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
+            # In prepare_documents_for_reranking
+            search_type = row.get("search_type", "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic")    
 
             # Get text components
             text_id = str(row.get("text_id", "")).strip()
@@ -39,7 +41,7 @@ def prepare_documents_for_reranking(combined_df, user_query):
 
     return documents
 
-def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0', top_n=10):
+def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0', top_n=15):
     """
     Reranks documents using Cohere's reranking API with improved error handling.
     """

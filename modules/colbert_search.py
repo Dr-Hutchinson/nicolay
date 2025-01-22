@@ -3,24 +3,24 @@ from sentence_transformers import SentenceTransformer
 import pandas as pd
 import os
 from modules.data_utils import load_lincoln_speech_corpus
-import streamlit as st
+from streamlit as st
 
 class ColBERTSearcher:
-    def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):
-        self.index_path = index_path
-        self.model = None
-        self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
+   def __init__(self, index_path="data/LincolnCorpus_1", lincoln_dict=None):
+       self.index_path = index_path
+       self.model = None
+       self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
-        if lincoln_dict is None:
-            lincoln_data_df = load_lincoln_speech_corpus()
-            print("Sample from lincoln_data_df:")
-            print(lincoln_data_df.head())
-            lincoln_data = lincoln_data_df.to_dict("records")
-            self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
-            print("Sample keys from self.lincoln_dict:", list(self.lincoln_dict.keys())[:5])
-            print("Sample value from self.lincoln_dict:", next(iter(self.lincoln_dict.values())))
-        else:
-            self.lincoln_dict = lincoln_dict
+       if lincoln_dict is None:
+           lincoln_data_df = load_lincoln_speech_corpus()
+           st.write("Sample from lincoln_data_df:")
+           st.write(lincoln_data_df.head())
+           lincoln_data = lincoln_data_df.to_dict("records")
+           self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
+           st.write("Sample keys from self.lincoln_dict:", list(self.lincoln_dict.keys())[:5])
+           st.write("Sample value from self.lincoln_dict:", next(iter(self.lincoln_dict.values())))
+       else:
+           self.lincoln_dict = lincoln_dict
 
    def load_index(self):
        if not os.path.exists(self.index_path):
@@ -51,5 +51,5 @@ class ColBERTSearcher:
            return pd.DataFrame(processed_results)
 
        except Exception as e:
-           print(f"ColBERT search error: {str(e)}")
+           st.write(f"ColBERT search error: {str(e)}")
            return pd.DataFrame()

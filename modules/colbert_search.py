@@ -14,9 +14,8 @@ class ColBERTSearcher:
        self.lincoln_dict = lincoln_dict or {}
        self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
-       # Ensure lincoln_dict is properly initialized
-       if lincoln_dict is None:
-
+        # Ensure lincoln_dict is properly initialized
+        if lincoln_dict is None:
             lincoln_data_df = load_lincoln_speech_corpus()
             lincoln_data = lincoln_data_df.to_dict("records")
             self.lincoln_dict = {item["text_id"]: item for item in lincoln_data}

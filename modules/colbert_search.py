@@ -28,7 +28,7 @@ class ColBERTSearcher:
                 lincoln_data = self.lincoln_dict.get(doc_id, {})
 
                 # Add debug print
-                print(f"Doc ID: {doc_id}, Found in lincoln_dict: {doc_id in self.lincoln_dict}")
+                st.write(f"Doc ID: {doc_id}, Found in lincoln_dict: {doc_id in self.lincoln_dict}")
 
                 processed_results.append({
                     "text_id": result['document_id'],
@@ -40,7 +40,7 @@ class ColBERTSearcher:
                 })
             return pd.DataFrame(processed_results)
         except Exception as e:
-            print(f"ColBERT search error: {str(e)}")
+            st.write(f"ColBERT search error: {str(e)}")
             return pd.DataFrame()
 
 # End colbert_search.py

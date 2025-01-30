@@ -5,14 +5,22 @@ from datetime import datetime as dt
 import pygsheets
 from google.oauth2 import service_account
 import logging
+import nltk
 
-# --- Our new pipeline orchestrator ---
+# Download NLTK data at app startup
+try:
+    nltk.download('punkt')
+    nltk.download('stopwords')
+except Exception as e:
+    st.warning(f"NLTK resource download failed: {str(e)}. Some features may be limited.")
+
+# --- Our pipeline orchestrator ---
 from modules.rag_pipeline import run_rag_pipeline
 
 # Logging Modules
 from modules.data_logging import DataLogger, log_benchmark_results
 
-# Possibly still need these imports if you do advanced steps:
+# Import additional modules
 from modules.semantic_search import semantic_search
 from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.reranking import rerank_results
@@ -85,18 +93,10 @@ if query_method == "Benchmark Questions":
         benchmark_data = pd.DataFrame()
 
     # Preprocess the benchmark data
-    #if not benchmark_data.empty:
-        # Process ideal_documents column
-    #    benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
-    #        lambda x: [doc.strip() for doc in x.split(",")] if isinstance(x, str) else []
-    #    )
-
-    # Update this section in the benchmark data preprocessing
     if not benchmark_data.empty and "ideal_documents" in benchmark_data.columns:
         benchmark_data["ideal_documents"] = benchmark_data["ideal_documents"].apply(
-            lambda x: [doc.strip() for doc in str(x).split(",") if doc.strip()]  # Added str() and filtering empty strings
+            lambda x: [doc.strip() for doc in str(x).split(",") if doc.strip()]
         )
-
 
         # Ensure category is lowercase and standardized
         benchmark_data["category"] = benchmark_data["category"].str.lower().str.replace(" ", "_")
@@ -155,18 +155,17 @@ if user_query and st.button("Run Evaluation"):
     st.write(f"Query: {user_query}")
 
     try:
-
+        # Load necessary data
         lincoln_data_df = load_lincoln_speech_corpus()
         lincoln_data = lincoln_data_df.to_dict("records")
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
-        # Initialize with dict
-        #colbert_searcher = ColBERTSearcher(lincoln_dict=lincoln_dict)
-        colbert_searcher = ColBERTSearcher(lincoln_dict=lincoln_dict)
-
-
-
-        #colbert_searcher = ColBERTSearcher()
+        # Initialize ColBERT with custom stopwords
+        custom_stopwords = {'civil', 'war', 'union', 'confederate'}  # Add any domain-specific stopwords
+        colbert_searcher = ColBERTSearcher(
+            lincoln_dict=lincoln_dict,
+            custom_stopwords=custom_stopwords
+        )
 
         # --- 1. Execute the RAG Pipeline ---
         pipeline_results = run_rag_pipeline(
@@ -198,7 +197,6 @@ if user_query and st.button("Run Evaluation"):
         # --- 3. Display the Hay Initial Answer ---
         st.write("### Hay's Initial Answer")
         st.markdown(initial_answer)
-        # Also optionally show the extracted keywords:
         st.write("**Keywords from Hay**:", weighted_keywords)
         st.write("**Year Keywords**:", year_keywords)
         st.write("**Text Keywords**:", text_keywords)
@@ -222,7 +220,6 @@ if user_query and st.button("Run Evaluation"):
             st.dataframe(colbert_results)
         else:
             st.write("No ColBERT search results found.")
-
 
         st.write("### Reranked Results")
         if not reranked_results.empty:
@@ -287,10 +284,7 @@ if user_query and st.button("Run Evaluation"):
                 category=question_category
             )
             if eval_results:
-                st.markdown(llm_evaluator.format_evaluation_results(
-                    eval_results
-                    #category=question_category
-                ))
+                st.markdown(llm_evaluator.format_evaluation_results(eval_results))
             else:
                 st.error("Unable to generate LLM evaluation results")
 
@@ -303,7 +297,6 @@ if user_query and st.button("Run Evaluation"):
                 bleu_rouge_results=evaluation_results or {},
                 llm_results=eval_results or {},
                 reranked_results=reranked_results
-                #question_category=question_category
             )
 
     except Exception as e:

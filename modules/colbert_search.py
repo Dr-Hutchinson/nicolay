@@ -27,20 +27,27 @@ class ColBERTSearcher:
         self.model = None
         self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
-        # Initialize stopwords
+        # Initialize stopwords without downloads
         try:
-            nltk.data.find('tokenizers/punkt_tab')
+            self.stopwords = set(stopwords.words('english'))
         except LookupError:
-            nltk.download('punkt_tab')
-            nltk.download('stopwords')
+            st.warning("NLTK resources not available. Using basic stopwords set.")
+            # Fallback to basic stopwords set
+            self.stopwords = {
+                'a', 'an', 'the', 'in', 'on', 'at', 'for', 'to', 'of', 'with', 'by',
+                'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down', 'out',
+                'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+                'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'shall', 'should',
+                'this', 'that', 'these', 'those', 'there', 'here'
+            }
 
-        # Combine NLTK stopwords with custom Lincoln-specific stopwords
-        self.stopwords = set(stopwords.words('english'))
+        # Add Lincoln-specific stopwords
         lincoln_specific_stopwords = {
-            'abraham', 'lincoln'
+            'abraham', 'lincoln', 'abe', 'president', 'mr', 'mrs',
+            'presidential', 'presidency', 'white', 'house'
         }
 
-        # Add any additional custom stopwords
+        # Add custom stopwords if provided
         if custom_stopwords:
             lincoln_specific_stopwords.update(custom_stopwords)
 
@@ -94,20 +101,28 @@ class ColBERTSearcher:
         Returns:
             Preprocessed query string
         """
-        # Tokenize the query
-        tokens = word_tokenize(query.lower())
+        try:
+            # Simple tokenization by splitting on whitespace if word_tokenize fails
+            try:
+                tokens = word_tokenize(query.lower())
+            except Exception as e:
+                st.debug(f"word_tokenize failed: {str(e)}. Using basic split.")
+                tokens = query.lower().split()
 
-        # Remove stopwords and normalize
-        filtered_tokens = [
-            token for token in tokens
-            if token not in self.stopwords and token.isalnum()
-        ]
+            # Remove stopwords and normalize
+            filtered_tokens = [
+                token for token in tokens
+                if token not in self.stopwords and token.isalnum()
+            ]
 
-        # If the filtered query would be empty, return original query
-        if not filtered_tokens:
+            # If the filtered query would be empty, return original query
+            if not filtered_tokens:
+                return query
+
+            return ' '.join(filtered_tokens)
+        except Exception as e:
+            st.warning(f"Query preprocessing failed: {str(e)}. Using original query.")
             return query
-
-        return ' '.join(filtered_tokens)
 
     def search(self, query: str, k: int = 5,
                skip_preprocessing: bool = False) -> pd.DataFrame:

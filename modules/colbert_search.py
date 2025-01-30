@@ -1,6 +1,6 @@
+import nltk
 from nltk.corpus import stopwords
 from nltk import word_tokenize
-import nltk
 from typing import List, Set, Optional
 import pandas as pd
 from sentence_transformers import SentenceTransformer
@@ -42,7 +42,8 @@ class ColBERTSearcher:
     def _initialize_stopwords(self) -> None:
         """Initialize stopwords including standard NLTK stopwords and domain-specific terms."""
         try:
-            nltk.data.find('corpora/stopwords')
+            nltk.download('stopwords')
+            nltk.download('punkt_tab')
         except LookupError:
             nltk.download('stopwords')
             nltk.download('punkt_tab')

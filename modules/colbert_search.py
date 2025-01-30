@@ -29,7 +29,7 @@ class ColBERTSearcher:
 
         # Initialize stopwords
         try:
-            nltk.data.find('tokenizers/punkt')
+            nltk.data.find('tokenizers/punkt_tab')
         except LookupError:
             nltk.download('punkt_tab')
             nltk.download('stopwords')

@@ -45,7 +45,7 @@ class ColBERTSearcher:
             nltk.data.find('corpora/stopwords')
         except LookupError:
             nltk.download('stopwords')
-            nltk.download('punkt')
+            nltk.download('punkt_tab')
 
         # Get standard English stopwords
         self.stopwords = set(stopwords.words('english'))

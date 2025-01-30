@@ -8,3 +8,4 @@ msgpack==1.0.8
 pyarrow==16.1.0
 rouge-score==0.1.2
 RAGatouille==0.0.8
+ntlk==3.9.1

@@ -9,7 +9,7 @@ import nltk
 
 # Download NLTK data at app startup
 try:
-    nltk.download('punkt')
+    nltk.download('punkt_tab')
     nltk.download('stopwords')
 except Exception as e:
     st.warning(f"NLTK resource download failed: {str(e)}. Some features may be limited.")

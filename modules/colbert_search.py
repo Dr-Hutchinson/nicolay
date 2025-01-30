@@ -5,6 +5,7 @@ from typing import List, Set, Optional
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 from ragatouille import RAGPretrainedModel
+from modules.data_utils import load_lincoln_speech_corpus
 
 class ColBERTSearcher:
     def __init__(self,
@@ -23,6 +24,20 @@ class ColBERTSearcher:
         self._initialize_lincoln_dict(lincoln_dict)
         self._initialize_stopwords()
         self._cache = {}
+
+    def _initialize_lincoln_dict(self, lincoln_dict: Optional[dict] = None) -> None:
+        """
+        Initialize the Lincoln corpus dictionary.
+
+        Args:
+            lincoln_dict: Optional pre-loaded dictionary of Lincoln corpus documents
+        """
+        if lincoln_dict is None:
+            lincoln_data_df = load_lincoln_speech_corpus()
+            lincoln_data = lincoln_data_df.to_dict("records")
+            self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
+        else:
+            self.lincoln_dict = lincoln_dict
 
     def _initialize_stopwords(self) -> None:
         """Initialize stopwords including standard NLTK stopwords and domain-specific terms."""
@@ -57,6 +72,11 @@ class ColBERTSearcher:
 
         # Reconstruct the query
         return ' '.join(filtered_tokens)
+
+    def load_index(self):
+        """Load the ColBERT index."""
+        if not self.model:
+            self.model = RAGPretrainedModel.from_index(self.index_path)
 
     def search(self, query: str, k: int = 5) -> pd.DataFrame:
         """

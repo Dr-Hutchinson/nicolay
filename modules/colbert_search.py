@@ -106,7 +106,7 @@ class ColBERTSearcher:
             try:
                 tokens = word_tokenize(query.lower())
             except Exception as e:
-                st.debug(f"word_tokenize failed: {str(e)}. Using basic split.")
+                st.write(f"word_tokenize failed: {str(e)}. Using basic split.")
                 tokens = query.lower().split()
 
             # Remove stopwords and normalize
@@ -149,8 +149,8 @@ class ColBERTSearcher:
             processed_query = query if skip_preprocessing else self.preprocess_query(query)
 
             # Log original and processed queries for debugging
-            st.debug(f"Original query: {query}")
-            st.debug(f"Processed query: {processed_query}")
+            st.write(f"Original query: {query}")
+            st.write(f"Processed query: {processed_query}")
 
             # Perform search
             results = self.model.search(query=processed_query, k=k)

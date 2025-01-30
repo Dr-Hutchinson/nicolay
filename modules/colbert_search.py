@@ -31,13 +31,13 @@ class ColBERTSearcher:
         try:
             nltk.data.find('tokenizers/punkt')
         except LookupError:
-            nltk.download('punkt')
+            nltk.download('punkt_tab')
             nltk.download('stopwords')
 
         # Combine NLTK stopwords with custom Lincoln-specific stopwords
         self.stopwords = set(stopwords.words('english'))
         lincoln_specific_stopwords = {
-            'abraham', 'lincoln' 
+            'abraham', 'lincoln'
         }
 
         # Add any additional custom stopwords

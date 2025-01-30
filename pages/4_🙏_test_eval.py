@@ -161,7 +161,10 @@ if user_query and st.button("Run Evaluation"):
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
         # Initialize with dict
+        #colbert_searcher = ColBERTSearcher(lincoln_dict=lincoln_dict)
         colbert_searcher = ColBERTSearcher(lincoln_dict=lincoln_dict)
+
+
 
         #colbert_searcher = ColBERTSearcher()
 

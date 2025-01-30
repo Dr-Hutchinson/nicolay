@@ -42,11 +42,10 @@ class ColBERTSearcher:
     def _initialize_stopwords(self) -> None:
         """Initialize stopwords including standard NLTK stopwords and domain-specific terms."""
         try:
-            nltk.download('stopwords')
-            nltk.download('punkt_tab')
+            nltk.data.find('corpora/stopwords')
         except LookupError:
             nltk.download('stopwords')
-            nltk.download('punkt_tab')
+            nltk.download('punkt')
 
         # Get standard English stopwords
         self.stopwords = set(stopwords.words('english'))

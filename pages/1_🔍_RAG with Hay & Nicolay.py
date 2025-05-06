@@ -883,7 +883,7 @@ with st.form("Search Interface"):
                         try:
                             reranked_response = co.rerank(
                                 #model='rerank-english-v2.0',
-                                model='rerank-v3.5'
+                                model='rerank-v3.5',
                                 query=user_query,
                                 documents=all_combined_data,
                                 top_n=10

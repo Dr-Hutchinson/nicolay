@@ -25,7 +25,7 @@ class ColBERTSearcher:
         """
         self.index_path = index_path
         self.model = None
-        self.encoder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        self.encoder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", token=False)
 
         # Initialize stopwords without downloads
         try:

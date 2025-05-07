@@ -41,7 +41,9 @@ gc = pygsheets.authorize(custom_credentials=credentials)
 api_sheet = gc.open('api_outputs')
 api_outputs = api_sheet.sheet1
 
-
+# DataStax API info
+os.environ['DATASTAX_DB_APPLICATION_TOKEN'] = st.secrets["datastax_db_application_token"]
+os.environ['DATASTAX_DB_ID'] = st.secrets["datastax_db_id"]
 
 #col1, col2, col3, col4, col5 = st.columns(5)
 

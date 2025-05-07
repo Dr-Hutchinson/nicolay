@@ -31,19 +31,26 @@ class DataStaxColBERTSearcher:
         Args:
             lincoln_dict: Dictionary of Lincoln corpus documents
             custom_stopwords: Set of custom stopwords to add to defaults
-            astra_db_id: Astra DB ID (if None, will use ASTRA_DB_ID env var)
-            astra_db_token: Astra DB application token (if None, will use ASTRA_DB_APPLICATION_TOKEN env var)
+            astra_db_id: Astra DB ID (if None, will check st.secrets then env vars)
+            astra_db_token: Astra DB application token (if None, will check st.secrets then env vars)
             keyspace: Astra DB keyspace to use
         """
-        # Set up Astra DB credentials
+        # Try to get Astra DB credentials from Streamlit secrets first
+        if astra_db_id is None and "ASTRA_DB_ID" in st.secrets:
+            astra_db_id = st.secrets["ASTRA_DB_ID"]
+
+        if astra_db_token is None and "ASTRA_DB_APPLICATION_TOKEN" in st.secrets:
+            astra_db_token = st.secrets["ASTRA_DB_APPLICATION_TOKEN"]
+
+        # Fall back to environment variables if not in secrets
         self.astra_db_id = astra_db_id or os.getenv("ASTRA_DB_ID")
         self.astra_db_token = astra_db_token or os.getenv("ASTRA_DB_APPLICATION_TOKEN")
         self.keyspace = keyspace
 
         if not self.astra_db_id or not self.astra_db_token:
             raise ValueError(
-                "Astra DB credentials not found. Please provide astra_db_id and astra_db_token "
-                "or set ASTRA_DB_ID and ASTRA_DB_APPLICATION_TOKEN environment variables."
+                "Astra DB credentials not found. Please provide them via st.secrets, "
+                "environment variables, or directly in the constructor."
             )
 
         # Initialize Lincoln dictionary

@@ -6,6 +6,11 @@ import pygsheets
 from google.oauth2 import service_account
 import logging
 import nltk
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Download NLTK data at app startup
 try:
@@ -27,13 +32,26 @@ from modules.reranking import rerank_results
 from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
-from modules.colbert_search import ColBERTSearcher
+
+# Import DataStax ColBERT implementation (new module)
+from modules.colbert_datastax import DataStaxColBERTSearcher
 
 from modules.data_utils import (
     load_lincoln_speech_corpus,
     load_voyant_word_counts,
     load_lincoln_index_embedded
 )
+
+# Check for Astra DB credentials in Streamlit secrets or environment variables
+astra_db_id = st.secrets.get("ASTRA_DB_ID") if "ASTRA_DB_ID" in st.secrets else os.getenv("ASTRA_DB_ID")
+astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") if "ASTRA_DB_APPLICATION_TOKEN" in st.secrets else os.getenv("ASTRA_DB_APPLICATION_TOKEN")
+
+if not astra_db_id or not astra_db_token:
+    st.warning("""
+        DataStax Astra DB credentials not found. Please add them to your Streamlit secrets or environment variables:
+        - ASTRA_DB_ID: Your Astra DB ID
+        - ASTRA_DB_APPLICATION_TOKEN: Your Astra DB application token
+    """)
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
@@ -62,6 +80,75 @@ if 'messages' not in st.session_state:
     st.session_state['messages'] = []
 if 'response_model_system_prompt' not in st.session_state:
     st.session_state['response_model_system_prompt'] = st.session_state.get('response_model_system_prompt', "")
+if 'datastax_colbert_initialized' not in st.session_state:
+    st.session_state['datastax_colbert_initialized'] = False
+if 'corpus_ingested' not in st.session_state:
+    st.session_state['corpus_ingested'] = False
+
+# Sidebar for DataStax ColBERT Config
+with st.sidebar:
+    st.header("DataStax ColBERT Configuration")
+
+    # Display status
+    if not astra_db_id or not astra_db_token:
+        st.warning("Astra DB credentials not found in Streamlit secrets or environment variables")
+    else:
+        st.success(f"Astra DB credentials configured: {astra_db_id[:6]}...{astra_db_id[-4:]}")
+
+    # Initialize DataStax ColBERT
+    if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
+        if st.button("Initialize DataStax ColBERT"):
+            try:
+                # Initialize with custom stopwords
+                custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+
+                # Load Lincoln corpus for initialization
+                lincoln_data_df = load_lincoln_speech_corpus()
+                lincoln_data = lincoln_data_df.to_dict("records")
+                lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+
+                # Initialize the searcher - Streamlit secrets handled inside the class
+                datastax_colbert_searcher = DataStaxColBERTSearcher(
+                    lincoln_dict=lincoln_dict,
+                    custom_stopwords=custom_stopwords
+                )
+
+                # Store in session state
+                st.session_state.datastax_colbert_searcher = datastax_colbert_searcher
+                st.session_state.datastax_colbert_initialized = True
+
+                st.success("DataStax ColBERT initialized successfully")
+            except Exception as e:
+                st.error(f"Error initializing DataStax ColBERT: {str(e)}")
+
+    # Ingest corpus if initialized but not ingested
+    if st.session_state.datastax_colbert_initialized and not st.session_state.corpus_ingested:
+        if st.button("Ingest Lincoln Corpus"):
+            try:
+                with st.spinner("Ingesting Lincoln corpus into DataStax ColBERT..."):
+                    # Load Lincoln corpus
+                    lincoln_data_df = load_lincoln_speech_corpus()
+
+                    # Extract texts and IDs
+                    corpus_texts = lincoln_data_df["speech_text"].tolist()
+                    doc_ids = lincoln_data_df["text_id"].tolist()
+
+                    # Ingest corpus
+                    success = st.session_state.datastax_colbert_searcher.ingest_corpus(
+                        corpus_texts=corpus_texts,
+                        doc_ids=doc_ids
+                    )
+
+                    if success:
+                        st.session_state.corpus_ingested = True
+                        st.success("Lincoln corpus ingested successfully")
+                    else:
+                        st.error("Failed to ingest Lincoln corpus")
+            except Exception as e:
+                st.error(f"Error ingesting corpus: {str(e)}")
+
+    if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
+        st.success("DataStax ColBERT ready for search")
 
 # Add query method selection
 query_method = st.radio(
@@ -141,6 +228,16 @@ else:
         ['factual_retrieval', 'analysis', 'comparative_analysis', 'synthesis']
     )
 
+# Select ColBERT Implementation
+colbert_impl = st.radio(
+    "Select ColBERT Implementation:",
+    ["DataStax ColBERT", "Local ColBERT"],
+    disabled=not st.session_state.get('datastax_colbert_initialized', False)
+)
+
+if colbert_impl == "DataStax ColBERT" and not st.session_state.get('datastax_colbert_initialized', False):
+    st.warning("DataStax ColBERT is not initialized. Please initialize it in the sidebar.")
+
 # Evaluation Method Selection
 st.subheader("Evaluation Options")
 eval_methods = st.multiselect(
@@ -160,12 +257,17 @@ if user_query and st.button("Run Evaluation"):
         lincoln_data = lincoln_data_df.to_dict("records")
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
-        # Initialize ColBERT with custom stopwords
-        custom_stopwords = {'civil', 'war', 'union', 'confederate'}  # Add any domain-specific stopwords
-        colbert_searcher = ColBERTSearcher(
-            lincoln_dict=lincoln_dict,
-            custom_stopwords=custom_stopwords
-        )
+        # Initialize ColBERT based on selected implementation
+        if colbert_impl == "DataStax ColBERT" and st.session_state.get('datastax_colbert_initialized', False):
+            colbert_searcher = st.session_state.datastax_colbert_searcher
+        else:
+            # Use original ColBERT implementation (imported as needed)
+            from modules.colbert_search import ColBERTSearcher
+            custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+            colbert_searcher = ColBERTSearcher(
+                lincoln_dict=lincoln_dict,
+                custom_stopwords=custom_stopwords
+            )
 
         # --- 1. Execute the RAG Pipeline ---
         pipeline_results = run_rag_pipeline(
@@ -179,6 +281,7 @@ if user_query and st.button("Run Evaluation"):
             nicolay_data_logger=nicolay_data_logger,
             reranking_results_logger=reranking_results_logger,
             semantic_results_logger=semantic_results_logger,
+            colbert_searcher=colbert_searcher  # Pass the selected searcher
         )
 
         # --- 2. Unpack the pipeline results ---
@@ -214,12 +317,12 @@ if user_query and st.button("Run Evaluation"):
         else:
             st.write("No semantic search results found.")
 
-        st.write("### ColBERT Search Results")
+        st.write(f"### {colbert_impl} Search Results")
         colbert_results = pipeline_results.get("colbert_results", pd.DataFrame())
         if not colbert_results.empty:
             st.dataframe(colbert_results)
         else:
-            st.write("No ColBERT search results found.")
+            st.write(f"No {colbert_impl} search results found.")
 
         st.write("### Reranked Results")
         if not reranked_results.empty:
@@ -306,3 +409,22 @@ if user_query and st.button("Run Evaluation"):
 # Summary/Visualization section
 st.write("### Summary and Visualization")
 st.write("Additional charts or summary metrics can go here.")
+
+# Add instructions for configuring DataStax
+st.sidebar.markdown("""
+### DataStax Configuration Guide
+
+To use DataStax ColBERT, you need to:
+
+1. Create an Astra DB account at [datastax.com](https://astra.datastax.com/signup)
+2. Create a database and generate an application token
+3. Add the following to your Streamlit secrets:
+   - In local dev: Create `.streamlit/secrets.toml` file with:
+     ```toml
+     ASTRA_DB_ID = "your-database-id"
+     ASTRA_DB_APPLICATION_TOKEN = "your-application-token"
+     ```
+   - In Streamlit Cloud: Add these values in the app settings
+4. Click "Initialize DataStax ColBERT" to connect to Astra DB
+5. Click "Ingest Lincoln Corpus" to upload your documents
+""")

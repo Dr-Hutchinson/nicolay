@@ -3,12 +3,9 @@ numpy==1.26.3
 openai==1.55.3
 pandas==2.0.3
 pygsheets==2.0.6
-streamlit==1.45.0
+streamlit==1.29.0
 msgpack==1.0.8
 pyarrow==16.1.0
 rouge-score==0.1.2
 RAGatouille==0.0.9
 nltk==3.9.1
-ragstack-ai-langchain==1.4.0
-ragstack-ai-colbert==1.0.6
-nest-asyncio==1.6.0

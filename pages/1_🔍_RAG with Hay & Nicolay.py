@@ -34,6 +34,12 @@ credentials = service_account.Credentials.from_service_account_info(
 
 gc = pygsheets.authorize(custom_credentials=credentials)
 
+# DataStax API info
+os.environ['DATASTAX_DB_APPLICATION_TOKEN'] = st.secrets["datastax_db_application_token"]
+os.environ['DATASTAX_DB_ID'] = st.secrets["datastax_db_id"]
+
+
+
 class DataLogger:
     def __init__(self, gc, sheet_name):
         self.gc = gc

@@ -5,7 +5,7 @@ pandas==2.0.3
 pygsheets==2.0.6
 streamlit==1.45.0
 msgpack==1.0.8
-pyarrow==16.1.0
+pyarrow==14.0.1
 rouge-score==0.1.2
 RAGatouille==0.0.9
 nltk==3.9.1

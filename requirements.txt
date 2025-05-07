@@ -9,6 +9,6 @@ pyarrow==16.1.0
 rouge-score==0.1.2
 RAGatouille==0.0.9
 nltk==3.9.1
-ragstack-ai-langchain==1.4.0
+ragstack-ai-langchain[colbert]==1.4.0
 ragstack-ai-colbert==1.0.6
 nest-asyncio==1.6.0

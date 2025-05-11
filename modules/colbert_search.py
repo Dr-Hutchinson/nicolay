@@ -190,32 +190,73 @@ class ColBERTSearcher:
             True if ingestion was successful, False otherwise
         """
         try:
+            # Input validation
+            if not corpus_texts:
+                st.error("No corpus texts provided for ingestion")
+                return False
+
+            st.info(f"Preparing to ingest {len(corpus_texts)} documents")
+
             if doc_ids is None:
                 # Generate sequential IDs if not provided
                 doc_ids = [f"doc_{i}" for i in range(len(corpus_texts))]
 
+            # Additional validation
             if len(corpus_texts) != len(doc_ids):
+                st.error(f"Mismatch between corpus_texts ({len(corpus_texts)}) and doc_ids ({len(doc_ids)})")
                 raise ValueError("corpus_texts and doc_ids must have the same length")
 
+            # Sample check of first document
+            st.info(f"First document sample (truncated): {corpus_texts[0][:100]}...")
+
             # Ingest texts batch by batch to avoid timeouts
-            batch_size = 10
+            batch_size = 5  # Reduced batch size for better reliability
+            total_batches = (len(corpus_texts) + batch_size - 1) // batch_size
+
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
             for i in range(0, len(corpus_texts), batch_size):
                 batch_texts = corpus_texts[i:i+batch_size]
                 batch_ids = doc_ids[i:i+batch_size]
 
-                for text, doc_id in zip(batch_texts, batch_ids):
-                    # Add text to vector store with document ID as metadata
-                    self.vector_store.add_texts(
-                        texts=[text],
-                        metadatas=[{"source": doc_id}],
-                        doc_id=doc_id
-                    )
+                # Update progress
+                current_batch = i // batch_size + 1
+                progress_bar.progress(current_batch / total_batches)
+                status_text.text(f"Processing batch {current_batch}/{total_batches}")
 
-                st.write(f"Indexed batch {i//batch_size + 1}/{(len(corpus_texts) + batch_size - 1)//batch_size}")
+                for j, (text, doc_id) in enumerate(zip(batch_texts, batch_ids)):
+                    try:
+                        # Skip empty or very short texts
+                        if not text or len(text) < 10:
+                            st.warning(f"Skipping document {doc_id} - text too short or empty")
+                            continue
 
+                        # Add text to vector store with document ID as metadata
+                        self.vector_store.add_texts(
+                            texts=[text],
+                            metadatas=[{"source": doc_id}],
+                            ids=[doc_id]  # Adding explicit IDs for better tracking
+                        )
+
+                        # Log successful addition with minimal output to avoid UI clutter
+                        if j == 0 or j == len(batch_texts) - 1:
+                            st.write(f"Added document {doc_id}")
+
+                    except Exception as e:
+                        st.warning(f"Error adding document {doc_id}: {str(e)}")
+                        # Continue with next document instead of aborting the entire process
+
+                st.write(f"Completed batch {current_batch}/{total_batches}")
+
+            progress_bar.progress(1.0)
+            status_text.text("Ingestion complete!")
             return True
+
         except Exception as e:
             st.error(f"Error ingesting corpus: {str(e)}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     def search(self, query: str, k: int = 5,
@@ -232,6 +273,9 @@ class ColBERTSearcher:
             DataFrame containing search results
         """
         try:
+            # Log that search is being attempted
+            st.info(f"Performing Astra DB ColBERT search for query: '{query}'")
+
             # Preprocess query unless explicitly skipped
             processed_query = query if skip_preprocessing else self.preprocess_query(query)
 
@@ -239,17 +283,36 @@ class ColBERTSearcher:
             st.write(f"Original query: {query}")
             st.write(f"Processed query: {processed_query}")
 
+            # Check if we have data in the vector store
+            try:
+                # This would be ideal but may not be directly available
+                # st.info(f"Current number of documents in vector store: {len(self.vector_store)}")
+                st.info("Executing similarity search...")
+            except:
+                pass
+
             # Perform search with DataStax ColBERT
             docs = self.vector_store.similarity_search(
                 query=processed_query,
                 k=k
             )
 
+            # Log number of results
+            st.info(f"Search returned {len(docs)} results")
+
+            if not docs:
+                st.warning("No results found. Try adjusting your query or ensure documents are indexed.")
+                return pd.DataFrame()
+
             # Process results into expected format
-            return self._process_search_results(docs)
+            results_df = self._process_search_results(docs)
+            st.info(f"Processed {len(results_df)} results into DataFrame")
+            return results_df
 
         except Exception as e:
             st.error(f"DataStax ColBERT search error: {str(e)}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
             return pd.DataFrame()
 
     def _process_search_results(self, docs) -> pd.DataFrame:

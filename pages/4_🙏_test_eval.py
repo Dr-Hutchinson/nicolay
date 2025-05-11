@@ -94,6 +94,10 @@ st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_tok
 with st.sidebar:
     st.header("DataStax ColBERT Configuration")
 
+    # Add this right before the ingest_corpus call in your sidebar code
+    st.write("Lincoln corpus columns:", lincoln_data_df.columns.tolist())
+    st.write("First row sample:", lincoln_data_df.iloc[0].to_dict())
+
     # Display status
     if not astra_db_id or not astra_db_token:
         st.warning("Astra DB credentials not found in Streamlit secrets or environment variables")
@@ -134,8 +138,24 @@ with st.sidebar:
                     # Load Lincoln corpus
                     lincoln_data_df = load_lincoln_speech_corpus()
 
+                    # Debug column names
+                    st.write("DataFrame columns:", lincoln_data_df.columns.tolist())
+
+                    # Determine the text content column - look for common column names
+                    text_column = None
+                    for possible_column in ['speech_text', 'text', 'content', 'full_text']:
+                        if possible_column in lincoln_data_df.columns:
+                            text_column = possible_column
+                            break
+
+                    if text_column is None:
+                        st.error(f"Could not find text content column. Available columns: {lincoln_data_df.columns.tolist()}")
+                        return
+
+                    st.info(f"Using '{text_column}' as the text content column")
+
                     # Extract texts and IDs
-                    corpus_texts = lincoln_data_df["speech_text"].tolist()
+                    corpus_texts = lincoln_data_df[text_column].tolist()
                     doc_ids = lincoln_data_df["text_id"].tolist()
 
                     # Ingest corpus
@@ -151,9 +171,29 @@ with st.sidebar:
                         st.error("Failed to ingest Lincoln corpus")
             except Exception as e:
                 st.error(f"Error ingesting corpus: {str(e)}")
+                import traceback
+                st.error(f"Traceback: {traceback.format_exc()}")
 
-    if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
-        st.success("DataStax ColBERT ready for search")
+    #if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
+#        st.success("DataStax ColBERT ready for search")
+
+    # Add this to your sidebar to check if the corpus is empty
+    if st.session_state.datastax_colbert_initialized:
+        if st.button("Test Astra DB Connection with Simple Query"):
+            try:
+                # Import a simple query that shouldn't rely on corpus ingestion
+                test_query = "Lincoln presidency"
+                test_results = st.session_state.datastax_colbert_searcher.search(
+                    test_query, k=2
+                )
+
+                if not test_results.empty:
+                    st.success(f"Successfully queried Astra DB and got {len(test_results)} results")
+                    st.dataframe(test_results)
+                else:
+                    st.warning("Query executed successfully but returned no results. This is expected if no documents have been ingested.")
+            except Exception as e:
+                st.error(f"Test query failed: {str(e)}")
 
 # Add query method selection
 query_method = st.radio(

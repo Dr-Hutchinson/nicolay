@@ -13,7 +13,7 @@ from ragstack_langchain.colbert import ColbertVectorStore as LangchainColbertVec
 # Load environment variables for Astra DB credentials
 load_dotenv()
 
-class DataStaxColBERTSearcher:
+class ColBERTSearcher:
     """
     Implements ColBERT searching using DataStax's Astra DB and RAGStack.
     This implementation replaces the local ColBERT index with a cloud-based solution.

@@ -6,7 +6,7 @@ import streamlit as st
 
 # In reranking.py
 def prepare_documents_for_reranking(combined_df, user_query):
-    
+
     documents = []
     for idx, row in combined_df.iterrows():
         try:
@@ -27,7 +27,7 @@ def prepare_documents_for_reranking(combined_df, user_query):
 
     return documents
 
-def rerank_results(query, documents, cohere_client, model='rerank-english-v2.0', top_n=15):
+def rerank_results(query, documents, cohere_client, model='rerank-v3.5', top_n=15):
     """
     Reranks documents using Cohere's reranking API with improved error handling.
     """

@@ -11,3 +11,4 @@ nltk==3.9.1
 ragstack-ai-langchain[colbert]==1.4.0
 ragstack-ai-colbert==1.0.6
 nest-asyncio==1.6.0
+transformers==4.49.0

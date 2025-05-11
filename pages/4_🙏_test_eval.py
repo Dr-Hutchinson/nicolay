@@ -85,6 +85,11 @@ if 'datastax_colbert_initialized' not in st.session_state:
 if 'corpus_ingested' not in st.session_state:
     st.session_state['corpus_ingested'] = False
 
+# Add this to your sidebar to debug Astra DB credentials
+st.sidebar.subheader("Debug Astra DB Credentials")
+st.sidebar.write(f"Astra DB ID (masked): {astra_db_id[:4]}...{astra_db_id[-4:] if astra_db_id else 'None'}")
+st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_token[-4:] if astra_db_token else 'None'}")
+
 # Sidebar for DataStax ColBERT Config
 with st.sidebar:
     st.header("DataStax ColBERT Configuration")

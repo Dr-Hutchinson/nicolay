@@ -91,12 +91,9 @@ st.sidebar.write(f"Astra DB ID (masked): {astra_db_id[:4]}...{astra_db_id[-4:] i
 st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_token[-4:] if astra_db_token else 'None'}")
 
 # Sidebar for DataStax ColBERT Config
+# Sidebar for DataStax ColBERT Config
 with st.sidebar:
     st.header("DataStax ColBERT Configuration")
-
-    # Add this right before the ingest_corpus call in your sidebar code
-    st.write("Lincoln corpus columns:", lincoln_data_df.columns.tolist())
-    st.write("First row sample:", lincoln_data_df.iloc[0].to_dict())
 
     # Display status
     if not astra_db_id or not astra_db_token:
@@ -108,6 +105,9 @@ with st.sidebar:
     if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
         if st.button("Initialize DataStax ColBERT"):
             try:
+                # Import ColBERTSearcher here to ensure it's defined
+                from modules.colbert_search import ColBERTSearcher
+
                 # Initialize with custom stopwords
                 custom_stopwords = {'civil', 'war', 'union', 'confederate'}
 
@@ -138,8 +138,9 @@ with st.sidebar:
                     # Load Lincoln corpus
                     lincoln_data_df = load_lincoln_speech_corpus()
 
-                    # Debug column names
-                    st.write("DataFrame columns:", lincoln_data_df.columns.tolist())
+                    # Debug column names - moved inside this handler
+                    st.write("Lincoln corpus columns:", lincoln_data_df.columns.tolist())
+                    st.write("First row sample:", lincoln_data_df.iloc[0].to_dict())
 
                     # Determine the text content column - look for common column names
                     text_column = None
@@ -150,32 +151,31 @@ with st.sidebar:
 
                     if text_column is None:
                         st.error(f"Could not find text content column. Available columns: {lincoln_data_df.columns.tolist()}")
-                        return
-
-                    st.info(f"Using '{text_column}' as the text content column")
-
-                    # Extract texts and IDs
-                    corpus_texts = lincoln_data_df[text_column].tolist()
-                    doc_ids = lincoln_data_df["text_id"].tolist()
-
-                    # Ingest corpus
-                    success = st.session_state.datastax_colbert_searcher.ingest_corpus(
-                        corpus_texts=corpus_texts,
-                        doc_ids=doc_ids
-                    )
-
-                    if success:
-                        st.session_state.corpus_ingested = True
-                        st.success("Lincoln corpus ingested successfully")
                     else:
-                        st.error("Failed to ingest Lincoln corpus")
+                        st.info(f"Using '{text_column}' as the text content column")
+
+                        # Extract texts and IDs
+                        corpus_texts = lincoln_data_df[text_column].tolist()
+                        doc_ids = lincoln_data_df["text_id"].tolist()
+
+                        # Ingest corpus
+                        success = st.session_state.datastax_colbert_searcher.ingest_corpus(
+                            corpus_texts=corpus_texts,
+                            doc_ids=doc_ids
+                        )
+
+                        if success:
+                            st.session_state.corpus_ingested = True
+                            st.success("Lincoln corpus ingested successfully")
+                        else:
+                            st.error("Failed to ingest Lincoln corpus")
             except Exception as e:
                 st.error(f"Error ingesting corpus: {str(e)}")
                 import traceback
                 st.error(f"Traceback: {traceback.format_exc()}")
 
-    #if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
-#        st.success("DataStax ColBERT ready for search")
+    if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
+        st.success("DataStax ColBERT ready for search")
 
     # Add this to your sidebar to check if the corpus is empty
     if st.session_state.datastax_colbert_initialized:

@@ -43,7 +43,8 @@ from modules.reranking import (
     format_reranked_results_for_model_input
 )
 
-from modules.colbert_search import ColBERTSearcher
+# Remove the direct import of ColBERTSearcher
+# Instead, we'll accept a ColBERT searcher instance as a parameter
 
 
 def extract_full_text(combined_text):
@@ -70,6 +71,7 @@ def run_rag_pipeline(
     perform_semantic_search=True,
     perform_colbert_search=True,
     perform_reranking=True,
+    colbert_searcher=None,  # Accept a ColBERT searcher instance
     hays_data_logger=None,
     keyword_results_logger=None,
     semantic_results_logger=None,
@@ -98,11 +100,20 @@ def run_rag_pipeline(
         lincoln_data = lincoln_data_df.to_dict("records")
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
-        colbert_searcher = ColBERTSearcher()
-        try:
-            colbert_searcher.load_index()  # This will raise FileNotFoundError if index is missing
-        except FileNotFoundError:
-            st.error("ColBERT index not found in data directory")
+        # Use the provided colbert_searcher instance or create a local one if needed
+        if colbert_searcher is None:
+            # Import locally to avoid circular imports
+            try:
+                from modules.colbert_search import ColBERTSearcher
+                colbert_searcher = ColBERTSearcher()
+                try:
+                    colbert_searcher.load_index()  # This will raise FileNotFoundError if index is missing
+                except FileNotFoundError:
+                    st.error("ColBERT index not found in data directory")
+            except ImportError:
+                st.error("No ColBERT implementation available. Please provide a colbert_searcher instance.")
+                colbert_searcher = None
+                perform_colbert_search = False  # Disable ColBERT search if no implementation available
 
         # Process Voyant data
         if not voyant_data_df.empty and "corpusTerms" in voyant_data_df.columns:
@@ -139,9 +150,6 @@ def run_rag_pipeline(
             max_tokens=500
         )
         raw_hay_output = response.choices[0].message.content
-        #st.write("**Raw Hay output**:")
-        #st.write(raw_hay_output)
-
 
         hay_output = json.loads(raw_hay_output)
         initial_answer = hay_output.get("initial_answer", "")
@@ -223,10 +231,9 @@ def run_rag_pipeline(
                     except Exception as e:
                         st.error(f"Error logging semantic search results: {str(e)}")
 
-
-        #
+        # 7. ColBERT Search
         colbert_matches_df = pd.DataFrame()
-        if perform_colbert_search:
+        if perform_colbert_search and colbert_searcher is not None:
             try:
                 colbert_matches_df = colbert_searcher.search(
                     user_query,
@@ -235,10 +242,7 @@ def run_rag_pipeline(
             except Exception as e:
                 st.error(f"Error in ColBERT search: {str(e)}")
 
-        # 7. Combine Results & Rerank
-        # In rag_pipeline.py
-        # 7. Combine Results & Rerank
-        #combined_df = pd.concat([search_results_df, semantic_matches_df])
+        # 8. Combine Results & Rerank
         combined_df = pd.concat([
             search_results_df,
             semantic_matches_df,
@@ -268,9 +272,6 @@ def run_rag_pipeline(
                 st.exception(e)  # Show full traceback
                 reranked_df = pd.DataFrame()  # Ensure we have an empty DataFrame on error
 
-        # 8. Nicolay Model
-        # In rag_pipeline.py, modify the Nicolay model section:
-
         # 9. Final "Nicolay" model call
         nicolay_output = {}
         if perform_reranking and not reranked_df.empty:
@@ -291,11 +292,6 @@ def run_rag_pipeline(
                                    f"{formatted_for_nicolay}"
                     }
                 ]
-
-                # Debug output
-                #st.write("Sending to Nicolay model:")
-                #st.write("Number of reranked results:", len(reranked_records))
-                #st.write("Formatted input:", formatted_for_nicolay)
 
                 second_model_response = openai_client.chat.completions.create(
                     model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",

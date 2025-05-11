@@ -34,7 +34,7 @@ from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
 
 # Import DataStax ColBERT implementation (new module)
-#from modules.colbert_datastax import DataStaxColBERTSearcher
+from modules.colbert_search import ColBERTSearcher
 
 from modules.data_utils import (
     load_lincoln_speech_corpus,

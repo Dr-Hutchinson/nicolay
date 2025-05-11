@@ -34,7 +34,7 @@ from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
 
 # Import DataStax ColBERT implementation (new module)
-from modules.colbert_datastax import DataStaxColBERTSearcher
+#from modules.colbert_datastax import DataStaxColBERTSearcher
 
 from modules.data_utils import (
     load_lincoln_speech_corpus,
@@ -108,7 +108,7 @@ with st.sidebar:
                 lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
                 # Initialize the searcher - Streamlit secrets handled inside the class
-                datastax_colbert_searcher = DataStaxColBERTSearcher(
+                datastax_colbert_searcher = ColBERTSearcher(
                     lincoln_dict=lincoln_dict,
                     custom_stopwords=custom_stopwords
                 )

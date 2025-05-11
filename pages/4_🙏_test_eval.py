@@ -229,14 +229,25 @@ else:
     )
 
 # Select ColBERT Implementation
-colbert_impl = st.radio(
-    "Select ColBERT Implementation:",
-    ["DataStax ColBERT", "Local ColBERT"],
-    disabled=not st.session_state.get('datastax_colbert_initialized', False)
-)
+#colbert_impl = st.radio(
+#    "Select ColBERT Implementation:",
+#    ["DataStax ColBERT", "Local ColBERT"],
+#    disabled=not st.session_state.get('datastax_colbert_initialized', False)
+#)
 
-if colbert_impl == "DataStax ColBERT" and not st.session_state.get('datastax_colbert_initialized', False):
-    st.warning("DataStax ColBERT is not initialized. Please initialize it in the sidebar.")
+st.info("Using Astra DB ColBERT implementation")
+colbert_impl = "Astra DB ColBERT"  # Set a default value for use in later code
+
+#if colbert_impl == "DataStax ColBERT" and not st.session_state.get('datastax_colbert_initialized', False):
+#    st.warning("DataStax ColBERT is not initialized. Please initialize it in the sidebar.")
+
+# Initialize ColBERT based on selected implementation
+# Use the initialized ColBERT searcher
+if st.session_state.get('datastax_colbert_initialized', False):
+    colbert_searcher = st.session_state.datastax_colbert_searcher
+else:
+    st.error("ColBERT searcher not initialized. Please initialize it in the sidebar first.")
+    colbert_searcher = None
 
 # Evaluation Method Selection
 st.subheader("Evaluation Options")

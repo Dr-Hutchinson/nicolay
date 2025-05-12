@@ -183,7 +183,7 @@ with st.sidebar:
                     st.warning("⚠️ No results found. This could indicate that the corpus isn't accessible.")
             except Exception as e:
                 st.error(f"Test search failed: {str(e)}")
-
+                
 # Add query method selection
 query_method = st.radio(
     "Select Query Input Method:",

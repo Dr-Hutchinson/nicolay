@@ -91,12 +91,13 @@ if not is_valid_env:
         """)
     st.stop()  # Stop execution if credentials are missing
 
-# Initialize ColBERT automatically
+# Initialize ColBERT connection only (skip ingestion)
 with status_container:
-    with st.spinner("Initializing ColBERT search system..."):
+    with st.spinner("Connecting to Astra DB ColBERT service..."):
         if 'colbert_searcher' not in st.session_state:
             try:
-                # Load Lincoln corpus for initialization
+                # Load Lincoln corpus for reference data only
+                # (we don't need this for ingestion, just for metadata lookup)
                 lincoln_data_df = load_lincoln_speech_corpus()
                 lincoln_data = lincoln_data_df.to_dict("records")
                 lincoln_dict = {item["text_id"]: item for item in lincoln_data}
@@ -104,7 +105,7 @@ with status_container:
                 # Initialize with custom stopwords
                 custom_stopwords = {'civil', 'war', 'union', 'confederate'}
 
-                # Initialize the searcher
+                # Initialize the searcher WITHOUT ingestion
                 colbert_searcher = ColBERTSearcher(
                     lincoln_dict=lincoln_dict,
                     custom_stopwords=custom_stopwords
@@ -114,93 +115,57 @@ with status_container:
                 st.session_state.colbert_searcher = colbert_searcher
                 st.session_state.colbert_initialized = True
 
-                st.success("✅ ColBERT search system initialized")
+                # Skip ingestion - assume corpus is already in Astra DB
+                st.session_state.corpus_ingested = True
 
-                # Check if corpus already has documents
-                if hasattr(colbert_searcher, 'has_documents') and colbert_searcher.has_documents():
-                    st.session_state.corpus_ingested = True
-                    st.success("✅ Lincoln corpus already available in Astra DB")
-                else:
-                    st.session_state.corpus_ingested = False
+                st.success("✅ Connected to Astra DB ColBERT service successfully")
+
+                # Verify connection with a test query
+                with st.spinner("Verifying connection with test query..."):
+                    success, message, test_results = colbert_searcher.test_connection("Lincoln")
+                    if success:
+                        st.success("✅ Test query successful - system ready")
+                    else:
+                        st.warning(f"⚠️ {message}. Will proceed anyway.")
+
             except Exception as e:
                 import traceback
-                st.error(f"❌ Failed to initialize ColBERT: {str(e)}")
+                st.error(f"❌ Failed to connect to Astra DB: {str(e)}")
+                st.error(traceback.format_exc())
                 st.session_state.colbert_initialized = False
                 st.stop()  # Stop execution if initialization fails
         else:
             colbert_searcher = st.session_state.colbert_searcher
-            st.success("✅ ColBERT search system ready")
-
-# Automatically ingest corpus if needed
-if st.session_state.get('colbert_initialized', False) and not st.session_state.get('corpus_ingested', False):
-    with status_container:
-        with st.spinner("Ingesting Lincoln corpus into Astra DB..."):
-            try:
-                # Determine the text content column
-                lincoln_data_df = load_lincoln_speech_corpus()
-                text_column = None
-                for possible_column in ['speech_text', 'text', 'content', 'full_text']:
-                    if possible_column in lincoln_data_df.columns:
-                        text_column = possible_column
-                        break
-
-                if text_column is None:
-                    st.error("Could not find text content column in Lincoln corpus.")
-                else:
-                    # Extract texts and IDs
-                    corpus_texts = lincoln_data_df[text_column].tolist()
-                    doc_ids = lincoln_data_df["text_id"].tolist()
-
-                    # Ingest corpus
-                    success = st.session_state.colbert_searcher.ingest_corpus(
-                        corpus_texts=corpus_texts,
-                        doc_ids=doc_ids
-                    )
-
-                    if success:
-                        st.session_state.corpus_ingested = True
-                        st.success("✅ Lincoln corpus ingested successfully")
-                    else:
-                        st.warning("⚠️ Corpus ingestion may be incomplete")
-            except Exception as e:
-                st.error(f"❌ Error ingesting corpus: {str(e)}")
+            st.success("✅ Astra DB connection ready")
 
 # Clean, minimal sidebar with system status
 with st.sidebar:
     st.header("System Status")
 
-    # Display system status
+    # Display Astra DB connection status
     if st.session_state.get('colbert_initialized', False):
-        st.success("✅ ColBERT search system: Online")
-
-        if st.session_state.get('corpus_ingested', False):
-            st.success("✅ Lincoln corpus: Ingested")
-        else:
-            st.warning("⚠️ Lincoln corpus: Not ingested")
+        st.success("✅ Astra DB ColBERT: Connected")
 
         # Add a collapsed advanced panel
         with st.expander("Advanced Options", expanded=False):
-            if st.button("Test Search Connection"):
+            if st.button("Test Connection"):
                 try:
                     with st.spinner("Testing connection..."):
-                        test_results = st.session_state.colbert_searcher.search(
-                            "Lincoln presidency", k=2
+                        success, message, test_results = st.session_state.colbert_searcher.test_connection(
+                            "Lincoln presidency"
                         )
 
-                    if not test_results.empty:
-                        st.success(f"Connection test successful: found {len(test_results)} results")
+                    if success:
+                        st.success(f"Connection test successful: {message}")
+                        st.dataframe(test_results)
                     else:
-                        st.warning("Query executed but returned no results.")
+                        st.warning(f"Connection test issue: {message}")
                 except Exception as e:
                     st.error(f"Connection test failed: {str(e)}")
-
-            if not st.session_state.get('corpus_ingested', False):
-                if st.button("Manually Ingest Corpus"):
-                    st.experimental_rerun()  # This will trigger the automatic ingestion
     else:
-        st.error("❌ ColBERT search system: Offline")
+        st.error("❌ Astra DB ColBERT: Disconnected")
 
-        if st.button("Retry Initialization"):
+        if st.button("Retry Connection"):
             st.experimental_rerun()  # Try again
 
 # Add query method selection

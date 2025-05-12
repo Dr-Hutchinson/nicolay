@@ -1,4 +1,4 @@
-from typing import List, Set, Optional, Dict, Any
+from typing import List, Set, Optional, Dict, Any, Tuple
 import os
 import pandas as pd
 import streamlit as st
@@ -16,7 +16,7 @@ load_dotenv()
 class ColBERTSearcher:
     """
     Implements ColBERT searching using DataStax's Astra DB and RAGStack.
-    This implementation replaces the local ColBERT index with a cloud-based solution.
+    This implementation connects to a cloud-based solution with existing ingested data.
     """
 
     def __init__(self,
@@ -24,9 +24,10 @@ class ColBERTSearcher:
                  custom_stopwords: Optional[Set[str]] = None,
                  astra_db_id: Optional[str] = None,
                  astra_db_token: Optional[str] = None,
-                 keyspace: str = "default_keyspace"):
+                 keyspace: str = "default_keyspace",
+                 skip_initialization: bool = False):
         """
-        Initialize DataStax ColBERT searcher.
+        Initialize DataStax ColBERT searcher with improved error handling.
 
         Args:
             lincoln_dict: Dictionary of Lincoln corpus documents
@@ -34,23 +35,31 @@ class ColBERTSearcher:
             astra_db_id: Astra DB ID (if None, will check st.secrets then env vars)
             astra_db_token: Astra DB application token (if None, will check st.secrets then env vars)
             keyspace: Astra DB keyspace to use
+            skip_initialization: If True, skip the datastax components initialization
         """
         # Try to get Astra DB credentials from Streamlit secrets first
-        if astra_db_id is None and "ASTRA_DB_ID" in st.secrets:
-            astra_db_id = st.secrets["ASTRA_DB_ID"]
+        if astra_db_id is None:
+            astra_db_id = st.secrets.get("ASTRA_DB_ID")
 
-        if astra_db_token is None and "ASTRA_DB_APPLICATION_TOKEN" in st.secrets:
-            astra_db_token = st.secrets["ASTRA_DB_APPLICATION_TOKEN"]
+        if astra_db_token is None:
+            astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN")
 
         # Fall back to environment variables if not in secrets
         self.astra_db_id = astra_db_id or os.getenv("ASTRA_DB_ID")
         self.astra_db_token = astra_db_token or os.getenv("ASTRA_DB_APPLICATION_TOKEN")
         self.keyspace = keyspace
 
-        if not self.astra_db_id or not self.astra_db_token:
+        if not self.astra_db_id:
             raise ValueError(
-                "Astra DB credentials not found. Please provide them via st.secrets, "
-                "environment variables, or directly in the constructor."
+                "Astra DB ID not found. Please provide it via st.secrets['ASTRA_DB_ID'], "
+                "environment variable ASTRA_DB_ID, or directly in the constructor."
+            )
+
+        if not self.astra_db_token:
+            raise ValueError(
+                "Astra DB application token not found. Please provide it via "
+                "st.secrets['ASTRA_DB_APPLICATION_TOKEN'], environment variable "
+                "ASTRA_DB_APPLICATION_TOKEN, or directly in the constructor."
             )
 
         # Initialize Lincoln dictionary
@@ -60,7 +69,13 @@ class ColBERTSearcher:
         self._initialize_stopwords(custom_stopwords)
 
         # Initialize DataStax components
-        self._initialize_datastax_components()
+        if not skip_initialization:
+            try:
+                self._initialize_datastax_components()
+            except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                raise RuntimeError(f"Failed to initialize DataStax components: {str(e)}\n{error_trace}")
 
     def _initialize_lincoln_dict(self, lincoln_dict: Optional[Dict[str, Any]]) -> None:
         """
@@ -82,9 +97,7 @@ class ColBERTSearcher:
             except Exception as e:
                 raise RuntimeError(f"Failed to initialize lincoln_dict: {str(e)}")
         else:
-            # Validate the provided dictionary
-            if not all('text_id' in item for item in lincoln_dict.values()):
-                raise ValueError("Provided lincoln_dict items must contain 'text_id' field")
+            # Accept the dictionary directly
             self.lincoln_dict = lincoln_dict
 
     def _initialize_stopwords(self, custom_stopwords: Optional[Set[str]]) -> None:
@@ -160,7 +173,6 @@ class ColBERTSearcher:
             try:
                 tokens = nltk.word_tokenize(query.lower())
             except Exception as e:
-                st.write(f"word_tokenize failed: {str(e)}. Using basic split.")
                 tokens = query.lower().split()
 
             # Remove stopwords and normalize
@@ -178,87 +190,6 @@ class ColBERTSearcher:
             st.warning(f"Query preprocessing failed: {str(e)}. Using original query.")
             return query
 
-    def ingest_corpus(self, corpus_texts: List[str], doc_ids: List[str] = None) -> bool:
-        """
-        Ingest corpus texts into DataStax ColBERT index.
-
-        Args:
-            corpus_texts: List of text documents to ingest
-            doc_ids: Optional list of document IDs to associate with texts
-
-        Returns:
-            True if ingestion was successful, False otherwise
-        """
-        try:
-            # Input validation
-            if not corpus_texts:
-                st.error("No corpus texts provided for ingestion")
-                return False
-
-            st.info(f"Preparing to ingest {len(corpus_texts)} documents")
-
-            if doc_ids is None:
-                # Generate sequential IDs if not provided
-                doc_ids = [f"doc_{i}" for i in range(len(corpus_texts))]
-
-            # Additional validation
-            if len(corpus_texts) != len(doc_ids):
-                st.error(f"Mismatch between corpus_texts ({len(corpus_texts)}) and doc_ids ({len(doc_ids)})")
-                raise ValueError("corpus_texts and doc_ids must have the same length")
-
-            # Sample check of first document
-            st.info(f"First document sample (truncated): {corpus_texts[0][:100]}...")
-
-            # Ingest texts batch by batch to avoid timeouts
-            batch_size = 5  # Reduced batch size for better reliability
-            total_batches = (len(corpus_texts) + batch_size - 1) // batch_size
-
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            for i in range(0, len(corpus_texts), batch_size):
-                batch_texts = corpus_texts[i:i+batch_size]
-                batch_ids = doc_ids[i:i+batch_size]
-
-                # Update progress
-                current_batch = i // batch_size + 1
-                progress_bar.progress(current_batch / total_batches)
-                status_text.text(f"Processing batch {current_batch}/{total_batches}")
-
-                for j, (text, doc_id) in enumerate(zip(batch_texts, batch_ids)):
-                    try:
-                        # Skip empty or very short texts
-                        if not text or len(text) < 10:
-                            st.warning(f"Skipping document {doc_id} - text too short or empty")
-                            continue
-
-                        # Add text to vector store with document ID as metadata
-                        self.vector_store.add_texts(
-                            texts=[text],
-                            metadatas=[{"source": doc_id}],
-                            ids=[doc_id]  # Adding explicit IDs for better tracking
-                        )
-
-                        # Log successful addition with minimal output to avoid UI clutter
-                        if j == 0 or j == len(batch_texts) - 1:
-                            st.write(f"Added document {doc_id}")
-
-                    except Exception as e:
-                        st.warning(f"Error adding document {doc_id}: {str(e)}")
-                        # Continue with next document instead of aborting the entire process
-
-                st.write(f"Completed batch {current_batch}/{total_batches}")
-
-            progress_bar.progress(1.0)
-            status_text.text("Ingestion complete!")
-            return True
-
-        except Exception as e:
-            st.error(f"Error ingesting corpus: {str(e)}")
-            import traceback
-            st.error(f"Traceback: {traceback.format_exc()}")
-            return False
-
     def search(self, query: str, k: int = 5,
                skip_preprocessing: bool = False) -> pd.DataFrame:
         """
@@ -273,23 +204,8 @@ class ColBERTSearcher:
             DataFrame containing search results
         """
         try:
-            # Log that search is being attempted
-            st.info(f"Performing Astra DB ColBERT search for query: '{query}'")
-
             # Preprocess query unless explicitly skipped
             processed_query = query if skip_preprocessing else self.preprocess_query(query)
-
-            # Log original and processed queries for debugging
-            st.write(f"Original query: {query}")
-            st.write(f"Processed query: {processed_query}")
-
-            # Check if we have data in the vector store
-            try:
-                # This would be ideal but may not be directly available
-                # st.info(f"Current number of documents in vector store: {len(self.vector_store)}")
-                st.info("Executing similarity search...")
-            except:
-                pass
 
             # Perform search with DataStax ColBERT
             docs = self.vector_store.similarity_search(
@@ -298,20 +214,16 @@ class ColBERTSearcher:
             )
 
             # Log number of results
-            st.info(f"Search returned {len(docs)} results")
-
             if not docs:
-                st.warning("No results found. Try adjusting your query or ensure documents are indexed.")
                 return pd.DataFrame()
 
             # Process results into expected format
             results_df = self._process_search_results(docs)
-            st.info(f"Processed {len(results_df)} results into DataFrame")
             return results_df
 
         except Exception as e:
-            st.error(f"DataStax ColBERT search error: {str(e)}")
             import traceback
+            st.error(f"DataStax ColBERT search error: {str(e)}")
             st.error(f"Traceback: {traceback.format_exc()}")
             return pd.DataFrame()
 
@@ -337,10 +249,10 @@ class ColBERTSearcher:
                 lincoln_data = self.lincoln_dict.get(doc_id, {})
 
                 processed_results.append({
-                    "text_id": doc_id,
+                    "Text ID": doc_id,
                     "colbert_score": float(score),
                     "raw_score": float(score),  # Use same score for consistency
-                    "TopSegment": doc.page_content,
+                    "Key Quote": doc.page_content,
                     "source": lincoln_data.get("source", ""),
                     "summary": lincoln_data.get("summary", ""),
                     "search_type": "DataStax_ColBERT",
@@ -351,6 +263,29 @@ class ColBERTSearcher:
                 continue
 
         return pd.DataFrame(processed_results)
+
+    def test_connection(self, test_query: str = "Lincoln presidency") -> Tuple[bool, str, pd.DataFrame]:
+        """
+        Test the connection to Astra DB with a simple query.
+
+        Args:
+            test_query: Query to use for testing
+
+        Returns:
+            Tuple of (success, message, results_df)
+        """
+        try:
+            results = self.search(test_query, k=2)
+
+            if results is not None and not results.empty:
+                return True, f"Successfully retrieved {len(results)} results", results
+            else:
+                return False, "Query executed but returned no results", pd.DataFrame()
+
+        except Exception as e:
+            import traceback
+            error_msg = f"Connection test failed: {str(e)}\n{traceback.format_exc()}"
+            return False, error_msg, pd.DataFrame()
 
     def add_stopwords(self, new_stopwords: Set[str]) -> None:
         """
@@ -378,3 +313,30 @@ class ColBERTSearcher:
             Set of current stopwords
         """
         return self.stopwords.copy()
+
+    @staticmethod
+    def verify_environment() -> Tuple[bool, str]:
+        """
+        Verify that the necessary environment is set up for ColBERT search.
+
+        Returns:
+            Tuple of (is_valid, message)
+        """
+        # Check for necessary Python packages
+        try:
+            import ragstack_colbert
+            import ragstack_langchain
+        except ImportError as e:
+            return False, f"Missing required packages: {str(e)}"
+
+        # Check for Astra DB credentials
+        astra_db_id = st.secrets.get("ASTRA_DB_ID", os.getenv("ASTRA_DB_ID"))
+        astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN", os.getenv("ASTRA_DB_APPLICATION_TOKEN"))
+
+        if not astra_db_id:
+            return False, "Missing Astra DB ID"
+
+        if not astra_db_token:
+            return False, "Missing Astra DB application token"
+
+        return True, "Environment configured correctly for ColBERT search"

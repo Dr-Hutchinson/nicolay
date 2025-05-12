@@ -79,3 +79,22 @@ def attempt_connection(test_query: str = "Lincoln presidency") -> Tuple[bool, st
     except Exception as e:
         error_trace = traceback.format_exc()
         return False, f"Connection failed: {str(e)}\n{error_trace}", None
+
+def display_connection_status():
+    """
+    Display Astra DB connection status in the Streamlit UI.
+    """
+    is_valid, message = validate_astra_credentials()
+
+    if is_valid:
+        st.sidebar.success("✅ Astra DB credentials: Valid")
+    else:
+        st.sidebar.error(f"❌ Astra DB credentials: {message}")
+        st.sidebar.info("""
+        To connect to Astra DB:
+        1. Create an account at datastax.com
+        2. Create a database and generate an application token
+        3. Add credentials to your .streamlit/secrets.toml file or environment variables
+        """)
+
+    return is_valid

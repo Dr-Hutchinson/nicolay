@@ -103,7 +103,20 @@ with status_container:
                 lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
                 # Initialize with custom stopwords
-                custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+                #custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+                custom_stopwords = {
+                # general English function words
+                'a', 'an', 'the', 'in', 'on', 'at', 'for', 'to', 'of', 'with', 'by',
+                'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down', 'out',
+                'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+                'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'shall', 'should',
+                'this', 'that', 'these', 'those', 'there', 'here',
+
+                # Lincoln‑specific
+                'abraham', 'lincoln', 'abe', 'president', 'mr', 'mrs',
+                'presidential', 'presidency', 'white', 'house'
+                }
+
 
                 # Initialize the searcher WITHOUT ingestion
                 colbert_searcher = ColBERTSearcher(

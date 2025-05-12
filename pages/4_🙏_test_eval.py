@@ -226,6 +226,22 @@ with st.sidebar:
                     except Exception as e:
                         st.error(f"Collection inspection failed: {str(e)}")
 
+            with col3:
+                if st.button("Check API Parameters"):
+                        try:
+                            # Check if the API supports multi-field search
+                            import inspect
+                            method_info = inspect.signature(st.session_state.colbert_searcher.vector_store.similarity_search)
+                            method_doc = st.session_state.colbert_searcher.vector_store.similarity_search.__doc__
+
+                            st.write("**Method Signature:**")
+                            st.code(str(method_info))
+
+                            st.write("**Method Documentation:**")
+                            st.write(method_doc)
+                        except Exception as e:
+                            st.error(f"Error checking API parameters: {str(e)}")
+
 # Add query method selection
 query_method = st.radio(
     "Select Query Input Method:",

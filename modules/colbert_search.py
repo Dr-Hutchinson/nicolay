@@ -190,10 +190,9 @@ class ColBERTSearcher:
             st.warning(f"Query preprocessing failed: {str(e)}. Using original query.")
             return query
 
-    def search(self, query: str, k: int = 5,
-               skip_preprocessing: bool = False) -> pd.DataFrame:
+    def search(self, query: str, k: int = 5, skip_preprocessing: bool = False) -> pd.DataFrame:
         """
-        Perform ColBERT search with processed query.
+        Perform ColBERT search across multiple fields (full_text, summary, keywords) with processed query.
 
         Args:
             query: The search query string
@@ -207,11 +206,20 @@ class ColBERTSearcher:
             # Preprocess query unless explicitly skipped
             processed_query = query if skip_preprocessing else self.preprocess_query(query)
 
-            # Perform search with DataStax ColBERT
-            docs = self.vector_store.similarity_search(
-                query=processed_query,
-                k=k
-            )
+            # Perform search with DataStax ColBERT across all fields
+            try:
+                docs = self.vector_store.similarity_search(
+                    query=processed_query,
+                    k=k,
+                    fields=["full_text", "summary", "keywords"]  # Search across all fields
+                )
+            except Exception as field_error:
+                # If fields parameter doesn't work, fall back to standard search
+                print(f"Multi-field search failed: {str(field_error)}. Falling back to standard search.")
+                docs = self.vector_store.similarity_search(
+                    query=processed_query,
+                    k=k
+                )
 
             # Log number of results
             if not docs:
@@ -255,7 +263,7 @@ class ColBERTSearcher:
                     "Key Quote": doc.page_content,
                     "source": lincoln_data.get("source", ""),
                     "summary": lincoln_data.get("summary", ""),
-                    "search_type": "DataStax_ColBERT",
+                    "search_type": "DataStax_ColBERT_MultiField",  # Updated to indicate multi-field search
                     "timestamp": pd.Timestamp.now()
                 })
             except Exception as e:
@@ -353,50 +361,6 @@ class ColBERTSearcher:
             return info
         except Exception as e:
             return {"error": str(e)}
-
-
-    def search_with_fields(self, query: str, k: int = 5) -> pd.DataFrame:
-        """
-        Attempt to search across multiple fields by passing additional parameters.
-        """
-        try:
-            # Preprocess query
-            processed_query = self.preprocess_query(query)
-
-            # Try different approaches to search across fields
-            try:
-                # Approach 1: Try using explicit fields parameter
-                docs = self.vector_store.similarity_search(
-                    query=processed_query,
-                    k=k,
-                    fields=["full_text", "summary", "keywords"]
-                )
-            except Exception:
-                try:
-                    # Approach 2: Try using search_parameters
-                    docs = self.vector_store.similarity_search(
-                        query=processed_query,
-                        k=k,
-                        search_parameters={"include_fields": ["full_text", "summary", "keywords"]}
-                    )
-                except Exception:
-                    # Fall back to standard search
-                    docs = self.vector_store.similarity_search(
-                        query=processed_query,
-                        k=k
-                    )
-
-            # Process results
-            if not docs:
-                return pd.DataFrame()
-
-            return self._process_search_results(docs)
-
-        except Exception as e:
-            import traceback
-            st.error(f"Multi-field search error: {str(e)}")
-            st.error(f"Traceback: {traceback.format_exc()}")
-            return pd.DataFrame()
 
     @staticmethod
     def verify_environment() -> Tuple[bool, str]:

@@ -242,12 +242,98 @@ with st.sidebar:
                         except Exception as e:
                             st.error(f"Error checking API parameters: {str(e)}")
 
+            # Add this right before using the Test Multi-Field Search button
+            if 'search_with_fields' not in dir(st.session_state.colbert_searcher):
+                # Define the method dynamically if it doesn't exist
+                def search_with_fields_method(self, query, k=5):
+                    """Attempt to search across multiple fields"""
+                    try:
+                        # Preprocess query
+                        processed_query = self.preprocess_query(query)
+
+                        # Try different approaches
+                        try:
+                            # Approach 1: Try fields parameter
+                            docs = self.vector_store.similarity_search(
+                                query=processed_query,
+                                k=k,
+                                fields=["full_text", "summary", "keywords"]
+                            )
+                        except Exception as e1:
+                            try:
+                                # Approach 2: Try search_parameters
+                                docs = self.vector_store.similarity_search(
+                                    query=processed_query,
+                                    k=k,
+                                    search_parameters={"include_fields": ["full_text", "summary", "keywords"]}
+                                )
+                            except Exception as e2:
+                                # Fall back to standard search
+                                docs = self.vector_store.similarity_search(
+                                    query=processed_query,
+                                    k=k
+                                )
+
+                        # Process results
+                        if not docs:
+                            return pd.DataFrame()
+
+                        return self._process_search_results(docs)
+
+                    except Exception as e:
+                        import traceback
+                        st.error(f"Multi-field search error: {str(e)}")
+                        st.error(f"Traceback: {traceback.format_exc()}")
+                        return pd.DataFrame()
+
+                # Add the method to the class instance
+                import types
+                st.session_state.colbert_searcher.search_with_fields = types.MethodType(
+                    search_with_fields_method, st.session_state.colbert_searcher
+                )
+
+
+
             with col4:
-                # In the Advanced Options expander, add this next to your other buttons
+                # Instead of calling search_with_fields
                 if st.button("Test Multi-Field Search"):
                     with st.spinner("Testing multi-field search..."):
-                        test_results = st.session_state.colbert_searcher.search_with_fields("emancipation", k=3)
-                        st.dataframe(test_results)
+                        # Try using existing search method with different parameters
+                        try:
+                            # Try with fields parameter directly
+                            processed_query = st.session_state.colbert_searcher.preprocess_query("emancipation")
+
+                            # First try with explicit fields parameter
+                            try:
+                                docs = st.session_state.colbert_searcher.vector_store.similarity_search(
+                                    query=processed_query,
+                                    k=3,
+                                    fields=["full_text", "summary", "keywords"]
+                                )
+                                results_df = st.session_state.colbert_searcher._process_search_results(docs)
+                                st.success("Fields parameter worked!")
+                            except Exception as e1:
+                                # Then try with search_parameters
+                                try:
+                                    docs = st.session_state.colbert_searcher.vector_store.similarity_search(
+                                        query=processed_query,
+                                        k=3,
+                                        search_parameters={"include_fields": ["full_text", "summary", "keywords"]}
+                                    )
+                                    results_df = st.session_state.colbert_searcher._process_search_results(docs)
+                                    st.success("Search parameters worked!")
+                                except Exception as e2:
+                                    # Fall back to standard search
+                                    docs = st.session_state.colbert_searcher.vector_store.similarity_search(
+                                        query=processed_query,
+                                        k=3
+                                    )
+                                    results_df = st.session_state.colbert_searcher._process_search_results(docs)
+                                    st.info("Used fallback standard search")
+
+                            st.dataframe(results_df)
+                        except Exception as e:
+                            st.error(f"Multi-field search test failed: {str(e)}")
 
 # Add query method selection
 query_method = st.radio(

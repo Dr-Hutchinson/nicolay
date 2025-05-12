@@ -1,6 +1,6 @@
 """
-Simplified ColBERT search implementation for pre-existing corpus on DataStax Astra DB.
-This assumes the Lincoln corpus is already stored on DataStax's servers.
+ColBERT search implementation using DataStax Astra DB.
+This implementation connects to a pre-existing corpus on DataStax's servers.
 """
 
 import os

@@ -92,10 +92,12 @@ st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_tok
 
 # Sidebar for DataStax ColBERT Config
 # Sidebar for DataStax ColBERT Config
+
+# Sidebar for DataStax ColBERT Config
 with st.sidebar:
     st.header("DataStax ColBERT Configuration")
 
-    # Display status
+    # Display Astra DB credentials status
     if not astra_db_id or not astra_db_token:
         st.warning("Astra DB credentials not found in Streamlit secrets or environment variables")
     else:
@@ -103,97 +105,79 @@ with st.sidebar:
 
     # Initialize DataStax ColBERT
     if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
-        if st.button("Initialize DataStax ColBERT"):
+        # Allow user to specify the collection name
+        collection_name = st.text_input(
+            "Collection Name",
+            value="lincoln_corpus",
+            help="The name of the pre-existing collection in Astra DB that contains the Lincoln corpus"
+        )
+
+        if st.button("Connect to Astra DB"):
             try:
-                # Import ColBERTSearcher here to ensure it's defined
                 from modules.colbert_search import ColBERTSearcher
 
-                # Initialize with custom stopwords
-                custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+                with st.spinner("Connecting to Astra DB and initializing ColBERT..."):
+                    # Load Lincoln metadata for result enrichment
+                    try:
+                        lincoln_data_df = load_lincoln_speech_corpus()
+                        lincoln_data = lincoln_data_df.to_dict("records")
+                        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+                        st.info(f"Loaded Lincoln metadata for {len(lincoln_dict)} documents")
+                    except Exception as e:
+                        st.warning(f"Could not load Lincoln metadata: {str(e)}. Results will have limited details.")
+                        lincoln_dict = {}
 
-                # Load Lincoln corpus for initialization
-                lincoln_data_df = load_lincoln_speech_corpus()
-                lincoln_data = lincoln_data_df.to_dict("records")
-                lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-
-                # Initialize the searcher - Streamlit secrets handled inside the class
-                datastax_colbert_searcher = ColBERTSearcher(
-                    lincoln_dict=lincoln_dict,
-                    custom_stopwords=custom_stopwords
-                )
+                    # Initialize ColBERT searcher for pre-existing corpus
+                    datastax_colbert_searcher = ColBERTSearcher(
+                        lincoln_dict=lincoln_dict,
+                        astra_db_id=astra_db_id,
+                        astra_db_token=astra_db_token,
+                        collection_name=collection_name
+                    )
 
                 # Store in session state
                 st.session_state.datastax_colbert_searcher = datastax_colbert_searcher
                 st.session_state.datastax_colbert_initialized = True
+                st.session_state.corpus_ingested = True  # Always true for pre-existing corpus
 
-                st.success("DataStax ColBERT initialized successfully")
+                st.success("Successfully connected to DataStax ColBERT service")
+
             except Exception as e:
-                st.error(f"Error initializing DataStax ColBERT: {str(e)}")
-
-    # Ingest corpus if initialized but not ingested
-    if st.session_state.datastax_colbert_initialized and not st.session_state.corpus_ingested:
-        if st.button("Ingest Lincoln Corpus"):
-            try:
-                with st.spinner("Ingesting Lincoln corpus into DataStax ColBERT..."):
-                    # Load Lincoln corpus
-                    lincoln_data_df = load_lincoln_speech_corpus()
-
-                    # Debug column names - moved inside this handler
-                    st.write("Lincoln corpus columns:", lincoln_data_df.columns.tolist())
-                    st.write("First row sample:", lincoln_data_df.iloc[0].to_dict())
-
-                    # Determine the text content column - look for common column names
-                    text_column = None
-                    for possible_column in ['speech_text', 'text', 'content', 'full_text']:
-                        if possible_column in lincoln_data_df.columns:
-                            text_column = possible_column
-                            break
-
-                    if text_column is None:
-                        st.error(f"Could not find text content column. Available columns: {lincoln_data_df.columns.tolist()}")
-                    else:
-                        st.info(f"Using '{text_column}' as the text content column")
-
-                        # Extract texts and IDs
-                        corpus_texts = lincoln_data_df[text_column].tolist()
-                        doc_ids = lincoln_data_df["text_id"].tolist()
-
-                        # Ingest corpus
-                        success = st.session_state.datastax_colbert_searcher.ingest_corpus(
-                            corpus_texts=corpus_texts,
-                            doc_ids=doc_ids
-                        )
-
-                        if success:
-                            st.session_state.corpus_ingested = True
-                            st.success("Lincoln corpus ingested successfully")
-                        else:
-                            st.error("Failed to ingest Lincoln corpus")
-            except Exception as e:
-                st.error(f"Error ingesting corpus: {str(e)}")
+                st.error(f"Error connecting to DataStax: {str(e)}")
                 import traceback
                 st.error(f"Traceback: {traceback.format_exc()}")
 
-    if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
-        st.success("DataStax ColBERT ready for search")
-
-    # Add this to your sidebar to check if the corpus is empty
+    # Display status if initialized
     if st.session_state.datastax_colbert_initialized:
-        if st.button("Test Astra DB Connection with Simple Query"):
+        st.subheader("ColBERT Status")
+
+        # Get searcher status
+        if hasattr(st.session_state, 'datastax_colbert_searcher'):
             try:
-                # Import a simple query that shouldn't rely on corpus ingestion
-                test_query = "Lincoln presidency"
-                test_results = st.session_state.datastax_colbert_searcher.search(
-                    test_query, k=2
-                )
+                status = st.session_state.datastax_colbert_searcher.get_status()
+                st.write(f"• Connected to Astra DB: {'✅' if status['connected'] else '❌'}")
+                st.write(f"• Using corpus collection: {status['corpus_collection']}")
+            except:
+                st.write("Status check failed")
+
+        # Test search button
+        if st.button("Run Test Search"):
+            try:
+                test_query = "What did Lincoln say about the Civil War?"
+
+                with st.spinner("Executing test search via Astra DB..."):
+                    test_results = st.session_state.datastax_colbert_searcher.search(
+                        query=test_query,
+                        k=3
+                    )
 
                 if not test_results.empty:
-                    st.success(f"Successfully queried Astra DB and got {len(test_results)} results")
-                    st.dataframe(test_results)
+                    st.success(f"✅ Found {len(test_results)} results!")
+                    st.dataframe(test_results[["text_id", "colbert_score", "Key Quote"]])
                 else:
-                    st.warning("Query executed successfully but returned no results. This is expected if no documents have been ingested.")
+                    st.warning("⚠️ No results found. This could indicate that the corpus isn't accessible.")
             except Exception as e:
-                st.error(f"Test query failed: {str(e)}")
+                st.error(f"Test search failed: {str(e)}")
 
 # Add query method selection
 query_method = st.radio(

@@ -1,51 +1,49 @@
-from typing import List, Set, Optional, Dict, Any
+"""
+Simplified ColBERT search implementation for pre-existing corpus on DataStax Astra DB.
+This assumes the Lincoln corpus is already stored on DataStax's servers.
+"""
+
 import os
+import time
+from typing import List, Dict, Any, Set, Optional, Union
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-from nltk.corpus import stopwords
-import nltk
 
 # DataStax RAGStack imports
 from ragstack_colbert import CassandraDatabase, ColbertEmbeddingModel
 from ragstack_langchain.colbert import ColbertVectorStore as LangchainColbertVectorStore
 
-# Load environment variables for Astra DB credentials
-load_dotenv()
-
 class ColBERTSearcher:
     """
     Implements ColBERT searching using DataStax's Astra DB and RAGStack.
-    This implementation replaces the local ColBERT index with a cloud-based solution.
+    Assumes the corpus is already stored on DataStax's servers.
     """
 
-    def __init__(self,
-                 lincoln_dict: Optional[dict] = None,
-                 custom_stopwords: Optional[Set[str]] = None,
-                 astra_db_id: Optional[str] = None,
-                 astra_db_token: Optional[str] = None,
-                 keyspace: str = "default_keyspace"):
+    def __init__(
+        self,
+        lincoln_dict: Optional[Dict[str, Any]] = None,
+        custom_stopwords: Optional[Set[str]] = None,
+        astra_db_id: Optional[str] = None,
+        astra_db_token: Optional[str] = None,
+        keyspace: str = "default_keyspace",
+        collection_name: str = "lincoln_corpus"  # Name of pre-existing collection
+    ):
         """
-        Initialize DataStax ColBERT searcher.
+        Initialize DataStax ColBERT searcher for pre-existing corpus.
 
         Args:
-            lincoln_dict: Dictionary of Lincoln corpus documents
-            custom_stopwords: Set of custom stopwords to add to defaults
-            astra_db_id: Astra DB ID (if None, will check st.secrets then env vars)
-            astra_db_token: Astra DB application token (if None, will check st.secrets then env vars)
+            lincoln_dict: Dictionary of Lincoln corpus documents for result enrichment
+            custom_stopwords: Not used in this implementation
+            astra_db_id: Astra DB ID
+            astra_db_token: Astra DB application token
             keyspace: Astra DB keyspace to use
+            collection_name: Name of the pre-existing collection containing the Lincoln corpus
         """
-        # Try to get Astra DB credentials from Streamlit secrets first
-        if astra_db_id is None and "ASTRA_DB_ID" in st.secrets:
-            astra_db_id = st.secrets["ASTRA_DB_ID"]
-
-        if astra_db_token is None and "ASTRA_DB_APPLICATION_TOKEN" in st.secrets:
-            astra_db_token = st.secrets["ASTRA_DB_APPLICATION_TOKEN"]
-
-        # Fall back to environment variables if not in secrets
-        self.astra_db_id = astra_db_id or os.getenv("ASTRA_DB_ID")
-        self.astra_db_token = astra_db_token or os.getenv("ASTRA_DB_APPLICATION_TOKEN")
+        # Get Astra DB credentials
+        self.astra_db_id = astra_db_id or st.secrets.get("ASTRA_DB_ID") or os.getenv("ASTRA_DB_ID")
+        self.astra_db_token = astra_db_token or st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") or os.getenv("ASTRA_DB_APPLICATION_TOKEN")
         self.keyspace = keyspace
+        self.collection_name = collection_name
 
         if not self.astra_db_id or not self.astra_db_token:
             raise ValueError(
@@ -53,77 +51,22 @@ class ColBERTSearcher:
                 "environment variables, or directly in the constructor."
             )
 
-        # Initialize Lincoln dictionary
-        self._initialize_lincoln_dict(lincoln_dict)
-
-        # Initialize stopwords
-        self._initialize_stopwords(custom_stopwords)
+        # Store lincoln_dict for metadata enrichment
+        self.lincoln_dict = lincoln_dict or {}
 
         # Initialize DataStax components
         self._initialize_datastax_components()
 
-    def _initialize_lincoln_dict(self, lincoln_dict: Optional[Dict[str, Any]]) -> None:
-        """
-        Initialize lincoln_dict with error handling and validation.
-
-        Args:
-            lincoln_dict: Dictionary of Lincoln corpus documents
-
-        Raises:
-            RuntimeError: If lincoln_dict initialization fails
-            ValueError: If provided lincoln_dict is invalid
-        """
-        if lincoln_dict is None:
-            try:
-                from modules.data_utils import load_lincoln_speech_corpus
-                lincoln_data_df = load_lincoln_speech_corpus()
-                lincoln_data = lincoln_data_df.to_dict("records")
-                self.lincoln_dict = {item['text_id']: item for item in lincoln_data}
-            except Exception as e:
-                raise RuntimeError(f"Failed to initialize lincoln_dict: {str(e)}")
-        else:
-            # Validate the provided dictionary
-            if not all('text_id' in item for item in lincoln_dict.values()):
-                raise ValueError("Provided lincoln_dict items must contain 'text_id' field")
-            self.lincoln_dict = lincoln_dict
-
-    def _initialize_stopwords(self, custom_stopwords: Optional[Set[str]]) -> None:
-        """
-        Initialize stopwords for query preprocessing.
-
-        Args:
-            custom_stopwords: Additional custom stopwords to include
-        """
-        try:
-            self.stopwords = set(stopwords.words('english'))
-        except LookupError:
-            st.warning("NLTK resources not available. Using basic stopwords set.")
-            # Fallback to basic stopwords set
-            self.stopwords = {
-                'a', 'an', 'the', 'in', 'on', 'at', 'for', 'to', 'of', 'with', 'by',
-                'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down', 'out',
-                'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
-                'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'shall', 'should',
-                'this', 'that', 'these', 'those', 'there', 'here'
-            }
-
-        # Add Lincoln-specific stopwords
-        lincoln_specific_stopwords = {
-            'abraham', 'lincoln', 'abe', 'president', 'mr', 'mrs',
-            'presidential', 'presidency', 'white', 'house'
-        }
-
-        # Add custom stopwords if provided
-        if custom_stopwords:
-            lincoln_specific_stopwords.update(custom_stopwords)
-
-        self.stopwords.update(lincoln_specific_stopwords)
-
     def _initialize_datastax_components(self) -> None:
         """
-        Initialize DataStax components for ColBERT search.
+        Initialize DataStax components for ColBERT search on pre-existing corpus.
         """
         try:
+            st.info(f"Connecting to Astra DB (ID: {self.astra_db_id[:4]}...{self.astra_db_id[-4:]})")
+
+            # Initialize the embedding model (lightweight operation)
+            self.embedding_model = ColbertEmbeddingModel()
+
             # Connect to Astra DB
             self.database = CassandraDatabase.from_astra(
                 astra_token=self.astra_db_token,
@@ -131,183 +74,60 @@ class ColBERTSearcher:
                 keyspace=self.keyspace
             )
 
-            # Initialize embedding model
-            self.embedding_model = ColbertEmbeddingModel()
-
-            # Create vector store
+            # Create vector store pointing to existing collection
             self.vector_store = LangchainColbertVectorStore(
                 database=self.database,
                 embedding_model=self.embedding_model,
+                collection_name=self.collection_name  # Point to existing collection
             )
 
-            st.success("Successfully connected to DataStax Astra DB ColBERT service")
+            st.success(f"Successfully connected to DataStax Astra DB ColBERT service")
+            st.info(f"Using pre-existing corpus collection: '{self.collection_name}'")
+
+            # Test connection with simple query
+            try:
+                test_docs = self.vector_store.similarity_search("test", k=1)
+                st.success(f"Connection test successful - corpus is accessible")
+            except Exception as e:
+                st.warning(f"Connection established but couldn't access collection: {str(e)}")
+
         except Exception as e:
             st.error(f"Failed to initialize DataStax components: {str(e)}")
-            raise
-
-    def preprocess_query(self, query: str) -> str:
-        """
-        Preprocess query by removing stopwords and normalizing text.
-
-        Args:
-            query: The search query string
-
-        Returns:
-            Preprocessed query string
-        """
-        try:
-            # Simple tokenization by splitting on whitespace if word_tokenize fails
-            try:
-                tokens = nltk.word_tokenize(query.lower())
-            except Exception as e:
-                st.write(f"word_tokenize failed: {str(e)}. Using basic split.")
-                tokens = query.lower().split()
-
-            # Remove stopwords and normalize
-            filtered_tokens = [
-                token for token in tokens
-                if token not in self.stopwords and token.isalnum()
-            ]
-
-            # If the filtered query would be empty, return original query
-            if not filtered_tokens:
-                return query
-
-            return ' '.join(filtered_tokens)
-        except Exception as e:
-            st.warning(f"Query preprocessing failed: {str(e)}. Using original query.")
-            return query
-
-    def ingest_corpus(self, corpus_texts: List[str], doc_ids: List[str] = None) -> bool:
-        """
-        Ingest corpus texts into DataStax ColBERT index.
-
-        Args:
-            corpus_texts: List of text documents to ingest
-            doc_ids: Optional list of document IDs to associate with texts
-
-        Returns:
-            True if ingestion was successful, False otherwise
-        """
-        try:
-            # Input validation
-            if not corpus_texts:
-                st.error("No corpus texts provided for ingestion")
-                return False
-
-            st.info(f"Preparing to ingest {len(corpus_texts)} documents")
-
-            if doc_ids is None:
-                # Generate sequential IDs if not provided
-                doc_ids = [f"doc_{i}" for i in range(len(corpus_texts))]
-
-            # Additional validation
-            if len(corpus_texts) != len(doc_ids):
-                st.error(f"Mismatch between corpus_texts ({len(corpus_texts)}) and doc_ids ({len(doc_ids)})")
-                raise ValueError("corpus_texts and doc_ids must have the same length")
-
-            # Sample check of first document
-            st.info(f"First document sample (truncated): {corpus_texts[0][:100]}...")
-
-            # Ingest texts batch by batch to avoid timeouts
-            batch_size = 5  # Reduced batch size for better reliability
-            total_batches = (len(corpus_texts) + batch_size - 1) // batch_size
-
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            for i in range(0, len(corpus_texts), batch_size):
-                batch_texts = corpus_texts[i:i+batch_size]
-                batch_ids = doc_ids[i:i+batch_size]
-
-                # Update progress
-                current_batch = i // batch_size + 1
-                progress_bar.progress(current_batch / total_batches)
-                status_text.text(f"Processing batch {current_batch}/{total_batches}")
-
-                for j, (text, doc_id) in enumerate(zip(batch_texts, batch_ids)):
-                    try:
-                        # Skip empty or very short texts
-                        if not text or len(text) < 10:
-                            st.warning(f"Skipping document {doc_id} - text too short or empty")
-                            continue
-
-                        # Add text to vector store with document ID as metadata
-                        self.vector_store.add_texts(
-                            texts=[text],
-                            metadatas=[{"source": doc_id}],
-                            ids=[doc_id]  # Adding explicit IDs for better tracking
-                        )
-
-                        # Log successful addition with minimal output to avoid UI clutter
-                        if j == 0 or j == len(batch_texts) - 1:
-                            st.write(f"Added document {doc_id}")
-
-                    except Exception as e:
-                        st.warning(f"Error adding document {doc_id}: {str(e)}")
-                        # Continue with next document instead of aborting the entire process
-
-                st.write(f"Completed batch {current_batch}/{total_batches}")
-
-            progress_bar.progress(1.0)
-            status_text.text("Ingestion complete!")
-            return True
-
-        except Exception as e:
-            st.error(f"Error ingesting corpus: {str(e)}")
             import traceback
             st.error(f"Traceback: {traceback.format_exc()}")
-            return False
+            raise
 
-    def search(self, query: str, k: int = 5,
-               skip_preprocessing: bool = False) -> pd.DataFrame:
+    def search(
+        self,
+        query: str,
+        k: int = 5,
+        filter_metadata: Optional[Dict[str, Any]] = None
+    ) -> pd.DataFrame:
         """
-        Perform ColBERT search with processed query.
+        Perform ColBERT search on pre-existing corpus using DataStax's API.
 
         Args:
             query: The search query string
             k: Number of results to return
-            skip_preprocessing: If True, skip query preprocessing
+            filter_metadata: Optional filtering criteria for results
 
         Returns:
             DataFrame containing search results
         """
         try:
-            # Log that search is being attempted
-            st.info(f"Performing Astra DB ColBERT search for query: '{query}'")
+            st.info(f"Executing ColBERT search via Astra DB: '{query}'")
 
-            # Preprocess query unless explicitly skipped
-            processed_query = query if skip_preprocessing else self.preprocess_query(query)
-
-            # Log original and processed queries for debugging
-            st.write(f"Original query: {query}")
-            st.write(f"Processed query: {processed_query}")
-
-            # Check if we have data in the vector store
-            try:
-                # This would be ideal but may not be directly available
-                # st.info(f"Current number of documents in vector store: {len(self.vector_store)}")
-                st.info("Executing similarity search...")
-            except:
-                pass
-
-            # Perform search with DataStax ColBERT
+            # Let DataStax handle all the search operations on their server
             docs = self.vector_store.similarity_search(
-                query=processed_query,
-                k=k
+                query=query,
+                k=k,
+                filter=filter_metadata
             )
 
-            # Log number of results
-            st.info(f"Search returned {len(docs)} results")
+            st.success(f"Found {len(docs)} results")
 
-            if not docs:
-                st.warning("No results found. Try adjusting your query or ensure documents are indexed.")
-                return pd.DataFrame()
-
-            # Process results into expected format
-            results_df = self._process_search_results(docs)
-            st.info(f"Processed {len(results_df)} results into DataFrame")
-            return results_df
+            # Process results into DataFrame format
+            return self._process_search_results(docs)
 
         except Exception as e:
             st.error(f"DataStax ColBERT search error: {str(e)}")
@@ -318,6 +138,7 @@ class ColBERTSearcher:
     def _process_search_results(self, docs) -> pd.DataFrame:
         """
         Process search results from DataStax ColBERT into DataFrame.
+        Enriches with metadata from lincoln_dict if available.
 
         Args:
             docs: List of Document objects from LangChain
@@ -327,54 +148,60 @@ class ColBERTSearcher:
         """
         processed_results = []
 
-        for doc in docs:
+        for i, doc in enumerate(docs):
             try:
                 # Extract document ID and score from metadata
                 doc_id = doc.metadata.get("source", "unknown")
                 score = doc.metadata.get("score", 0.0)
 
-                # Retrieve Lincoln data if available
-                lincoln_data = self.lincoln_dict.get(doc_id, {})
+                # Default values
+                source = doc.metadata.get("original_source", "")
+                summary = doc.metadata.get("summary", "")
+
+                # Try to enrich with lincoln_dict if available
+                if doc_id in self.lincoln_dict:
+                    lincoln_data = self.lincoln_dict[doc_id]
+                    if not source and "source" in lincoln_data:
+                        source = lincoln_data["source"]
+                    if not summary and "summary" in lincoln_data:
+                        summary = lincoln_data["summary"]
+
+                # Extract a key quote from the content
+                key_quote = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
 
                 processed_results.append({
                     "text_id": doc_id,
+                    "search_rank": i + 1,
                     "colbert_score": float(score),
-                    "raw_score": float(score),  # Use same score for consistency
+                    "raw_score": float(score),
                     "TopSegment": doc.page_content,
-                    "source": lincoln_data.get("source", ""),
-                    "summary": lincoln_data.get("summary", ""),
-                    "search_type": "DataStax_ColBERT",
+                    "Key Quote": key_quote,
+                    "source": source,
+                    "summary": summary,
+                    "search_type": "Astra_ColBERT",
                     "timestamp": pd.Timestamp.now()
                 })
             except Exception as e:
-                st.warning(f"Error processing result {doc}: {str(e)}")
+                st.warning(f"Error processing result {i+1}: {str(e)}")
                 continue
 
-        return pd.DataFrame(processed_results)
+        # Create DataFrame and sort by score
+        results_df = pd.DataFrame(processed_results)
+        if not results_df.empty:
+            results_df = results_df.sort_values(by="colbert_score", ascending=False)
 
-    def add_stopwords(self, new_stopwords: Set[str]) -> None:
-        """
-        Add new stopwords to the existing set.
+        return results_df
 
-        Args:
-            new_stopwords: Set of new stopwords to add
+    def get_status(self) -> Dict[str, Any]:
         """
-        self.stopwords.update(new_stopwords)
-
-    def remove_stopwords(self, words_to_remove: Set[str]) -> None:
-        """
-        Remove words from the stopwords set.
-
-        Args:
-            words_to_remove: Set of words to remove from stopwords
-        """
-        self.stopwords.difference_update(words_to_remove)
-
-    def get_stopwords(self) -> Set[str]:
-        """
-        Get the current set of stopwords.
+        Get the current status of the ColBERT searcher.
 
         Returns:
-            Set of current stopwords
+            Dictionary with status information
         """
-        return self.stopwords.copy()
+        return {
+            "connected": hasattr(self, "vector_store"),
+            "corpus_ingested": True,  # Always true as we're using a pre-existing corpus
+            "corpus_collection": self.collection_name,
+            "astra_db_id": f"{self.astra_db_id[:4]}...{self.astra_db_id[-4:]}",
+        }

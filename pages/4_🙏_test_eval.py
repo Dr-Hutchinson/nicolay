@@ -184,7 +184,44 @@ with st.sidebar:
                 if st.button("Inspect Collection"):
                     try:
                         with st.spinner("Inspecting collection..."):
-                            collection_info = st.session_state.colbert_searcher.get_collection_info()
+                            # Define a simple inspection function that works with existing attributes
+                            def inspect_collection(searcher):
+                                """Inspect the collection using existing attributes"""
+                                try:
+                                    # Create a simple info object with what we can safely access
+                                    info = {
+                                        "database_type": type(searcher.database).__name__,
+                                        "vector_store_type": type(searcher.vector_store).__name__
+                                    }
+
+                                    # Try to get a sample document to understand structure
+                                    sample_doc = None
+                                    try:
+                                        docs = searcher.vector_store.similarity_search("lincoln", k=1)
+                                        if docs:
+                                            sample_doc = docs[0]
+                                    except Exception as e:
+                                        info["sample_error"] = str(e)
+
+                                    # If we got a sample document, extract its structure
+                                    if sample_doc:
+                                        info["document_structure"] = {
+                                            "type": type(sample_doc).__name__,
+                                            "has_metadata": hasattr(sample_doc, "metadata"),
+                                            "metadata_keys": list(sample_doc.metadata.keys()) if hasattr(sample_doc, "metadata") and sample_doc.metadata else [],
+                                            "content_preview": sample_doc.page_content[:100] + "..." if hasattr(sample_doc, "page_content") else "No content attribute"
+                                        }
+
+                                        # Include sample metadata if available
+                                        if hasattr(sample_doc, "metadata") and sample_doc.metadata:
+                                            info["metadata_sample"] = sample_doc.metadata
+
+                                    return info
+                                except Exception as e:
+                                    return {"error": str(e)}
+
+                            # Call the inspection function directly
+                            collection_info = inspect_collection(st.session_state.colbert_searcher)
                             st.json(collection_info)  # Display as JSON for easy analysis
                     except Exception as e:
                         st.error(f"Collection inspection failed: {str(e)}")

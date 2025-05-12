@@ -33,7 +33,7 @@ from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
 
-# Import DataStax ColBERT implementation (new module)
+# Import DataStax ColBERT implementation
 from modules.colbert_search import ColBERTSearcher
 
 from modules.data_utils import (
@@ -42,20 +42,15 @@ from modules.data_utils import (
     load_lincoln_index_embedded
 )
 
-# Check for Astra DB credentials in Streamlit secrets or environment variables
-astra_db_id = st.secrets.get("ASTRA_DB_ID") if "ASTRA_DB_ID" in st.secrets else os.getenv("ASTRA_DB_ID")
-astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") if "ASTRA_DB_APPLICATION_TOKEN" in st.secrets else os.getenv("ASTRA_DB_APPLICATION_TOKEN")
-
-if not astra_db_id or not astra_db_token:
-    st.warning("""
-        DataStax Astra DB credentials not found. Please add them to your Streamlit secrets or environment variables:
-        - ASTRA_DB_ID: Your Astra DB ID
-        - ASTRA_DB_APPLICATION_TOKEN: Your Astra DB application token
-    """)
+# Import the Astra connection handler
+from modules.astra_connection import validate_astra_credentials
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
 st.title("RAG Benchmarking and Evaluation Module")
+
+# Initialize status container at the top of the app
+status_container = st.container()
 
 # Google Sheets Client Initialization
 credentials = service_account.Credentials.from_service_account_info(
@@ -80,120 +75,133 @@ if 'messages' not in st.session_state:
     st.session_state['messages'] = []
 if 'response_model_system_prompt' not in st.session_state:
     st.session_state['response_model_system_prompt'] = st.session_state.get('response_model_system_prompt', "")
-if 'datastax_colbert_initialized' not in st.session_state:
-    st.session_state['datastax_colbert_initialized'] = False
-if 'corpus_ingested' not in st.session_state:
-    st.session_state['corpus_ingested'] = False
 
-# Add this to your sidebar to debug Astra DB credentials
-st.sidebar.subheader("Debug Astra DB Credentials")
-st.sidebar.write(f"Astra DB ID (masked): {astra_db_id[:4]}...{astra_db_id[-4:] if astra_db_id else 'None'}")
-st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_token[-4:] if astra_db_token else 'None'}")
+# Check Astra DB environment first
+is_valid_env, env_message = validate_astra_credentials()
+if not is_valid_env:
+    with status_container:
+        st.error(f"⚠️ {env_message}")
+        st.info("""
+        To use this application with Astra DB:
+        1. Create an account at datastax.com
+        2. Create a database and generate an application token
+        3. Add the following to your environment or .streamlit/secrets.toml:
+           - ASTRA_DB_ID
+           - ASTRA_DB_APPLICATION_TOKEN
+        """)
+    st.stop()  # Stop execution if credentials are missing
 
-# Sidebar for DataStax ColBERT Config
-# Sidebar for DataStax ColBERT Config
-with st.sidebar:
-    st.header("DataStax ColBERT Configuration")
-
-    # Display status
-    if not astra_db_id or not astra_db_token:
-        st.warning("Astra DB credentials not found in Streamlit secrets or environment variables")
-    else:
-        st.success(f"Astra DB credentials configured: {astra_db_id[:6]}...{astra_db_id[-4:]}")
-
-    # Initialize DataStax ColBERT
-    if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
-        if st.button("Initialize DataStax ColBERT"):
+# Initialize ColBERT automatically
+with status_container:
+    with st.spinner("Initializing ColBERT search system..."):
+        if 'colbert_searcher' not in st.session_state:
             try:
-                # Import ColBERTSearcher here to ensure it's defined
-                from modules.colbert_search import ColBERTSearcher
-
-                # Initialize with custom stopwords
-                custom_stopwords = {'civil', 'war', 'union', 'confederate'}
-
                 # Load Lincoln corpus for initialization
                 lincoln_data_df = load_lincoln_speech_corpus()
                 lincoln_data = lincoln_data_df.to_dict("records")
                 lincoln_dict = {item["text_id"]: item for item in lincoln_data}
 
-                # Initialize the searcher - Streamlit secrets handled inside the class
-                datastax_colbert_searcher = ColBERTSearcher(
+                # Initialize with custom stopwords
+                custom_stopwords = {'civil', 'war', 'union', 'confederate'}
+
+                # Initialize the searcher
+                colbert_searcher = ColBERTSearcher(
                     lincoln_dict=lincoln_dict,
                     custom_stopwords=custom_stopwords
                 )
 
                 # Store in session state
-                st.session_state.datastax_colbert_searcher = datastax_colbert_searcher
-                st.session_state.datastax_colbert_initialized = True
+                st.session_state.colbert_searcher = colbert_searcher
+                st.session_state.colbert_initialized = True
 
-                st.success("DataStax ColBERT initialized successfully")
+                st.success("✅ ColBERT search system initialized")
+
+                # Check if corpus already has documents
+                if hasattr(colbert_searcher, 'has_documents') and colbert_searcher.has_documents():
+                    st.session_state.corpus_ingested = True
+                    st.success("✅ Lincoln corpus already available in Astra DB")
+                else:
+                    st.session_state.corpus_ingested = False
             except Exception as e:
-                st.error(f"Error initializing DataStax ColBERT: {str(e)}")
+                import traceback
+                st.error(f"❌ Failed to initialize ColBERT: {str(e)}")
+                st.session_state.colbert_initialized = False
+                st.stop()  # Stop execution if initialization fails
+        else:
+            colbert_searcher = st.session_state.colbert_searcher
+            st.success("✅ ColBERT search system ready")
 
-    # Ingest corpus if initialized but not ingested
-    if st.session_state.datastax_colbert_initialized and not st.session_state.corpus_ingested:
-        if st.button("Ingest Lincoln Corpus"):
+# Automatically ingest corpus if needed
+if st.session_state.get('colbert_initialized', False) and not st.session_state.get('corpus_ingested', False):
+    with status_container:
+        with st.spinner("Ingesting Lincoln corpus into Astra DB..."):
             try:
-                with st.spinner("Ingesting Lincoln corpus into DataStax ColBERT..."):
-                    # Load Lincoln corpus
-                    lincoln_data_df = load_lincoln_speech_corpus()
+                # Determine the text content column
+                lincoln_data_df = load_lincoln_speech_corpus()
+                text_column = None
+                for possible_column in ['speech_text', 'text', 'content', 'full_text']:
+                    if possible_column in lincoln_data_df.columns:
+                        text_column = possible_column
+                        break
 
-                    # Debug column names - moved inside this handler
-                    st.write("Lincoln corpus columns:", lincoln_data_df.columns.tolist())
-                    st.write("First row sample:", lincoln_data_df.iloc[0].to_dict())
+                if text_column is None:
+                    st.error("Could not find text content column in Lincoln corpus.")
+                else:
+                    # Extract texts and IDs
+                    corpus_texts = lincoln_data_df[text_column].tolist()
+                    doc_ids = lincoln_data_df["text_id"].tolist()
 
-                    # Determine the text content column - look for common column names
-                    text_column = None
-                    for possible_column in ['speech_text', 'text', 'content', 'full_text']:
-                        if possible_column in lincoln_data_df.columns:
-                            text_column = possible_column
-                            break
+                    # Ingest corpus
+                    success = st.session_state.colbert_searcher.ingest_corpus(
+                        corpus_texts=corpus_texts,
+                        doc_ids=doc_ids
+                    )
 
-                    if text_column is None:
-                        st.error(f"Could not find text content column. Available columns: {lincoln_data_df.columns.tolist()}")
+                    if success:
+                        st.session_state.corpus_ingested = True
+                        st.success("✅ Lincoln corpus ingested successfully")
                     else:
-                        st.info(f"Using '{text_column}' as the text content column")
+                        st.warning("⚠️ Corpus ingestion may be incomplete")
+            except Exception as e:
+                st.error(f"❌ Error ingesting corpus: {str(e)}")
 
-                        # Extract texts and IDs
-                        corpus_texts = lincoln_data_df[text_column].tolist()
-                        doc_ids = lincoln_data_df["text_id"].tolist()
+# Clean, minimal sidebar with system status
+with st.sidebar:
+    st.header("System Status")
 
-                        # Ingest corpus
-                        success = st.session_state.datastax_colbert_searcher.ingest_corpus(
-                            corpus_texts=corpus_texts,
-                            doc_ids=doc_ids
+    # Display system status
+    if st.session_state.get('colbert_initialized', False):
+        st.success("✅ ColBERT search system: Online")
+
+        if st.session_state.get('corpus_ingested', False):
+            st.success("✅ Lincoln corpus: Ingested")
+        else:
+            st.warning("⚠️ Lincoln corpus: Not ingested")
+
+        # Add a collapsed advanced panel
+        with st.expander("Advanced Options", expanded=False):
+            if st.button("Test Search Connection"):
+                try:
+                    with st.spinner("Testing connection..."):
+                        test_results = st.session_state.colbert_searcher.search(
+                            "Lincoln presidency", k=2
                         )
 
-                        if success:
-                            st.session_state.corpus_ingested = True
-                            st.success("Lincoln corpus ingested successfully")
-                        else:
-                            st.error("Failed to ingest Lincoln corpus")
-            except Exception as e:
-                st.error(f"Error ingesting corpus: {str(e)}")
-                import traceback
-                st.error(f"Traceback: {traceback.format_exc()}")
+                    if not test_results.empty:
+                        st.success(f"Connection test successful: found {len(test_results)} results")
+                    else:
+                        st.warning("Query executed but returned no results.")
+                except Exception as e:
+                    st.error(f"Connection test failed: {str(e)}")
 
-    if st.session_state.datastax_colbert_initialized and st.session_state.corpus_ingested:
-        st.success("DataStax ColBERT ready for search")
+            if not st.session_state.get('corpus_ingested', False):
+                if st.button("Manually Ingest Corpus"):
+                    st.experimental_rerun()  # This will trigger the automatic ingestion
+    else:
+        st.error("❌ ColBERT search system: Offline")
 
-    # Add this to your sidebar to check if the corpus is empty
-    if st.session_state.datastax_colbert_initialized:
-        if st.button("Test Astra DB Connection with Simple Query"):
-            try:
-                # Import a simple query that shouldn't rely on corpus ingestion
-                test_query = "Lincoln presidency"
-                test_results = st.session_state.datastax_colbert_searcher.search(
-                    test_query, k=2
-                )
-
-                if not test_results.empty:
-                    st.success(f"Successfully queried Astra DB and got {len(test_results)} results")
-                    st.dataframe(test_results)
-                else:
-                    st.warning("Query executed successfully but returned no results. This is expected if no documents have been ingested.")
-            except Exception as e:
-                st.error(f"Test query failed: {str(e)}")
+        if st.button("Retry Initialization"):
+            st.experimental_rerun()  # Try again
 
 # Add query method selection
 query_method = st.radio(
@@ -273,25 +281,15 @@ else:
         ['factual_retrieval', 'analysis', 'comparative_analysis', 'synthesis']
     )
 
-# Select ColBERT Implementation
-#colbert_impl = st.radio(
-#    "Select ColBERT Implementation:",
-#    ["DataStax ColBERT", "Local ColBERT"],
-#    disabled=not st.session_state.get('datastax_colbert_initialized', False)
-#)
-
+# Set ColBERT implementation info
 st.info("Using Astra DB ColBERT implementation")
 colbert_impl = "Astra DB ColBERT"  # Set a default value for use in later code
 
-#if colbert_impl == "DataStax ColBERT" and not st.session_state.get('datastax_colbert_initialized', False):
-#    st.warning("DataStax ColBERT is not initialized. Please initialize it in the sidebar.")
-
-# Initialize ColBERT based on selected implementation
-# Use the initialized ColBERT searcher
-if st.session_state.get('datastax_colbert_initialized', False):
-    colbert_searcher = st.session_state.datastax_colbert_searcher
+# Use the initialized ColBERT searcher from session state
+if st.session_state.get('colbert_initialized', False):
+    colbert_searcher = st.session_state.colbert_searcher
 else:
-    st.error("ColBERT searcher not initialized. Please initialize it in the sidebar first.")
+    st.error("ColBERT searcher not initialized. Please check the system status.")
     colbert_searcher = None
 
 # Evaluation Method Selection
@@ -312,18 +310,6 @@ if user_query and st.button("Run Evaluation"):
         lincoln_data_df = load_lincoln_speech_corpus()
         lincoln_data = lincoln_data_df.to_dict("records")
         lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-
-        # Initialize ColBERT based on selected implementation
-        if colbert_impl == "DataStax ColBERT" and st.session_state.get('datastax_colbert_initialized', False):
-            colbert_searcher = st.session_state.datastax_colbert_searcher
-        else:
-            # Use original ColBERT implementation (imported as needed)
-            from modules.colbert_search import ColBERTSearcher
-            custom_stopwords = {'civil', 'war', 'union', 'confederate'}
-            colbert_searcher = ColBERTSearcher(
-                lincoln_dict=lincoln_dict,
-                custom_stopwords=custom_stopwords
-            )
 
         # --- 1. Execute the RAG Pipeline ---
         pipeline_results = run_rag_pipeline(
@@ -465,22 +451,3 @@ if user_query and st.button("Run Evaluation"):
 # Summary/Visualization section
 st.write("### Summary and Visualization")
 st.write("Additional charts or summary metrics can go here.")
-
-# Add instructions for configuring DataStax
-st.sidebar.markdown("""
-### DataStax Configuration Guide
-
-To use DataStax ColBERT, you need to:
-
-1. Create an Astra DB account at [datastax.com](https://astra.datastax.com/signup)
-2. Create a database and generate an application token
-3. Add the following to your Streamlit secrets:
-   - In local dev: Create `.streamlit/secrets.toml` file with:
-     ```toml
-     ASTRA_DB_ID = "your-database-id"
-     ASTRA_DB_APPLICATION_TOKEN = "your-application-token"
-     ```
-   - In Streamlit Cloud: Add these values in the app settings
-4. Click "Initialize DataStax ColBERT" to connect to Astra DB
-5. Click "Ingest Lincoln Corpus" to upload your documents
-""")

@@ -162,7 +162,7 @@ with st.sidebar:
         # Add a collapsed advanced panel
         # Add a collapsed advanced panel
         with st.expander("Advanced Options", expanded=False):
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
 
             with col1:
                 if st.button("Test Connection"):
@@ -241,6 +241,13 @@ with st.sidebar:
                             st.write(method_doc)
                         except Exception as e:
                             st.error(f"Error checking API parameters: {str(e)}")
+
+            with col4:
+                # In the Advanced Options expander, add this next to your other buttons
+                if st.button("Test Multi-Field Search"):
+                    with st.spinner("Testing multi-field search..."):
+                        test_results = st.session_state.colbert_searcher.search_with_fields("emancipation", k=3)
+                        st.dataframe(test_results)
 
 # Add query method selection
 query_method = st.radio(

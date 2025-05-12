@@ -314,6 +314,21 @@ class ColBERTSearcher:
         """
         return self.stopwords.copy()
 
+    def inspect_collection_schema(self):
+        """
+        Inspect the Astra DB collection schema to understand how documents are stored.
+
+        Returns:
+            Information about the collection schema
+        """
+        try:
+            # Get collection schema information
+            collection_info = self.database.get_collection_info()
+            return collection_info
+        except Exception as e:
+            return f"Error inspecting collection: {str(e)}"
+
+
     @staticmethod
     def verify_environment() -> Tuple[bool, str]:
         """

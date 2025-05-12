@@ -33,7 +33,7 @@ from modules.prompt_loader import load_prompts
 from modules.rag_evaluator import RAGEvaluator, add_evaluator_to_benchmark
 from modules.llm_evaluator import LLMEvaluator
 
-# Import DataStax ColBERT implementation (new module)
+# Import DataStax ColBERT implementation
 from modules.colbert_search import ColBERTSearcher
 
 from modules.data_utils import (
@@ -42,16 +42,42 @@ from modules.data_utils import (
     load_lincoln_index_embedded
 )
 
-# Check for Astra DB credentials in Streamlit secrets or environment variables
-astra_db_id = st.secrets.get("ASTRA_DB_ID") if "ASTRA_DB_ID" in st.secrets else os.getenv("ASTRA_DB_ID")
-astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") if "ASTRA_DB_APPLICATION_TOKEN" in st.secrets else os.getenv("ASTRA_DB_APPLICATION_TOKEN")
+# Function for DataStax ColBERT initialization
+def initialize_datastax_colbert(collection_name="lincoln_corpus"):
+    """Initialize DataStax ColBERT connection and return initialization status."""
+    try:
+        # Check for Astra DB credentials in Streamlit secrets or environment variables
+        astra_db_id = st.secrets.get("ASTRA_DB_ID") if "ASTRA_DB_ID" in st.secrets else os.getenv("ASTRA_DB_ID")
+        astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") if "ASTRA_DB_APPLICATION_TOKEN" in st.secrets else os.getenv("ASTRA_DB_APPLICATION_TOKEN")
 
-if not astra_db_id or not astra_db_token:
-    st.warning("""
-        DataStax Astra DB credentials not found. Please add them to your Streamlit secrets or environment variables:
-        - ASTRA_DB_ID: Your Astra DB ID
-        - ASTRA_DB_APPLICATION_TOKEN: Your Astra DB application token
-    """)
+        if not astra_db_id or not astra_db_token:
+            return False, "Astra DB credentials not found in secrets or environment variables"
+
+        # Load Lincoln metadata for result enrichment
+        lincoln_data_df = load_lincoln_speech_corpus()
+        lincoln_data = lincoln_data_df.to_dict("records")
+        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+
+        # Initialize ColBERT searcher for pre-existing corpus
+        datastax_colbert_searcher = ColBERTSearcher(
+            lincoln_dict=lincoln_dict,
+            astra_db_id=astra_db_id,
+            astra_db_token=astra_db_token,
+            collection_name=collection_name
+        )
+
+        # Store in session state
+        st.session_state.datastax_colbert_searcher = datastax_colbert_searcher
+        st.session_state.datastax_colbert_initialized = True
+        st.session_state.corpus_ingested = True  # Always true for pre-existing corpus
+        st.session_state.astra_db_id = astra_db_id
+        st.session_state.astra_db_token = astra_db_token
+
+        return True, None
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return False, str(e)
 
 # Streamlit App Initialization
 st.set_page_config(page_title="RAG Benchmarking", layout="wide")
@@ -84,100 +110,123 @@ if 'datastax_colbert_initialized' not in st.session_state:
     st.session_state['datastax_colbert_initialized'] = False
 if 'corpus_ingested' not in st.session_state:
     st.session_state['corpus_ingested'] = False
+if 'collection_name' not in st.session_state:
+    st.session_state['collection_name'] = "lincoln_corpus"
 
-# Add this to your sidebar to debug Astra DB credentials
-st.sidebar.subheader("Debug Astra DB Credentials")
-st.sidebar.write(f"Astra DB ID (masked): {astra_db_id[:4]}...{astra_db_id[-4:] if astra_db_id else 'None'}")
-st.sidebar.write(f"Astra DB Token (masked): {astra_db_token[:4]}...{astra_db_token[-4:] if astra_db_token else 'None'}")
+# Check for Astra DB credentials in Streamlit secrets or environment variables
+astra_db_id = st.secrets.get("ASTRA_DB_ID") if "ASTRA_DB_ID" in st.secrets else os.getenv("ASTRA_DB_ID")
+astra_db_token = st.secrets.get("ASTRA_DB_APPLICATION_TOKEN") if "ASTRA_DB_APPLICATION_TOKEN" in st.secrets else os.getenv("ASTRA_DB_APPLICATION_TOKEN")
 
-# Sidebar for DataStax ColBERT Config
-# Sidebar for DataStax ColBERT Config
-
-# Sidebar for DataStax ColBERT Config
+# Sidebar for status and debugging
 with st.sidebar:
-    st.header("DataStax ColBERT Configuration")
+    st.header("DataStax ColBERT Status")
 
-    # Display Astra DB credentials status
-    if not astra_db_id or not astra_db_token:
-        st.warning("Astra DB credentials not found in Streamlit secrets or environment variables")
-    else:
-        st.success(f"Astra DB credentials configured: {astra_db_id[:6]}...{astra_db_id[-4:]}")
+    # Collection name input (with stored value persistence)
+    collection_name = st.text_input(
+        "Collection Name",
+        value=st.session_state.get('collection_name', "lincoln_corpus"),
+        key="collection_name_input"
+    )
+    st.session_state.collection_name = collection_name
 
-    # Initialize DataStax ColBERT
-    if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
-        # Allow user to specify the collection name
-        collection_name = st.text_input(
-            "Collection Name",
-            value="lincoln_corpus",
-            help="The name of the pre-existing collection in Astra DB that contains the Lincoln corpus"
-        )
+    # Show connection status
+    if st.session_state.get('datastax_colbert_initialized', False):
+        st.success("✅ Connected to Astra DB")
 
-        if st.button("Connect to Astra DB"):
-            try:
-                from modules.colbert_search import ColBERTSearcher
-
-                with st.spinner("Connecting to Astra DB and initializing ColBERT..."):
-                    # Load Lincoln metadata for result enrichment
-                    try:
-                        lincoln_data_df = load_lincoln_speech_corpus()
-                        lincoln_data = lincoln_data_df.to_dict("records")
-                        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-                        st.info(f"Loaded Lincoln metadata for {len(lincoln_dict)} documents")
-                    except Exception as e:
-                        st.warning(f"Could not load Lincoln metadata: {str(e)}. Results will have limited details.")
-                        lincoln_dict = {}
-
-                    # Initialize ColBERT searcher for pre-existing corpus
-                    datastax_colbert_searcher = ColBERTSearcher(
-                        lincoln_dict=lincoln_dict,
-                        astra_db_id=astra_db_id,
-                        astra_db_token=astra_db_token,
-                        collection_name=collection_name
-                    )
-
-                # Store in session state
-                st.session_state.datastax_colbert_searcher = datastax_colbert_searcher
-                st.session_state.datastax_colbert_initialized = True
-                st.session_state.corpus_ingested = True  # Always true for pre-existing corpus
-
-                st.success("Successfully connected to DataStax ColBERT service")
-
-            except Exception as e:
-                st.error(f"Error connecting to DataStax: {str(e)}")
-                import traceback
-                st.error(f"Traceback: {traceback.format_exc()}")
-
-    # Display status if initialized
-    if st.session_state.datastax_colbert_initialized:
-        st.subheader("ColBERT Status")
-
-        # Get searcher status
+        # Display collection details
         if hasattr(st.session_state, 'datastax_colbert_searcher'):
             try:
                 status = st.session_state.datastax_colbert_searcher.get_status()
-                st.write(f"• Connected to Astra DB: {'✅' if status['connected'] else '❌'}")
-                st.write(f"• Using corpus collection: {status['corpus_collection']}")
+                st.info(f"Using collection: {status.get('corpus_collection', 'unknown')}")
             except:
-                st.write("Status check failed")
+                st.warning("Could not retrieve collection status")
 
-        # Test search button
-        if st.button("Run Test Search"):
-            try:
-                test_query = "What did Lincoln say about the Civil War?"
+        # Test search functionality
+        with st.expander("Debug Tools"):
+            if st.button("Run Test Search"):
+                try:
+                    test_query = "Lincoln Civil War"
+                    with st.spinner(f"Searching for: '{test_query}'"):
+                        test_results = st.session_state.datastax_colbert_searcher.search(
+                            query=test_query, k=2
+                        )
 
-                with st.spinner("Executing test search via Astra DB..."):
-                    test_results = st.session_state.datastax_colbert_searcher.search(
-                        query=test_query,
-                        k=3
-                    )
+                    if not test_results.empty:
+                        st.success(f"Found {len(test_results)} results")
+                        st.dataframe(test_results[["text_id", "colbert_score", "Key Quote"]])
+                    else:
+                        st.warning("No results found")
+                except Exception as e:
+                    st.error(f"Search failed: {str(e)}")
 
-                if not test_results.empty:
-                    st.success(f"✅ Found {len(test_results)} results!")
-                    st.dataframe(test_results[["text_id", "colbert_score", "Key Quote"]])
+            # Show credentials (masked)
+            st.write("**Astra DB Credentials:**")
+            db_id = st.session_state.get('astra_db_id', astra_db_id)
+            db_token = st.session_state.get('astra_db_token', astra_db_token)
+            if db_id:
+                st.write(f"DB ID: {db_id[:4]}...{db_id[-4:]}")
+            if db_token:
+                st.write(f"Token: {db_token[:4]}...{db_token[-4:]}")
+    else:
+        st.error("❌ Not connected to Astra DB")
+
+        # Show credentials status
+        if not astra_db_id or not astra_db_token:
+            st.warning("""
+                DataStax Astra DB credentials not found. Please add them to your Streamlit secrets or environment variables:
+                - ASTRA_DB_ID: Your Astra DB ID
+                - ASTRA_DB_APPLICATION_TOKEN: Your Astra DB application token
+            """)
+        else:
+            st.info(f"Credentials found but not connected")
+
+        # Manual connection button
+        if st.button("Connect to Astra DB"):
+            with st.spinner("Connecting to Astra DB..."):
+                success, error = initialize_datastax_colbert(collection_name)
+                if success:
+                    st.success("✅ Connected successfully")
                 else:
-                    st.warning("⚠️ No results found. This could indicate that the corpus isn't accessible.")
-            except Exception as e:
-                st.error(f"Test search failed: {str(e)}")
+                    st.error(f"❌ Connection failed: {error}")
+
+        # Show help for troubleshooting
+        with st.expander("Troubleshooting"):
+            st.markdown("""
+            **Common issues:**
+            - Check that Astra DB credentials are correct
+            - Verify that the collection name exists
+            - Ensure your Astra DB instance is active
+            - Check for network connectivity issues
+            """)
+
+    # Add configuration guide
+    with st.expander("DataStax Configuration Guide"):
+        st.markdown("""
+        To use DataStax ColBERT, you need to:
+
+        1. Create an Astra DB account at [datastax.com](https://astra.datastax.com/signup)
+        2. Create a database and generate an application token
+        3. Add the following to your Streamlit secrets:
+           - In local dev: Create `.streamlit/secrets.toml` file with:
+             ```toml
+             ASTRA_DB_ID = "your-database-id"
+             ASTRA_DB_APPLICATION_TOKEN = "your-application-token"
+             ```
+           - In Streamlit Cloud: Add these values in the app settings
+        4. Ensure your collection name is correct
+        """)
+
+# Automatically initialize DataStax ColBERT if not already initialized
+if not st.session_state.datastax_colbert_initialized and astra_db_id and astra_db_token:
+    with st.spinner("Connecting to DataStax Astra DB..."):
+        success, error = initialize_datastax_colbert(collection_name)
+        if success:
+            st.success("✅ Connected to DataStax Astra DB successfully")
+        else:
+            st.warning(f"⚠️ Could not connect automatically: {error}. You can retry manually using the sidebar.")
+
+# Main content area
+st.write("## RAG Query Evaluation")
 
 # Add query method selection
 query_method = st.radio(
@@ -257,26 +306,8 @@ else:
         ['factual_retrieval', 'analysis', 'comparative_analysis', 'synthesis']
     )
 
-# Select ColBERT Implementation
-#colbert_impl = st.radio(
-#    "Select ColBERT Implementation:",
-#    ["DataStax ColBERT", "Local ColBERT"],
-#    disabled=not st.session_state.get('datastax_colbert_initialized', False)
-#)
-
-st.info("Using Astra DB ColBERT implementation")
-colbert_impl = "Astra DB ColBERT"  # Set a default value for use in later code
-
-#if colbert_impl == "DataStax ColBERT" and not st.session_state.get('datastax_colbert_initialized', False):
-#    st.warning("DataStax ColBERT is not initialized. Please initialize it in the sidebar.")
-
-# Initialize ColBERT based on selected implementation
-# Use the initialized ColBERT searcher
-if st.session_state.get('datastax_colbert_initialized', False):
-    colbert_searcher = st.session_state.datastax_colbert_searcher
-else:
-    st.error("ColBERT searcher not initialized. Please initialize it in the sidebar first.")
-    colbert_searcher = None
+# Display information about the search method
+st.info("Using Astra DB ColBERT implementation for enhanced retrieval accuracy")
 
 # Evaluation Method Selection
 st.subheader("Evaluation Options")
@@ -288,46 +319,43 @@ eval_methods = st.multiselect(
 
 # Process button
 if user_query and st.button("Run Evaluation"):
+    # Check if DataStax ColBERT is initialized - if not, try to initialize on-demand
+    if not st.session_state.get('datastax_colbert_initialized', False):
+        st.info("DataStax ColBERT not initialized. Attempting to connect...")
+        success, error = initialize_datastax_colbert(collection_name)
+        if not success:
+            st.error(f"❌ Could not initialize DataStax ColBERT: {error}")
+            st.stop()  # Stop execution if initialization fails
+
     st.subheader("Processing Query")
-    st.write(f"Query: {user_query}")
+    st.write(f"Query: '{user_query}'")
 
     try:
-        # Load necessary data
-        lincoln_data_df = load_lincoln_speech_corpus()
-        lincoln_data = lincoln_data_df.to_dict("records")
-        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
-
-        # Initialize ColBERT based on selected implementation
-        if colbert_impl == "DataStax ColBERT" and st.session_state.get('datastax_colbert_initialized', False):
+        # Start evaluation process - show a spinner
+        with st.spinner("Processing query through the RAG pipeline..."):
+            # Get the colbert searcher from session state
             colbert_searcher = st.session_state.datastax_colbert_searcher
-        else:
-            # Use original ColBERT implementation (imported as needed)
-            from modules.colbert_search import ColBERTSearcher
-            custom_stopwords = {'civil', 'war', 'union', 'confederate'}
-            colbert_searcher = ColBERTSearcher(
-                lincoln_dict=lincoln_dict,
-                custom_stopwords=custom_stopwords
-            )
 
-        # --- 1. Execute the RAG Pipeline ---
-        pipeline_results = run_rag_pipeline(
-            user_query=user_query,
-            perform_keyword_search=True,
-            perform_semantic_search=True,
-            perform_colbert_search=True,
-            perform_reranking=True,
-            hays_data_logger=hays_data_logger,
-            keyword_results_logger=keyword_results_logger,
-            nicolay_data_logger=nicolay_data_logger,
-            reranking_results_logger=reranking_results_logger,
-            semantic_results_logger=semantic_results_logger,
-            colbert_searcher=colbert_searcher  # Pass the selected searcher
-        )
+            # --- 1. Execute the RAG Pipeline ---
+            pipeline_results = run_rag_pipeline(
+                user_query=user_query,
+                perform_keyword_search=True,
+                perform_semantic_search=True,
+                perform_colbert_search=True,
+                perform_reranking=True,
+                hays_data_logger=hays_data_logger,
+                keyword_results_logger=keyword_results_logger,
+                nicolay_data_logger=nicolay_data_logger,
+                reranking_results_logger=reranking_results_logger,
+                semantic_results_logger=semantic_results_logger,
+                colbert_searcher=colbert_searcher  # Pass the DataStax searcher
+            )
 
         # --- 2. Unpack the pipeline results ---
         hay_output = pipeline_results.get("hay_output", {})
         search_results = pipeline_results.get("search_results", pd.DataFrame())
         semantic_matches = pipeline_results.get("semantic_results", pd.DataFrame())
+        colbert_results = pipeline_results.get("colbert_results", pd.DataFrame())
         reranked_results = pipeline_results.get("reranked_results", pd.DataFrame())
         nicolay_output = pipeline_results.get("nicolay_output", {})
 
@@ -337,134 +365,193 @@ if user_query and st.button("Run Evaluation"):
         year_keywords = hay_output.get("year_keywords", [])
         text_keywords = hay_output.get("text_keywords", [])
 
-        # --- 3. Display the Hay Initial Answer ---
-        st.write("### Hay's Initial Answer")
-        st.markdown(initial_answer)
-        st.write("**Keywords from Hay**:", weighted_keywords)
-        st.write("**Year Keywords**:", year_keywords)
-        st.write("**Text Keywords**:", text_keywords)
+        # --- 3. Display the results in tabs for better organization ---
+        tabs = st.tabs(["Initial Answer", "Search Results", "Final Response", "Benchmark Analysis"])
 
-        # --- 4. Display the RAG Search Results ---
-        st.write("### Keyword Search Results")
-        if not search_results.empty:
-            st.dataframe(search_results)
-        else:
-            st.write("No keyword search results found.")
+        with tabs[0]:
+            st.write("### Hay's Initial Analysis")
+            st.markdown(initial_answer)
 
-        st.write("### Semantic Search Results")
-        if not semantic_matches.empty:
-            st.dataframe(semantic_matches)
-        else:
-            st.write("No semantic search results found.")
+            # Display keywords in columns
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Keywords from Hay**")
+                st.json(weighted_keywords)
+            with col2:
+                st.write("**Year Keywords**")
+                st.write(year_keywords)
+                st.write("**Text Keywords**")
+                st.write(text_keywords)
 
-        st.write(f"### {colbert_impl} Search Results")
-        colbert_results = pipeline_results.get("colbert_results", pd.DataFrame())
-        if not colbert_results.empty:
-            st.dataframe(colbert_results)
-        else:
-            st.write(f"No {colbert_impl} search results found.")
+        with tabs[1]:
+            st.write("### Search Results")
 
-        st.write("### Reranked Results")
-        if not reranked_results.empty:
-            st.dataframe(reranked_results)
-        else:
-            st.write("No reranked results found.")
+            # Create subtabs for different search types
+            search_tabs = st.tabs(["Keyword Search", "Semantic Search", "ColBERT Search", "Reranked Results"])
 
-        # Normalized comparison function
-        def normalize_doc_id(doc_id):
-            """Normalize document IDs by extracting just the numeric portion."""
-            if isinstance(doc_id, str) and "Text #:" in doc_id:
-                return doc_id.split("Text #:")[1].strip()
-            return str(doc_id)
+            with search_tabs[0]:
+                if not search_results.empty:
+                    st.dataframe(search_results)
+                else:
+                    st.write("No keyword search results found.")
 
-        # --- 6. Display Nicolay's Final Response ---
-        final_answer_dict = nicolay_output.get("FinalAnswer", {})
-        final_answer_text = final_answer_dict.get("Text", "")
+            with search_tabs[1]:
+                if not semantic_matches.empty:
+                    st.dataframe(semantic_matches)
+                else:
+                    st.write("No semantic search results found.")
 
-        st.write("### Nicolay's Final Response")
-        st.markdown(final_answer_text)
+            with search_tabs[2]:
+                if not colbert_results.empty:
+                    st.dataframe(colbert_results)
 
-        # If references exist, display them
-        references = final_answer_dict.get("References", [])
-        if references:
-            st.write("**References:**")
-            for ref in references:
-                st.write(f"- {ref}")
+                    # Display a sample of the top result in an expander
+                    if len(colbert_results) > 0:
+                        with st.expander("View Top ColBERT Result Text"):
+                            top_result = colbert_results.iloc[0]
+                            st.markdown(f"**Document ID:** {top_result['text_id']}")
+                            st.markdown(f"**Score:** {top_result['colbert_score']:.4f}")
+                            st.markdown("**Text Content:**")
+                            st.markdown(top_result['TopSegment'])
+                else:
+                    st.write("No ColBERT search results found.")
 
-        # --- 5. Compare to Benchmark ---
-        st.write("### Benchmark Analysis")
-        top_reranked_ids = reranked_results["Text ID"].head(3).tolist() if not reranked_results.empty else []
+            with search_tabs[3]:
+                if not reranked_results.empty:
+                    st.dataframe(reranked_results)
+                else:
+                    st.write("No reranked results found.")
 
-        # Normalize document IDs before comparison
-        normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
-        normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
+        with tabs[2]:
+            # --- 4. Display Nicolay's Final Response ---
+            final_answer_dict = nicolay_output.get("FinalAnswer", {})
+            final_answer_text = final_answer_dict.get("Text", "")
 
-        matching_expected = len(set(normalized_expected) & set(normalized_reranked))
-        st.write(f"Expected documents matched in top 3: {matching_expected}/{len(expected_documents)}")
+            st.write("### Nicolay's Final Response")
+            st.markdown(final_answer_text)
 
-        # --- 7. Run Selected Evaluations ---
-        evaluation_results = None
-        eval_results = None
+            # If references exist, display them
+            references = final_answer_dict.get("References", [])
+            if references:
+                with st.expander("View References"):
+                    for ref in references:
+                        st.write(f"- {ref}")
 
-        if "BLEU/ROUGE Evaluation" in eval_methods:
-            st.subheader("BLEU/ROUGE Evaluation Results")
-            evaluator = RAGEvaluator()
-            evaluation_results = evaluator.evaluate_rag_response(
-                reranked_results=reranked_results,
-                generated_response=final_answer_text,
-                ideal_documents=expected_documents
-            )
-            st.markdown(add_evaluator_to_benchmark(evaluation_results))
+        with tabs[3]:
+            # --- 5. Compare to Benchmark ---
+            st.write("### Benchmark Analysis")
 
-        if "LLM-based Evaluation" in eval_methods:
-            st.subheader("LLM Evaluation Results")
-            llm_evaluator = LLMEvaluator()
-            eval_results = llm_evaluator.evaluate_response(
-                query=user_query,
-                response=final_answer_text,
-                source_texts=reranked_results['Key Quote'].tolist(),
-                ideal_docs=expected_documents,
-                category=question_category
-            )
-            if eval_results:
-                st.markdown(llm_evaluator.format_evaluation_results(eval_results))
+            # Show expected documents
+            st.write("**Expected Documents:**")
+            st.write(expected_documents)
+
+            # Get top reranked IDs
+            top_reranked_ids = reranked_results["text_id"].head(3).tolist() if not reranked_results.empty else []
+
+            # Normalize document IDs before comparison
+            def normalize_doc_id(doc_id):
+                """Normalize document IDs by extracting just the numeric portion."""
+                if isinstance(doc_id, str) and "Text #:" in doc_id:
+                    return doc_id.split("Text #:")[1].strip()
+                return str(doc_id)
+
+            normalized_expected = [normalize_doc_id(doc) for doc in expected_documents]
+            normalized_reranked = [normalize_doc_id(doc) for doc in top_reranked_ids]
+
+            # Calculate matching metrics
+            matching_expected = len(set(normalized_expected) & set(normalized_reranked))
+            matching_percentage = matching_expected / len(expected_documents) * 100 if expected_documents else 0
+
+            # Display metrics with color coding
+            if matching_percentage >= 75:
+                st.success(f"✅ Document match: {matching_expected}/{len(expected_documents)} expected documents found ({matching_percentage:.1f}%)")
+            elif matching_percentage >= 50:
+                st.warning(f"⚠️ Document match: {matching_expected}/{len(expected_documents)} expected documents found ({matching_percentage:.1f}%)")
             else:
-                st.error("Unable to generate LLM evaluation results")
+                st.error(f"❌ Document match: {matching_expected}/{len(expected_documents)} expected documents found ({matching_percentage:.1f}%)")
 
-        # Log benchmark results only if we have evaluation results
-        if evaluation_results or eval_results:
+            # Display retrieved vs expected in columns
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Top Retrieved Documents:**")
+                for i, doc_id in enumerate(top_reranked_ids):
+                    st.write(f"{i+1}. {doc_id}")
+
+            with col2:
+                st.write("**Expected Documents:**")
+                for i, doc_id in enumerate(expected_documents):
+                    st.write(f"{i+1}. {doc_id}")
+
+        # --- 6. Run Selected Evaluations ---
+        st.subheader("Detailed Evaluation")
+        eval_tabs = st.tabs(["BLEU/ROUGE Evaluation", "LLM-based Evaluation"])
+
+        # BLEU/ROUGE Evaluation
+        with eval_tabs[0]:
+            if "BLEU/ROUGE Evaluation" in eval_methods:
+                with st.spinner("Running BLEU/ROUGE evaluation..."):
+                    evaluator = RAGEvaluator()
+                    evaluation_results = evaluator.evaluate_rag_response(
+                        reranked_results=reranked_results,
+                        generated_response=final_answer_text,
+                        ideal_documents=expected_documents
+                    )
+                    st.markdown(add_evaluator_to_benchmark(evaluation_results))
+            else:
+                st.info("BLEU/ROUGE evaluation not selected")
+
+        # LLM-based Evaluation
+        with eval_tabs[1]:
+            if "LLM-based Evaluation" in eval_methods:
+                with st.spinner("Running LLM-based evaluation..."):
+                    llm_evaluator = LLMEvaluator()
+                    eval_results = llm_evaluator.evaluate_response(
+                        query=user_query,
+                        response=final_answer_text,
+                        source_texts=reranked_results['Key Quote'].tolist() if not reranked_results.empty else [],
+                        ideal_docs=expected_documents,
+                        category=question_category
+                    )
+                    if eval_results:
+                        st.markdown(llm_evaluator.format_evaluation_results(eval_results))
+                    else:
+                        st.error("Unable to generate LLM evaluation results")
+            else:
+                st.info("LLM-based evaluation not selected")
+
+        # Log benchmark results
+        if "BLEU/ROUGE Evaluation" in eval_methods or "LLM-based Evaluation" in eval_methods:
             log_benchmark_results(
                 benchmark_logger=benchmark_logger,
                 user_query=user_query,
                 expected_documents=expected_documents,
-                bleu_rouge_results=evaluation_results or {},
-                llm_results=eval_results or {},
+                bleu_rouge_results=evaluation_results if "BLEU/ROUGE Evaluation" in eval_methods else {},
+                llm_results=eval_results if "LLM-based Evaluation" in eval_methods else {},
                 reranked_results=reranked_results
             )
+            st.success("Benchmark results logged successfully")
 
     except Exception as e:
         st.error(f"Error processing query: {e}")
         st.exception(e)  # This will show the full traceback
 
-# Summary/Visualization section
-st.write("### Summary and Visualization")
-st.write("Additional charts or summary metrics can go here.")
+# Add about section
+st.markdown("---")
+st.subheader("About Astra DB ColBERT Implementation")
+st.markdown("""
+This evaluation module uses DataStax's Astra DB ColBERT implementation for enhanced retrieval accuracy.
 
-# Add instructions for configuring DataStax
-st.sidebar.markdown("""
-### DataStax Configuration Guide
+**How it works:**
+- Unlike traditional vector search that creates one vector per document, ColBERT creates vectors for each token in a document
+- This allows for more accurate retrieval, especially for unusual terms and proper names
+- All processing happens on DataStax's cloud service, minimizing local resource usage
+- The implementation follows DataStax's recommended best practices for RAG applications
 
-To use DataStax ColBERT, you need to:
+**Benefits of ColBERT over traditional vector search:**
+- Better handling of proper names and rare terms
+- Less sensitive to chunking strategies
+- Higher accuracy for specific queries
+- Better contextual understanding
 
-1. Create an Astra DB account at [datastax.com](https://astra.datastax.com/signup)
-2. Create a database and generate an application token
-3. Add the following to your Streamlit secrets:
-   - In local dev: Create `.streamlit/secrets.toml` file with:
-     ```toml
-     ASTRA_DB_ID = "your-database-id"
-     ASTRA_DB_APPLICATION_TOKEN = "your-application-token"
-     ```
-   - In Streamlit Cloud: Add these values in the app settings
-4. Click "Initialize DataStax ColBERT" to connect to Astra DB
-5. Click "Ingest Lincoln Corpus" to upload your documents
+**Learn more:** [Highly Accurate Retrieval with ColBERT and Astra DB](https://www.datastax.com/blog/highly-accurate-retrieval-for-your-rag-application-with-colbert-and-astra-db)
 """)

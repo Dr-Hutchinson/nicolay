@@ -324,6 +324,7 @@ class ColBERTSearcher:
         try:
             # Get collection schema information
             collection_info = self.database.get_collection_info()
+            st.write(collection_info)
             return collection_info
         except Exception as e:
             return f"Error inspecting collection: {str(e)}"

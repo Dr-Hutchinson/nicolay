@@ -314,20 +314,45 @@ class ColBERTSearcher:
         """
         return self.stopwords.copy()
 
-    def inspect_collection_schema(self):
+    def get_collection_info(self):
         """
-        Inspect the Astra DB collection schema to understand how documents are stored.
+        Get basic information about the Astra DB collection.
 
         Returns:
-            Information about the collection schema
+            Dictionary with collection information
         """
         try:
-            # Get collection schema information
-            collection_info = self.database.get_collection_info()
-            st.write("Collection Info:" + collection_info)
-            return collection_info
+            # Create a simple info object with what we can safely access
+            info = {
+                "database_type": type(self.database).__name__,
+                "vector_store_type": type(self.vector_store).__name__
+            }
+
+            # Try to get a sample document to understand structure
+            sample_doc = None
+            try:
+                docs = self.vector_store.similarity_search("lincoln", k=1)
+                if docs:
+                    sample_doc = docs[0]
+            except Exception as e:
+                info["sample_error"] = str(e)
+
+            # If we got a sample document, extract its structure
+            if sample_doc:
+                info["document_structure"] = {
+                    "type": type(sample_doc).__name__,
+                    "has_metadata": hasattr(sample_doc, "metadata"),
+                    "metadata_keys": list(sample_doc.metadata.keys()) if hasattr(sample_doc, "metadata") and sample_doc.metadata else [],
+                    "content_preview": sample_doc.page_content[:100] + "..." if hasattr(sample_doc, "page_content") else "No content attribute"
+                }
+
+                # Include sample metadata if available
+                if hasattr(sample_doc, "metadata") and sample_doc.metadata:
+                    info["metadata_sample"] = sample_doc.metadata
+
+            return info
         except Exception as e:
-            return f"Error inspecting collection: {str(e)}"
+            return {"error": str(e)}
 
 
     @staticmethod

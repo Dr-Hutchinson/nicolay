@@ -160,26 +160,34 @@ with st.sidebar:
         st.success("✅ Astra DB ColBERT: Connected")
 
         # Add a collapsed advanced panel
+        # Add a collapsed advanced panel
         with st.expander("Advanced Options", expanded=False):
-            if st.button("Test Connection"):
-                try:
-                    with st.spinner("Testing connection..."):
-                        success, message, test_results = st.session_state.colbert_searcher.test_connection(
-                            "Lincoln presidency"
-                        )
+            col1, col2 = st.columns(2)
 
-                    if success:
-                        st.success(f"Connection test successful: {message}")
-                        st.dataframe(test_results)
-                    else:
-                        st.warning(f"Connection test issue: {message}")
-                except Exception as e:
-                    st.error(f"Connection test failed: {str(e)}")
-    else:
-        st.error("❌ Astra DB ColBERT: Disconnected")
+            with col1:
+                if st.button("Test Connection"):
+                    try:
+                        with st.spinner("Testing connection..."):
+                            success, message, test_results = st.session_state.colbert_searcher.test_connection(
+                                "Lincoln presidency"
+                            )
 
-        if st.button("Retry Connection"):
-            st.experimental_rerun()  # Try again
+                        if success:
+                            st.success(f"Connection test successful: {message}")
+                            st.dataframe(test_results)
+                        else:
+                            st.warning(f"Connection test issue: {message}")
+                    except Exception as e:
+                        st.error(f"Connection test failed: {str(e)}")
+
+            with col2:
+                if st.button("Inspect Collection"):
+                    try:
+                        with st.spinner("Inspecting collection..."):
+                            collection_info = st.session_state.colbert_searcher.get_collection_info()
+                            st.json(collection_info)  # Display as JSON for easy analysis
+                    except Exception as e:
+                        st.error(f"Collection inspection failed: {str(e)}")
 
 # Add query method selection
 query_method = st.radio(

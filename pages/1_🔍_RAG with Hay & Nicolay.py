@@ -295,8 +295,7 @@ with st.form("Search Interface"):
 
             # function for loading JSON 'text_id' for comparison for semantic search results
             def get_source_and_summary(text_id):
-                # text_id may arrive as a full string "Text #: 386" (from the new CSV text_id column)
-                # or as a bare integer (legacy). Normalise to the "Text #: N" key used in lincoln_dict.
+                # text_id may arrive as a full string "Text #: 386" (new CSV) or bare integer (legacy)
                 if isinstance(text_id, str) and text_id.startswith("Text #:"):
                     text_id_str = text_id.strip()
                 else:
@@ -474,17 +473,21 @@ with st.form("Search Interface"):
 
             def extract_full_text(record):
                 marker = "Full Text:\n"
+                end_marker = "\n\nSummary:"
                 # Check if the record is a string
                 if isinstance(record, str):
-                    # Finding the position where the 'Full Text' starts
                     marker_index = record.find(marker)
                     if marker_index != -1:
-                        # Extracting text starting from the position after the marker
-                        return record[marker_index + len(marker):].strip()
+                        text_start = marker_index + len(marker)
+                        text = record[text_start:]
+                        # Trim off Summary/Keywords/Concepts metadata that follows the full text
+                        end_index = text.find(end_marker)
+                        if end_index != -1:
+                            text = text[:end_index]
+                        return text.strip()
                     else:
                         return ""
                 else:
-                    # Handle cases where the record is NaN or None
                     return ""
 
             def remove_duplicates(search_results, semantic_matches):
@@ -655,7 +658,6 @@ with st.form("Search Interface"):
                             # text segment - 0.1
 
                             for idx, result in enumerate(search_results, start=1):
-                                # Strip existing "Source: " prefix from source field before display
                                 clean_source = re.sub(r'^Source:\s+', '', result['source']).strip()
                                 expander_label = f"**Keyword Match {idx}**: *{clean_source}* `{result['text_id']}`"
                                 with st.expander(expander_label):
@@ -857,8 +859,8 @@ with st.form("Search Interface"):
                     else:
                         search_results = pd.DataFrame(columns=['text_id'])  # Create a DataFrame with the necessary column for consistency
 
-                    # text_id in the new CSV is already named 'text_id' — no rename needed.
-                    # Extract the numeric portion ("Text #: 386" -> 386) for deduplication comparisons.
+                    # text_id is already named correctly — no rename needed.
+                    # Extract numeric portion ("Text #: 386" -> 386) for deduplication comparisons.
                     semantic_matches['text_id'] = semantic_matches['text_id'].str.extract(r'(\d+)').astype(int)
 
                     # Handle the case where search_results is empty

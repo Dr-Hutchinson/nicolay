@@ -398,68 +398,134 @@ with st.form("Search Interface"):
             #    instances.sort(key=lambda x: x['weighted_score'], reverse=True)
             #    return instances[:top_n]
 
-            # keyword text segment - 0.1
-            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5, context_size=1000):
+            # keyword text segment - 0.2
+            # Revised search logic — three-layer approach:
+            #
+            # Layer 1 (filtered):  if text_keywords present, score only chunks from
+            #                      those speeches.  If ≥2 scored hits, use them.
+            # Layer 2 (fallback):  if Layer 1 returns <2 hits, re-run against the
+            #                      full corpus (year filter still applied).  This
+            #                      recovers gracefully when Hay names a wrong/absent
+            #                      speech without silently returning zero results.
+            # Layer 3 (supplement): always run a full-corpus pass and append any
+            #                      top results not already found in Layer 1/2, up to
+            #                      top_n total.  This surfaces speeches Hay didn't
+            #                      anticipate but the keywords still found.
+            #
+            # text_keywords are now a preference signal, not a hard gate.
+
+            def _score_entries(dynamic_weights, original_weights, data,
+                               year_keywords, text_keywords_list, context_size):
+                """Score all entries that pass year + text filters. Returns list of result dicts."""
                 instances = []
+                for entry in data:
+                    if 'full_text' not in entry or 'source' not in entry:
+                        continue
+                    source_lower = entry['source'].lower()
+
+                    # Year filter — always applied when year_keywords present
+                    match_year = not year_keywords or any(
+                        str(year) in source_lower for year in year_keywords)
+                    if not match_year:
+                        continue
+
+                    # Text filter — only applied when text_keywords_list is non-empty
+                    match_text = not text_keywords_list or any(
+                        re.search(r'\b' + re.escape(kw) + r'\b', source_lower)
+                        for kw in text_keywords_list)
+                    if not match_text:
+                        continue
+
+                    entry_text_lower = entry['full_text'].lower()
+                    summary_lower = entry.get('summary', '').lower()
+                    keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+                    combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+
+                    total_dynamic_weighted_score = 0
+                    keyword_counts = {}
+                    keyword_positions = {}
+
+                    for keyword in original_weights.keys():
+                        keyword_lower = keyword.lower()
+                        for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
+                            count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
+                            dynamic_weight = dynamic_weights.get(keyword, 0)
+                            if count > 0:
+                                keyword_counts[keyword] = count
+                                total_dynamic_weighted_score += count * dynamic_weight
+                                keyword_positions[match.start()] = (keyword, original_weights[keyword])
+
+                    if keyword_positions:
+                        best_pos = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
+                        start_q = max(0, best_pos - context_size // 3)
+                        end_q = min(len(entry['full_text']), best_pos + context_size // 3)
+                        snippet = entry['full_text'][start_q:end_q]
+                        expanded_context = get_neighbor_context(entry, window=1)
+                        instances.append({
+                            "text_id": entry['text_id'],
+                            "source": entry['source'],
+                            "summary": entry.get('summary', ''),
+                            "quote": snippet.replace('\n', ' '),
+                            "full_text_expanded": expanded_context,
+                            "weighted_score": total_dynamic_weighted_score,
+                            "keyword_counts": keyword_counts
+                        })
+
+                instances.sort(key=lambda x: x['weighted_score'], reverse=True)
+                return instances
+
+            def find_instances_expanded_search(dynamic_weights, original_weights, data,
+                                               year_keywords=None, text_keywords=None,
+                                               top_n=5, context_size=1000):
+
                 if text_keywords:
-                    if isinstance(text_keywords, list):
-                        text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
-                    else:
-                        text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
+                    text_keywords_list = (
+                        [kw.strip().lower() for kw in text_keywords]
+                        if isinstance(text_keywords, list)
+                        else [kw.strip().lower() for kw in text_keywords.split(',')]
+                    )
                 else:
                     text_keywords_list = []
 
-                for entry in data:
-                    if 'full_text' in entry and 'source' in entry:
-                        entry_text_lower = entry['full_text'].lower()
-                        source_lower = entry['source'].lower()
-                        summary_lower = entry.get('summary', '').lower()
-                        keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+                # ── Layer 1: filtered search (named speeches + year) ──────────
+                if text_keywords_list:
+                    filtered = _score_entries(dynamic_weights, original_weights, data,
+                                              year_keywords, text_keywords_list, context_size)
+                    # Tag results so the UI can show which layer found them
+                    for r in filtered:
+                        r['search_layer'] = 'filtered'
+                else:
+                    filtered = []
 
-                        match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-                        match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+                # ── Layer 2: full-corpus fallback if filtered search thin ─────
+                # Threshold: fewer than 2 scored hits triggers fallback.
+                # Year filter still applied; text filter removed.
+                if len(filtered) < 2:
+                    fallback = _score_entries(dynamic_weights, original_weights, data,
+                                              year_keywords, [], context_size)
+                    # Remove any that already appeared in filtered results
+                    filtered_ids = {r['text_id'] for r in filtered}
+                    fallback = [r for r in fallback if r['text_id'] not in filtered_ids]
+                    for r in fallback:
+                        r['search_layer'] = 'fallback'
+                    primary_results = filtered + fallback
+                else:
+                    primary_results = filtered
+                    fallback = []
 
-                        if match_source_year and match_source_text:
-                            total_dynamic_weighted_score = 0
-                            keyword_counts = {}
-                            keyword_positions = {}
-                            combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+                # ── Layer 3: supplementary full-corpus pass ───────────────────
+                # Always runs. Finds top results from the whole corpus not already
+                # in primary_results, and appends them up to top_n total.
+                all_corpus = _score_entries(dynamic_weights, original_weights, data,
+                                            year_keywords, [], context_size)
+                primary_ids = {r['text_id'] for r in primary_results}
+                supplementary = [r for r in all_corpus if r['text_id'] not in primary_ids]
+                for r in supplementary:
+                    r['search_layer'] = 'supplementary'
 
-                            for keyword in original_weights.keys():
-                                keyword_lower = keyword.lower()
-                                for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-                                    count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-                                    dynamic_weight = dynamic_weights.get(keyword, 0)
-                                    if count > 0:
-                                        keyword_counts[keyword] = count
-                                        total_dynamic_weighted_score += count * dynamic_weight
-                                        keyword_index = match.start()
-                                        original_weight = original_weights[keyword]
-                                        keyword_positions[keyword_index] = (keyword, original_weight)
-
-                            if keyword_positions:
-                                highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                                start_quote = max(0, highest_original_weighted_position - context_size // 3)
-                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 3)
-                                snippet = entry['full_text'][start_quote:end_quote]
-
-                                # Build neighbor-expanded context (±1 chunk from same source).
-                                # This richer passage is passed to Nicolay; the shorter
-                                # keyword snippet is still stored separately for display.
-                                expanded_context = get_neighbor_context(entry, window=1)
-
-                                instances.append({
-                                    "text_id": entry['text_id'],
-                                    "source": entry['source'],
-                                    "summary": entry.get('summary', ''),
-                                    "quote": snippet.replace('\n', ' '),      # display / logging
-                                    "full_text_expanded": expanded_context,   # passed to Nicolay
-                                    "weighted_score": total_dynamic_weighted_score,
-                                    "keyword_counts": keyword_counts
-                                })
-
-                instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-                return instances[:top_n]
+                combined = primary_results + supplementary
+                combined.sort(key=lambda x: x['weighted_score'], reverse=True)
+                return combined[:top_n]
 
 
 
@@ -658,6 +724,13 @@ with st.form("Search Interface"):
                     st.write("**How Does This Work?**")
                     st.write("The Initial Response based on the user query is given by Hay, a finetuned large language model. This response helps Hay steer in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Hay's Response Answer with Nicolay's Response and Analysis and the end of the RAG process to see how AI techniques can be used for historical sources.")
 
+                # Initialize both result containers to safe empty values.
+                # This prevents NameError in the reranking block when either
+                # search method is disabled or fails to return results.
+                search_results = pd.DataFrame()
+                semantic_matches = pd.DataFrame()
+                user_query_embedding = None
+
                 # Use st.columns to create two columns
                 col1, col2 = st.columns(2)
 
@@ -684,40 +757,29 @@ with st.form("Search Interface"):
 
                             search_results = pd.DataFrame()  # Create an empty DataFrame for consistency
 
-                            # Display message for no results found
-                            #st.markdown("### Keyword Search Results")
                             with st.expander("**No keyword search results found.**"):
                                 st.write("No keyword search results found based on your query and Hays's outputs. Try again or modify your query. You can also use the Additional Search Options box above to search for specific terms, speeches, and years.")
                         else:
                             st.markdown("### Keyword Search Results")
-                            # (Existing code for displaying keyword search results)
 
                             with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
                                 st.write(keyword_search_explainer)
 
-                            # text segment - 0.0
-
-                            #for idx, result in enumerate(search_results, start=1):
-                            #    expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                            #    with st.expander(expander_label):
-                            #        st.markdown(f"{result['source']}")
-                            #        st.markdown(f"{result['text_id']}")
-                            #        st.markdown(f"{result['summary']}")
-                            #        st.markdown(f"**Key Quote:**\n{result['quote']}")
-                            #        st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                            #        st.markdown("**Keyword Counts:**")
-                            #        st.json(result['keyword_counts'])
-
-                            # text segment - 0.1
-
                             for idx, result in enumerate(search_results, start=1):
                                 clean_source = re.sub(r'^Source:\s+', '', result['source']).strip()
-                                expander_label = f"**Keyword Match {idx}**: *{clean_source}* `{result['text_id']}`"
+                                # Show which search layer surfaced this result
+                                layer = result.get('search_layer', '')
+                                layer_label = {
+                                    'filtered': ' *(targeted)*',
+                                    'fallback': ' *(corpus fallback)*',
+                                    'supplementary': ' *(supplementary)*'
+                                }.get(layer, '')
+                                expander_label = f"**Keyword Match {idx}**{layer_label}: *{clean_source}* `{result['text_id']}`"
                                 with st.expander(expander_label):
                                     st.markdown(f"**Source:** {clean_source}")
                                     st.markdown(f"**Text ID:** {result['text_id']}")
                                     st.markdown(f"**Summary:**\n{result['summary']}")
-                                    st.markdown(f"**Key Quote:**\n{result['quote']}")  # Display the full expanded quote
+                                    st.markdown(f"**Key Quote:**\n{result['quote']}")
                                     st.markdown(f"**Weighted Score:** {result['weighted_score']}")
                                     st.markdown("**Keyword Counts:**")
                                     st.json(result['keyword_counts'])
@@ -900,7 +962,6 @@ with st.form("Search Interface"):
                 #            st.error("Error in reranking: " + str(e))
 
                 # Reranking results with Cohere's Reranker API Endpoint
-                # Reranking results with Cohere's Reranker API Endpoint
                 if perform_reranking:
 
                     if isinstance(search_results, list):
@@ -908,17 +969,23 @@ with st.form("Search Interface"):
 
                     # Convert 'text_id' in search_results to numeric format if it's not empty
                     if not search_results.empty:
-                        search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
+                        search_results['text_id'] = search_results['text_id'].str.extract(r'(\d+)').astype(int)
                     else:
-                        search_results = pd.DataFrame(columns=['text_id'])  # Create a DataFrame with the necessary column for consistency
+                        search_results = pd.DataFrame(columns=['text_id'])
 
-                    # text_id is already named correctly — no rename needed.
-                    # Extract numeric portion ("Text #: 386" -> 386) for deduplication comparisons.
-                    semantic_matches['text_id'] = semantic_matches['text_id'].str.extract(r'(\d+)').astype(int)
+                    # Guard: semantic_matches may be an empty DataFrame if semantic
+                    # search was disabled or failed.  Only process it if non-empty.
+                    if not semantic_matches.empty:
+                        semantic_matches['text_id'] = semantic_matches['text_id'].str.extract(r'(\d+)').astype(int)
 
-                    # Handle the case where search_results is empty
-                    if search_results.empty:
+                    # Build deduplicated combined results
+                    if search_results.empty and semantic_matches.empty:
+                        st.warning("No search results available for ranking. Enable at least one search method.")
+                        deduplicated_results = pd.DataFrame()
+                    elif search_results.empty:
                         deduplicated_results = semantic_matches
+                    elif semantic_matches.empty:
+                        deduplicated_results = search_results
                     else:
                         deduplicated_results = remove_duplicates(search_results, semantic_matches)
 

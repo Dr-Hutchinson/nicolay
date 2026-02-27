@@ -92,7 +92,7 @@ def log_semantic_search_results(semantic_results_logger, semantic_matches):
             'Timestamp': now,
             'UserQuery': row['UserQuery'],
             'HyDE_Query': initial_answer,
-            'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
+            'TextID': row['text_id'],  # text_id column (replaces old Unnamed: 0)
             'SimilarityScore': row['similarities'],
             'TopSegment': row['TopSegment']
             }
@@ -214,6 +214,42 @@ semantic_search_explainer = st.session_state['semantic_search_explainer']
 relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
 nicolay_model_explainer = st.session_state['nicolay_model_explainer']
 
+# --- Cached data loaders ---
+# These are defined at module level and decorated with @st.cache_data so Streamlit
+# loads each file only once per session, regardless of how many queries are submitted.
+# The 53 MB CSV in particular must not be reloaded on every query submission.
+
+@st.cache_data
+def load_lincoln_data():
+    with open('data/lincoln_speech_corpus_repaired.json', 'r') as f:
+        return json.load(f)
+
+@st.cache_data
+def load_keyword_data():
+    with open('data/voyant_word_counts.json', 'r') as f:
+        return json.load(f)
+
+@st.cache_data
+def load_embedded_df():
+    df = pd.read_csv('data/lincoln_index_embedded_repaired.csv')
+    # Parse stored embeddings from JSON strings to numpy arrays once at load time
+    df['embedding'] = df['embedding'].apply(lambda x: np.array(json.loads(x)))
+    # Extract full_text from combined field using the app's existing marker logic
+    marker = "Full Text:\n"
+    def extract_ft(record):
+        if isinstance(record, str):
+            idx = record.find(marker)
+            return record[idx + len(marker):].strip() if idx != -1 else ""
+        return ""
+    df['full_text'] = df['combined'].apply(extract_ft)
+    return df
+
+# Pre-load all data at startup
+lincoln_data = load_lincoln_data()
+keyword_data = load_keyword_data()
+lincoln_dict = {item['text_id']: item for item in lincoln_data}
+df_embedded = load_embedded_df()
+
 # Streamlit interface
 st.title("Exploring RAG with Nicolay and Hay")
 
@@ -275,25 +311,10 @@ with st.form("Search Interface"):
         if valid_search_condition:
 
             st.subheader("Starting RAG Process: (takes about 30-60 seconds in total)")
-            # Load data
-            #lincoln_speeches_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\lincoln-speeches_final_formatted.json'
-            lincoln_speeches_file_path = 'data/lincoln_speech_corpus.json'
-            keyword_frequency_file_path = 'data/voyant_word_counts.json'
-            lincoln_speeches_embedded = "lincoln_index_embedded.csv"
+            # Data is pre-loaded and cached at module level (lincoln_data, keyword_data,
+            # lincoln_dict, df_embedded). No file I/O needed here.
 
-            # define functions
-            def load_json(file_path):
-                with open(file_path, 'r') as file:
-                    data = json.load(file)
-                return data
-
-            lincoln_data = load_json(lincoln_speeches_file_path)
-            keyword_data = load_json(keyword_frequency_file_path)
-
-            # Convert JSON data to a dictionary with 'text_id' as the key for easy access
-            lincoln_dict = {item['text_id']: item for item in lincoln_data}
-
-            # function for loading JSON 'text_id' for comparsion for semantic search results
+            # function for loading JSON 'text_id' for comparison for semantic search results
             def get_source_and_summary(text_id):
                 # Convert numerical text_id to string format used in JSON
                 text_id_str = f"Text #: {text_id}"
@@ -698,15 +719,13 @@ with st.form("Search Interface"):
                         # Initialize the match counter
                         match_counter = 1
 
-                        df = pd.read_csv(lincoln_speeches_embedded)
-                        df['full_text'] = df['combined'].apply(extract_full_text)
-                        df['embedding'] = df['full_text'].apply(lambda x: get_embedding(x) if x else np.zeros(embedding_size))
-                        #st.write("Sample text_id from DataFrame:", df['Unnamed: 0'].iloc[0])
+                        # Use pre-loaded, cached DataFrame (embeddings already parsed at startup)
+                        df = df_embedded.copy()
 
-                        # After calculating embeddings for the dataset
-                        my_bar.progress(20, text=progress_text)  # Update to 20% after embeddings
+                        # After loading cached data (effectively instant)
+                        my_bar.progress(20, text=progress_text)
 
-                        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(get_source_and_summary))
+                        df['source'], df['summary'] = zip(*df['text_id'].apply(get_source_and_summary))
 
                         #st.write("Sample source and summary from DataFrame:", df[['source', 'summary']].iloc[0])
                         # Perform initial semantic search, using HyDE approach
@@ -729,11 +748,11 @@ with st.form("Search Interface"):
                                 break
 
                             # Updated label to include 'text_id', 'source'
-                            semantic_expander_label = f"**Semantic Match {match_counter}**: *{row['source']}* `Text #: {row['Unnamed: 0']}`"
+                            semantic_expander_label = f"**Semantic Match {match_counter}**: *{row['source']}* `Text #: {row['text_id']}`"
                             with st.expander(semantic_expander_label, expanded=False):
                                 # Display 'source', 'text_id', 'summary'
                                 st.markdown(f"**Source:** {row['source']}")
-                                st.markdown(f"**Text ID:** {row['Unnamed: 0']}")
+                                st.markdown(f"**Text ID:** {row['text_id']}")
                                 st.markdown(f"**Summary:**\n{row['summary']}")
 
                                 # Process for finding key quotes remains the same
@@ -852,7 +871,8 @@ with st.form("Search Interface"):
                         search_results = pd.DataFrame(columns=['text_id'])  # Create a DataFrame with the necessary column for consistency
 
                     # Rename the identifier column in semantic_matches to align with search_results
-                    semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
+                    # text_id column is already correctly named in the new CSV schema
+                    # semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)  # not needed
                     semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
 
                     # Handle the case where search_results is empty

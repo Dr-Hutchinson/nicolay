@@ -293,6 +293,48 @@ with st.form("Search Interface"):
             # Convert JSON data to a dictionary with 'text_id' as the key for easy access
             lincoln_dict = {item['text_id']: item for item in lincoln_data}
 
+            # --- Adjacency Index ---
+            # Build a lookup keyed by (source_file, position) so neighbor chunks
+            # can be retrieved for context stuffing.  Falls back gracefully if the
+            # new schema fields ('position', 'source_file') are absent (old corpus).
+            adjacency_index = {}
+            for item in lincoln_data:
+                sf = item.get('source_file')
+                pos = item.get('position')
+                if sf is not None and pos is not None:
+                    adjacency_index[(sf, pos)] = item
+
+            def get_neighbor_context(item, window=1):
+                """Return full_text of item plus up to `window` preceding and
+                following chunks from the same source_file, concatenated in
+                reading order.
+
+                Uses `position` and `source_file` from the new corpus schema.
+                `total_in_source` is used for boundary checking so we never
+                request a chunk beyond the end of the speech.
+                Falls back to own-chunk text if adjacency fields are absent.
+                """
+                sf = item.get('source_file')
+                pos = item.get('position')
+                total = item.get('total_in_source')   # max valid position index
+                own_text = item.get('full_text', '')
+                if sf is None or pos is None or not adjacency_index:
+                    # Old corpus -- no adjacency data; return own text only
+                    return own_text
+                parts = []
+                for offset in range(-window, window + 1):
+                    neighbor_pos = pos + offset
+                    # Respect speech boundaries: skip positions below 0 or
+                    # beyond the last chunk in this source file.
+                    if neighbor_pos < 0:
+                        continue
+                    if total is not None and neighbor_pos >= total:
+                        continue
+                    neighbor = adjacency_index.get((sf, neighbor_pos))
+                    if neighbor:
+                        parts.append(neighbor.get('full_text', ''))
+                return '\n\n'.join(filter(None, parts))
+
             # function for loading JSON 'text_id' for comparison for semantic search results
             def get_source_and_summary(text_id):
                 # text_id may arrive as a full string "Text #: 386" (new CSV) or bare integer (legacy)
@@ -400,11 +442,18 @@ with st.form("Search Interface"):
                                 start_quote = max(0, highest_original_weighted_position - context_size // 3)
                                 end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 3)
                                 snippet = entry['full_text'][start_quote:end_quote]
+
+                                # Build neighbor-expanded context (±1 chunk from same source).
+                                # This richer passage is passed to Nicolay; the shorter
+                                # keyword snippet is still stored separately for display.
+                                expanded_context = get_neighbor_context(entry, window=1)
+
                                 instances.append({
                                     "text_id": entry['text_id'],
                                     "source": entry['source'],
                                     "summary": entry.get('summary', ''),
-                                    "quote": snippet.replace('\n', ' '),
+                                    "quote": snippet.replace('\n', ' '),      # display / logging
+                                    "full_text_expanded": expanded_context,   # passed to Nicolay
                                     "weighted_score": total_dynamic_weighted_score,
                                     "keyword_counts": keyword_counts
                                 })
@@ -502,12 +551,16 @@ with st.form("Search Interface"):
                 # Limiting to the top 3 results
                 top_three_results = reranked_results[:3]
                 for result in top_three_results:
+                    # 'Key Quote' now holds either the neighbor-expanded keyword context
+                    # or the full semantic chunk text.  Label it 'Full Text' so Nicolay
+                    # knows to select and cite the most analytically relevant passage
+                    # rather than treating this as a pre-extracted excerpt.
                     formatted_entry = f"Match {result['Rank']}: " \
                                       f"Search Type - {result['Search Type']}, " \
                                       f"Text ID - {result['Text ID']}, " \
                                       f"Source - {result['Source']}, " \
                                       f"Summary - {result['Summary']}, " \
-                                      f"Key Quote - {result['Key Quote']}, " \
+                                      f"Full Text (select the most relevant passage to quote directly) - {result['Key Quote']}, " \
                                       f"Relevance Score - {result['Relevance Score']:.2f}"
                     formatted_results.append(formatted_entry)
                 return "\n\n".join(formatted_results)
@@ -875,15 +928,23 @@ with st.form("Search Interface"):
                     for index, result in deduplicated_results.iterrows():
                         # Check if the result is from keyword search or semantic search
                         if result.text_id in search_results.text_id.values and perform_keyword_search:
-                            # Format as keyword search result
-                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
+                            # Keyword match: use neighbor-expanded context if available,
+                            # falling back to the keyword snippet for old-corpus compatibility.
+                            expanded = result.get('full_text_expanded', '') if hasattr(result, 'get') else ''
+                            passage = expanded if expanded else result.get('quote', '')
+                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{passage}"
                             all_combined_data.append(combined_data)
                         elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                            # Format as semantic search result
-                            segments = segment_text(result.full_text)
-                            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                            top_segment = max(segment_scores, key=lambda x: x[1])
-                            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
+                            # Semantic match: use full chunk text so Nicolay can select
+                            # the best passage rather than being bound to a pre-cut segment.
+                            full_text = result.get('full_text', '') if hasattr(result, 'get') else ''
+                            if not full_text:
+                                # Fallback: compute top segment as before
+                                segments = segment_text(result.full_text)
+                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                                top_segment = max(segment_scores, key=lambda x: x[1])
+                                full_text = top_segment[0]
+                            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{full_text}"
                             all_combined_data.append(combined_data)
 
                     # Use all_combined_data for reranking
@@ -904,12 +965,13 @@ with st.form("Search Interface"):
                             full_reranked_results = []
                             for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
                                 combined_data = result.document
-                                data_parts = combined_data['text'].split("|")
+                                # Split on first 3 pipes only — passage text may contain pipes
+                                data_parts = combined_data['text'].split("|", 3)
                                 if len(data_parts) >= 4:
-                                    search_type, text_id_part, summary, quote = data_parts
+                                    search_type, text_id_part, summary, passage = data_parts
                                     text_id = str(text_id_part.split(":")[-1].strip())
                                     summary = summary.strip()
-                                    quote = quote.strip()
+                                    passage = passage.strip()
                                     # Retrieve source information
                                     text_id_str = f"Text #: {text_id}"
                                     source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
@@ -920,7 +982,7 @@ with st.form("Search Interface"):
                                         'Text ID': text_id,
                                         'Source': source,
                                         'Summary': summary,
-                                        'Key Quote': quote,
+                                        'Key Quote': passage,   # full text / expanded context
                                         'Relevance Score': result.relevance_score
                                     })
                                     # Display only the top 3 results
@@ -930,7 +992,9 @@ with st.form("Search Interface"):
                                             st.markdown(f"Text ID: {text_id}")
                                             st.markdown(f"{source}")
                                             st.markdown(f"{summary}")
-                                            st.markdown(f"Key Quote:\n{quote}")
+                                            # Show a 500-char preview; Nicolay receives full passage
+                                            preview = passage[:500] + ("…" if len(passage) > 500 else "")
+                                            st.markdown(f"**Passage Preview (first 500 chars):**\n{preview}")
                                             st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))

@@ -564,10 +564,10 @@ with st.form("Search Interface"):
 
                 # Parse the response to extract generated keywords
                 api_response_data = json.loads(msg)
-                initial_answer = api_response_data['initial_answer']
-                model_weighted_keywords = api_response_data['weighted_keywords']
-                model_year_keywords = api_response_data['year_keywords']
-                model_text_keywords = api_response_data['text_keywords']
+                initial_answer = api_response_data.get('initial_answer', '')
+                model_weighted_keywords = api_response_data.get('weighted_keywords', {})
+                model_year_keywords = api_response_data.get('year_keywords', []) or []
+                model_text_keywords = api_response_data.get('text_keywords', []) or []
                 model_query_assessment = api_response_data.get('query_assessment', '')  # New in Hay v3 — plain string
 
                 hays_data = {

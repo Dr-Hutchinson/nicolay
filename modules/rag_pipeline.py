@@ -154,8 +154,8 @@ def run_rag_pipeline(
         hay_output = json.loads(raw_hay_output)
         initial_answer = hay_output.get("initial_answer", "")
         model_weighted_keywords = hay_output.get("weighted_keywords", {})
-        model_year_keywords = hay_output.get("year_keywords", [])
-        model_text_keywords = hay_output.get("text_keywords", [])
+        model_year_keywords = hay_output.get("year_keywords", []) or []
+        model_text_keywords = hay_output.get("text_keywords", []) or []
         model_query_assessment = hay_output.get("query_assessment", "")  # New in Hay v3 — plain string
 
         if hays_data_logger:

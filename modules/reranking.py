@@ -97,13 +97,13 @@ def rerank_results(query, documents, cohere_client, model='rerank-v3.5', top_n=1
         return pd.DataFrame()
 
 
-def format_reranked_results_for_model_input(reranked_results, max_results=3):
+def format_reranked_results_for_model_input(reranked_results, max_results=5):
     """
     Formats reranked results for input to the Nicolay model.
 
     Args:
         reranked_results (list): List of dictionaries containing reranked results
-        max_results (int): Maximum number of results to format
+        max_results (int): Maximum number of results to format (v3 uses k=5)
 
     Returns:
         str: Formatted string of results
@@ -118,7 +118,7 @@ def format_reranked_results_for_model_input(reranked_results, max_results=3):
                 f"Search Type - {result.get('Search Type', 'Unknown')}, "
                 f"Text ID - {result.get('Text ID', 'Unknown')}, "
                 f"Summary - {result.get('Summary', 'No summary')}, "
-                f"Key Quote - {result.get('Key Quote', 'No quote')}, "
+                f"Full Text (select the most relevant passage to quote directly) - {result.get('Key Quote', 'No quote')}, "
                 f"Relevance Score - {result.get('Relevance Score', 0.0):.2f}"
             )
             formatted_results.append(formatted_entry)

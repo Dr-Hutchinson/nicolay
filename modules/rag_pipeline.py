@@ -80,7 +80,7 @@ def run_rag_pipeline(
     gc=None,
     openai_api_key=None,
     cohere_api_key=None,
-    top_n_results=5  # v3 uses k=5 matches
+    top_n_results=5
 ):
     try:
         # 1. Load Prompts
@@ -156,7 +156,7 @@ def run_rag_pipeline(
         model_weighted_keywords = hay_output.get("weighted_keywords", {})
         model_year_keywords = hay_output.get("year_keywords", [])
         model_text_keywords = hay_output.get("text_keywords", [])
-        model_query_assessment = hay_output.get("query_assessment", {})  # New in Hay v3
+        model_query_assessment = hay_output.get("query_assessment", "")  # New in Hay v3 — plain string
 
         if hays_data_logger:
             hays_data_logger.record_api_outputs({
@@ -165,7 +165,7 @@ def run_rag_pipeline(
                 "weighted_keywords": model_weighted_keywords,
                 "year_keywords": model_year_keywords,
                 "text_keywords": model_text_keywords,
-                "query_assessment": json.dumps(model_query_assessment),  # New in Hay v3
+                "query_assessment": model_query_assessment,  # String — no json.dumps needed
                 "full_output": raw_hay_output,
                 "Timestamp": dt.now()
             })

@@ -1,1 +1,31 @@
-Generate a detailed and accurate initial response to the user's query, focusing on Abraham Lincoln's perspectives and historical context. After the initial response, identify and list a set of weighted keywords. These keywords should be unique and specifically tailored to the query, with an emphasis on low-frequency, single-word terms that are likely to appear in Lincoln's speeches and writings. Prioritize words that are significant yet less common, as they will be more effective for dynamic keyword searches against the Lincoln speech corpus. Additionally, if a particular speech or document by Lincoln is highly relevant to the query, please specify it. This approach will aid in narrowing down the search to the most pertinent texts. Ensure that the keywords and references are historically accurate and directly address the user's query.
+Generate a detailed and accurate initial response to the user's query, focusing on Abraham Lincoln's perspectives and historical context. After the initial response, identify and list a set of weighted keywords. These keywords should be unique and specifically tailored to the query, with an emphasis on low-frequency, single-word terms that are likely to appear in Lincoln's speeches and writings. Prioritize words that are significant yet less common, as they will be more effective for dynamic keyword searches against the Lincoln speech corpus. Additionally, if a particular speech or document by Lincoln is highly relevant to the query, please specify it using the exact source strings listed below. This approach will aid in narrowing down the search to the most pertinent texts. Ensure that the keywords and references are historically accurate and directly address the user's query.
+
+IMPORTANT — text_keywords must use ONLY the exact strings from this list. Do not name speeches not present here. If uncertain, leave text_keywords empty rather than guessing.
+
+CORPUS SOURCES (use these exact strings for text_keywords):
+1.  At Peoria, Illinois. October 16, 1854.
+2.  A House Divided Speech. June 16, 1858.
+3.  Eulogy on Henry Clay. July 6, 1852.
+4.  Farewell Address. February 11, 1861.
+5.  Cooper Union Address. February 27, 1860.
+6.  First Inaugural Address. March 4, 1861.
+7.  Second Inaugural Address. March 4, 1865.
+8.  July 4th Message to Congress. July 4, 1861.
+9.  First Annual Message. December 3, 1861.
+10. Second Annual Message. December 1, 1862
+11. Emancipation Proclamation. January 1, 1863.
+12. Public Letter to James Conkling. August 26, 1863
+13. Public Letter to James Conkling. August 26, 1864
+14. Third Annual Message. December 8, 1863.
+15. Gettysburg Address. November 19, 1863
+16. Fourth Annual Message. December 6, 1864
+17. Lincoln-Douglas Debates, First Debate, Ottawa, Illinois, August 21, 1858
+18. Lincoln-Douglas Debates, Second Debate, Freeport, Illinois, August 27, 1858
+19. Lincoln-Douglas Debates, Third Debate, Jonesboro, Illinois, September 15, 1858
+20. Lincoln-Douglas Debates, Fourth Debate, Charleston, Illinois, September 18, 1858
+21. Lincoln-Douglas Debates, Fifth Debate, Galesburg, Illinois, October 7, 1858
+22. Lincoln-Douglas Debates, Sixth Debate, Quincy, Illinois, October 13, 1858
+23. Lincoln-Douglas Debates, Seventh Debate, Alton, Illinois, October 15, 1858
+
+VALID YEARS for year_keywords: 1852, 1854, 1858, 1860, 1861, 1862, 1863, 1864, 1865
+Do not include years outside this list. If the relevant text spans multiple years, include all applicable years from this list. If uncertain, leave year_keywords empty.

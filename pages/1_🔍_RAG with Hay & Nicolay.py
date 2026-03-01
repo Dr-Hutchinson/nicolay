@@ -121,7 +121,6 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
     # Extract key information from model output
     final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
     references_raw = model_output.get("FinalAnswer", {}).get("References", [])
-    # References may be a list or a string in v3
     references = ", ".join(references_raw) if isinstance(references_raw, list) else str(references_raw)
 
     # User query analysis (v3 adds synthesis_assessment)
@@ -134,19 +133,18 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
     answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
     quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
 
-    # Model Feedback (v3 schema: Retrieval Quality Notes, Critical Missing Evidence Flag, Suggested Improvements)
+    # Model Feedback (v3: Retrieval Quality Notes, Critical Missing Evidence Flag, Suggested Improvements)
     model_feedback = model_output.get("Model Feedback", {})
     retrieval_quality = model_feedback.get("Retrieval Quality Notes",
-                           model_feedback.get("Response Effectiveness", ""))  # fallback for v2 compatibility
+                           model_feedback.get("Response Effectiveness", ""))  # v2 fallback
     missing_evidence = model_feedback.get("Critical Missing Evidence Flag", "")
     suggested_improvements = model_feedback.get("Suggested Improvements",
-                                model_feedback.get("Suggestions for Improvement", ""))  # fallback for v2
+                                model_feedback.get("Suggestions for Improvement", ""))  # v2 fallback
 
-    # Match analysis - handles both v2 (3 matches) and v3 (5 matches, RerankedMatch1-5)
+    # Match analysis — generic loop handles both v2 (3 matches) and v3 (5 matches, RerankedMatch1-5)
     match_analysis = model_output.get("Match Analysis", {})
     match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
     match_data = {}
-
     for match_key, match_details in match_analysis.items():
         match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
         match_data[match_key] = "; ".join(match_info)
@@ -155,7 +153,7 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
     meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
     meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
 
-    # Construct a record for logging
+    # Construct record
     record = {
         'Timestamp': dt.now(),
         'UserQuery': user_query,
@@ -167,7 +165,7 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'HistoricalContext': historical_context,
         'AnswerEvaluation': answer_evaluation,
         'QuoteIntegration': quote_integration,
-        **match_data,  # Unpacks RerankedMatch1-5 (v3) or Match1-3 (v2)
+        **match_data,
         'MetaStrategy': str(meta_strategy),
         'MetaSynthesis': meta_synthesis,
         'RetrievalQualityNotes': retrieval_quality,
@@ -175,11 +173,9 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'SuggestedImprovements': suggested_improvements
     }
 
-    # Add highlight success information for each match
     for match_key, success in highlight_success_dict.items():
         record[f'{match_key}_HighlightSuccess'] = success
 
-    # Log the record
     nicolay_data_logger.record_api_outputs(record)
 
 # System prompt
@@ -496,9 +492,8 @@ with st.form("Search Interface"):
             def format_reranked_results_for_model_input(reranked_results):
                 formatted_results = []
                 # v3 uses k=5 matches
-                top_five_results = reranked_results[:5]
-                for result in top_five_results:
-                    formatted_entry = f"Match {result['Rank']}: " \
+                for idx, result in enumerate(reranked_results[:5], 1):
+                    formatted_entry = f"Match {idx}: " \
                                       f"Search Type - {result['Search Type']}, " \
                                       f"Text ID - {result['Text ID']}, " \
                                       f"Source - {result['Source']}, " \
@@ -553,9 +548,9 @@ with st.form("Search Interface"):
 
              # Send the messages to the fine-tuned model
                 response = client.chat.completions.create(
-                    #model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",  # Hays finetuned model, GPT-3.5
-                    #model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",  # Hays v2 model
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",  # Hays v3 model
+                    #model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",  # Hays v1, GPT-3.5
+                    #model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",  # Hays v2
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",  # Hays v3
                     messages=messages_for_model,
                     temperature=0,
                     max_tokens=800,  # Increased for v3 query_assessment field
@@ -573,7 +568,7 @@ with st.form("Search Interface"):
                 model_weighted_keywords = api_response_data['weighted_keywords']
                 model_year_keywords = api_response_data['year_keywords']
                 model_text_keywords = api_response_data['text_keywords']
-                model_query_assessment = api_response_data.get('query_assessment', {})  # New in Hay v3
+                model_query_assessment = api_response_data.get('query_assessment', '')  # New in Hay v3 — plain string
 
                 hays_data = {
                     'query': user_query,
@@ -581,7 +576,7 @@ with st.form("Search Interface"):
                     'weighted_keywords': model_weighted_keywords,
                     'year_keywords': model_year_keywords,
                     'text_keywords': model_text_keywords,
-                    'query_assessment': json.dumps(model_query_assessment),  # New in Hay v3
+                    'query_assessment': model_query_assessment,  # String — no json.dumps needed
                     'full_output': msg
                 }
 
@@ -681,7 +676,7 @@ with st.form("Search Interface"):
                             st.write("**Text Keywords:**")
                             st.json(text_keywords)
                             st.write("**Query Assessment (Hay v3):**")
-                            st.json(model_query_assessment)
+                            st.write(model_query_assessment)
                             st.write("**Raw Search Results**")
                             st.dataframe(search_results)
                             st.write("**Full Model Output**")
@@ -963,8 +958,8 @@ with st.form("Search Interface"):
                         # Send the messages to the finetuned model
                         second_model_response = client.chat.completions.create(
                             #model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Nicolay v1, GPT-3.5
-                            #model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",  # Nicolay v2 model
-                            model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",  # Nicolay v3 model
+                            #model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",  # Nicolay v2
+                            model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",  # Nicolay v3
                             messages=messages_for_second_model,
                             temperature=0,
                             max_tokens=3000,  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers

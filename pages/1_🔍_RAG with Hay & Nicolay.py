@@ -955,15 +955,15 @@ with st.form("Search Interface"):
                                     'Key Quote': full_text,   # Column name retained for downstream compatibility
                                     'Relevance Score': result.relevance_score
                                 })
-                                    # Display only the top 3 results
-                                    if idx < 3:
-                                        expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
-                                        with st.expander(expander_label):
-                                            st.markdown(f"Text ID: {text_id}")
-                                            st.markdown(f"{source}")
-                                            st.markdown(f"{summary}")
-                                            st.markdown(f"Full Text (excerpt):\n{full_text[:500]}{'...' if len(full_text) > 500 else ''}")
-                                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
+                                # Display only the top 3 results
+                                if idx < 3:
+                                    expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
+                                    with st.expander(expander_label):
+                                        st.markdown(f"Text ID: {text_id}")
+                                        st.markdown(f"{source}")
+                                        st.markdown(f"{summary}")
+                                        st.markdown(f"Full Text (excerpt):\n{full_text[:500]}{'...' if len(full_text) > 500 else ''}")
+                                        st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))
 

@@ -876,28 +876,50 @@ with st.form("Search Interface"):
 
                     all_combined_data = []
 
-                    # Format deduplicated results for reranking
+                    # Format deduplicated results for reranking — YAML format with full chunk text.
+                    # Replaces the previous pipe-delimited key-quote-window approach.
+                    # lincoln_dict is keyed as "Text #: {text_id}" and contains 'full_text'.
                     for index, result in deduplicated_results.iterrows():
-                        # Check if the result is from keyword search or semantic search
                         if result.text_id in search_results.text_id.values and perform_keyword_search:
-                            # Format as keyword search result
-                            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
-                            all_combined_data.append(combined_data)
+                            search_type = "Keyword"
                         elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                            # Format as semantic search result
-                            segments = segment_text(result.full_text)
-                            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                            top_segment = max(segment_scores, key=lambda x: x[1])
-                            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
-                            all_combined_data.append(combined_data)
+                            search_type = "Semantic"
+                        else:
+                            continue
+
+                        text_id = str(result.text_id)
+                        summary = str(result.summary) if hasattr(result, 'summary') else ""
+
+                        # Full chunk text from corpus (mirrors Cohere reranking upgrade)
+                        lookup_key = f"Text #: {text_id}"
+                        corpus_entry = lincoln_dict.get(lookup_key, {})
+                        full_text = corpus_entry.get('full_text', "")
+
+                        # Fallback: use key quote or top segment if full_text lookup fails
+                        if not full_text:
+                            if search_type == "Keyword" and hasattr(result, 'quote'):
+                                full_text = str(result.quote)
+                            elif search_type == "Semantic":
+                                segments = segment_text(result.full_text)
+                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                                top_segment = max(segment_scores, key=lambda x: x[1])
+                                full_text = top_segment[0]
+
+                        import yaml as _yaml
+                        doc_dict = {
+                            "search_type": search_type,
+                            "text_id": text_id,
+                            "summary": summary,
+                            "full_text": full_text,
+                        }
+                        all_combined_data.append(_yaml.dump(doc_dict, allow_unicode=True, default_flow_style=False, sort_keys=False))
 
                     # Use all_combined_data for reranking
                     if all_combined_data:
                         st.markdown("### Ranked Search Results")
                         try:
                             reranked_response = co.rerank(
-                                #model='rerank-english-v2.0',
-                                model='rerank-v3.5',
+                                model='rerank-v4.0-pro',
                                 query=user_query,
                                 documents=all_combined_data,
                                 top_n=10
@@ -906,28 +928,33 @@ with st.form("Search Interface"):
                                 st.write(relevance_ranking_explainer)
 
                             # DataFrame for storing all reranked results
+                            import yaml as _yaml
                             full_reranked_results = []
-                            for idx, result in enumerate(reranked_response.results):  # Access the results attribute of the response
+                            for idx, result in enumerate(reranked_response.results):
                                 combined_data = result.document
-                                data_parts = combined_data['text'].split("|")
-                                if len(data_parts) >= 4:
-                                    search_type, text_id_part, summary, quote = data_parts
-                                    text_id = str(text_id_part.split(":")[-1].strip())
-                                    summary = summary.strip()
-                                    quote = quote.strip()
-                                    # Retrieve source information
-                                    text_id_str = f"Text #: {text_id}"
-                                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-                                    # Store each result in the DataFrame
-                                    full_reranked_results.append({
-                                        'Rank': idx + 1,
-                                        'Search Type': search_type,
-                                        'Text ID': text_id,
-                                        'Source': source,
-                                        'Summary': summary,
-                                        'Key Quote': quote,
-                                        'Relevance Score': result.relevance_score
-                                    })
+                                doc_text = combined_data['text'] if isinstance(combined_data, dict) else str(combined_data)
+                                try:
+                                    doc_parsed = _yaml.safe_load(doc_text) or {}
+                                except _yaml.YAMLError:
+                                    doc_parsed = {}
+
+                                search_type = str(doc_parsed.get("search_type", "Unknown")).strip()
+                                text_id = str(doc_parsed.get("text_id", "Unknown")).strip()
+                                summary = str(doc_parsed.get("summary", "")).strip()
+                                full_text = str(doc_parsed.get("full_text", "")).strip()
+
+                                text_id_str = f"Text #: {text_id}"
+                                source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
+
+                                full_reranked_results.append({
+                                    'Rank': idx + 1,
+                                    'Search Type': search_type,
+                                    'Text ID': text_id,
+                                    'Source': source,
+                                    'Summary': summary,
+                                    'Key Quote': full_text,   # Column name retained for downstream compatibility
+                                    'Relevance Score': result.relevance_score
+                                })
                                     # Display only the top 3 results
                                     if idx < 3:
                                         expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
@@ -935,7 +962,7 @@ with st.form("Search Interface"):
                                             st.markdown(f"Text ID: {text_id}")
                                             st.markdown(f"{source}")
                                             st.markdown(f"{summary}")
-                                            st.markdown(f"Key Quote:\n{quote}")
+                                            st.markdown(f"Full Text (excerpt):\n{full_text[:500]}{'...' if len(full_text) > 500 else ''}")
                                             st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
                         except Exception as e:
                             st.error("Error in reranking: " + str(e))

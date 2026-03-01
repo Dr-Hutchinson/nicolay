@@ -256,8 +256,8 @@ def run_rag_pipeline(
         reranked_df = pd.DataFrame()
         if perform_reranking and not combined_df.empty:
             try:
-                # Prepare documents using the new function from reranking.py
-                documents_for_cohere = prepare_documents_for_reranking(combined_df, user_query)
+                # Prepare documents using YAML format with full chunk text (Cohere reranking upgrade)
+                documents_for_cohere = prepare_documents_for_reranking(combined_df, user_query, lincoln_dict=lincoln_dict)
 
                 # Use the new reranking function
                 reranked_df = rerank_results(

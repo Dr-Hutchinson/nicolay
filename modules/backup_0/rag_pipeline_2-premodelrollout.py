@@ -80,7 +80,7 @@ def run_rag_pipeline(
     gc=None,
     openai_api_key=None,
     cohere_api_key=None,
-    top_n_results=5  # v3 uses k=5 matches
+    top_n_results=5
 ):
     try:
         # 1. Load Prompts
@@ -144,10 +144,10 @@ def run_rag_pipeline(
             {"role": "user", "content": user_query}
         ]
         response = openai_client.chat.completions.create(
-            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",
             messages=messages_for_model,
             temperature=0,
-            max_tokens=800  # Increased for v3 query_assessment field
+            max_tokens=500
         )
         raw_hay_output = response.choices[0].message.content
 
@@ -156,7 +156,6 @@ def run_rag_pipeline(
         model_weighted_keywords = hay_output.get("weighted_keywords", {})
         model_year_keywords = hay_output.get("year_keywords", [])
         model_text_keywords = hay_output.get("text_keywords", [])
-        model_query_assessment = hay_output.get("query_assessment", {})  # New in Hay v3
 
         if hays_data_logger:
             hays_data_logger.record_api_outputs({
@@ -165,7 +164,6 @@ def run_rag_pipeline(
                 "weighted_keywords": model_weighted_keywords,
                 "year_keywords": model_year_keywords,
                 "text_keywords": model_text_keywords,
-                "query_assessment": json.dumps(model_query_assessment),  # New in Hay v3
                 "full_output": raw_hay_output,
                 "Timestamp": dt.now()
             })
@@ -296,10 +294,10 @@ def run_rag_pipeline(
                 ]
 
                 second_model_response = openai_client.chat.completions.create(
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+                    model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",
                     messages=nicolay_messages,
                     temperature=0,
-                    max_tokens=3000  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers
+                    max_tokens=2000
                 )
 
                 raw_nicolay = second_model_response.choices[0].message.content
@@ -328,7 +326,6 @@ def run_rag_pipeline(
         return {
             "hay_output": hay_output,
             "initial_answer": initial_answer,
-            "query_assessment": model_query_assessment,  # New in Hay v3
             "search_results": search_results_df,
             "semantic_results": semantic_matches_df,
             "colbert_results": colbert_matches_df,

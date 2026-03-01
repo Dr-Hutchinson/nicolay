@@ -97,13 +97,17 @@ def rerank_results(query, documents, cohere_client, model='rerank-v3.5', top_n=1
         return pd.DataFrame()
 
 
-def format_reranked_results_for_model_input(reranked_results, max_results=5):
+def format_reranked_results_for_model_input(reranked_results, max_results=5, lincoln_dict=None):
     """
     Formats reranked results for input to the Nicolay model.
 
     Args:
         reranked_results (list): List of dictionaries containing reranked results
         max_results (int): Maximum number of results to format (v3 uses k=5)
+        lincoln_dict (dict): Optional. Corpus dictionary keyed as "Text #: {text_id}",
+                             used to look up full chunk text for each match.
+                             If provided, full corpus text is passed instead of the
+                             key quote window, resolving the key quote bottleneck (dev log #50).
 
     Returns:
         str: Formatted string of results
@@ -113,12 +117,30 @@ def format_reranked_results_for_model_input(reranked_results, max_results=5):
     # Take only the top N results
     for idx, result in enumerate(reranked_results[:max_results], 1):
         try:
+            text_id = result.get('Text ID', 'Unknown')
+
+            # Resolve full chunk text from corpus if lincoln_dict is available (dev log #50).
+            # Falls back to the key quote window if lookup fails or lincoln_dict is not provided.
+            full_text = None
+            if lincoln_dict is not None:
+                lookup_key = f"Text #: {text_id}"
+                corpus_entry = lincoln_dict.get(lookup_key, {})
+                full_text = corpus_entry.get('full_text', None)
+
+            if full_text:
+                text_field_label = "Full Text (select the most relevant passage to quote directly)"
+                text_field_value = full_text
+            else:
+                # Fallback: key quote window (pre-dev-log-#50 behavior)
+                text_field_label = "Full Text (select the most relevant passage to quote directly)"
+                text_field_value = result.get('Key Quote', 'No quote')
+
             formatted_entry = (
                 f"Match {idx}: "
                 f"Search Type - {result.get('Search Type', 'Unknown')}, "
-                f"Text ID - {result.get('Text ID', 'Unknown')}, "
-                f"Summary - {result.get('Summary', 'No summary')}, "
-                f"Full Text (select the most relevant passage to quote directly) - {result.get('Key Quote', 'No quote')}, "
+                f"Text ID - {text_id}, "
+                f"Summary (curatorial description only — not quotable corpus text) - {result.get('Summary', 'No summary')}, "
+                f"{text_field_label} - {text_field_value}, "
                 f"Relevance Score - {result.get('Relevance Score', 0.0):.2f}"
             )
             formatted_results.append(formatted_entry)

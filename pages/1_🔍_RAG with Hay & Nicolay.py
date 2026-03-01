@@ -493,12 +493,22 @@ with st.form("Search Interface"):
                 formatted_results = []
                 # v3 uses k=5 matches
                 for idx, result in enumerate(reranked_results[:5], 1):
+                    text_id = result['Text ID']
+
+                    # Dev log #50: look up full chunk text from lincoln_dict.
+                    # lincoln_dict is keyed as "Text #: {text_id}" and contains 'full_text'.
+                    # Falls back to key quote window if lookup fails.
+                    lookup_key = f"Text #: {text_id}"
+                    corpus_entry = lincoln_dict.get(lookup_key, {})
+                    full_text = corpus_entry.get('full_text', None)
+                    text_field_value = full_text if full_text else result['Key Quote']
+
                     formatted_entry = f"Match {idx}: " \
                                       f"Search Type - {result['Search Type']}, " \
-                                      f"Text ID - {result['Text ID']}, " \
+                                      f"Text ID - {text_id}, " \
                                       f"Source - {result['Source']}, " \
-                                      f"Summary - {result['Summary']}, " \
-                                      f"Full Text (select the most relevant passage to quote directly) - {result['Key Quote']}, " \
+                                      f"Summary (curatorial description only — not quotable corpus text) - {result['Summary']}, " \
+                                      f"Full Text (select the most relevant passage to quote directly) - {text_field_value}, " \
                                       f"Relevance Score - {result['Relevance Score']:.2f}"
                     formatted_results.append(formatted_entry)
                 return "\n\n".join(formatted_results)

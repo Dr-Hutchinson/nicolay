@@ -281,8 +281,8 @@ def run_rag_pipeline(
                 # Convert reranked_df to records for formatting if needed
                 reranked_records = reranked_df.to_dict('records') if isinstance(reranked_df, pd.DataFrame) else []
 
-                # Format top 3 for the second model
-                formatted_for_nicolay = format_reranked_results_for_model_input(reranked_records)
+                # Format top k=5 for the Nicolay model (dev log #50: pass lincoln_dict for full chunk text lookup)
+                formatted_for_nicolay = format_reranked_results_for_model_input(reranked_records, lincoln_dict=lincoln_dict)
 
                 # Build your message
                 nicolay_messages = [

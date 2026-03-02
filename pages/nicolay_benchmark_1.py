@@ -837,9 +837,9 @@ RESULTS_FILE = "nicolay_benchmark_results.json"
 CSV_FILE = "nicolay_benchmark_summary.csv"
 
 
-def load_results() -> dict:
-    if Path(RESULTS_FILE).exists():
-        with open(RESULTS_FILE, "r") as f:
+def load_results(results_file: str = RESULTS_FILE) -> dict:
+    if Path(results_file).exists():
+        with open(results_file, "r") as f:
             return json.load(f)
     return {
         "run_metadata": {
@@ -855,12 +855,12 @@ def load_results() -> dict:
     }
 
 
-def save_results(results: dict):
-    with open(RESULTS_FILE, "w") as f:
+def save_results(results: dict, results_file: str = RESULTS_FILE):
+    with open(results_file, "w") as f:
         json.dump(results, f, indent=2, default=str)
 
 
-def export_csv(results: dict) -> str:
+def export_csv(results: dict, csv_file: str = CSV_FILE) -> str:
     rows = []
     for qid, qdata in results.get("queries", {}).items():
         rows.append({
@@ -896,8 +896,8 @@ def export_csv(results: dict) -> str:
     if not rows:
         return ""
     df = pd.DataFrame(rows)
-    df.to_csv(CSV_FILE, index=False)
-    return CSV_FILE
+    df.to_csv(csv_file, index=False)
+    return csv_file
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1065,17 +1065,20 @@ def main():
         st.markdown("---")
         if st.button("📁 Export CSV"):
             results_data = st.session_state.get("results", load_results())
-            csv_path = export_csv(results_data)
+            _csv_path = str(Path(results_dir) / "nicolay_benchmark_summary.csv")
+            csv_path = export_csv(results_data, _csv_path)
             if csv_path and Path(csv_path).exists():
                 with open(csv_path, "rb") as f:
-                    st.download_button("⬇️ Download CSV", f, file_name=CSV_FILE, mime="text/csv")
+                    st.download_button("⬇️ Download CSV", f, file_name="nicolay_benchmark_summary.csv", mime="text/csv")
 
     # ── LOAD SAVED RESULTS ────────────────────────────────────────────────────
+    # Resolve file paths from sidebar setting. Store in session_state so they
+    # remain consistent across Streamlit reruns without touching module-level constants.
+    results_file_path = str(Path(results_dir) / "nicolay_benchmark_results.json")
+    csv_file_path = str(Path(results_dir) / "nicolay_benchmark_summary.csv")
+
     if "results" not in st.session_state:
-        global RESULTS_FILE, CSV_FILE
-        RESULTS_FILE = str(Path(results_dir) / "nicolay_benchmark_results.json")
-        CSV_FILE = str(Path(results_dir) / "nicolay_benchmark_summary.csv")
-        st.session_state.results = load_results()
+        st.session_state.results = load_results(results_file_path)
 
     results = st.session_state.results
 
@@ -1177,7 +1180,7 @@ def main():
                             status_cb=lambda msg: status_box.info(msg)
                         )
                     results["queries"][q["id"]] = qresult
-                    save_results(results)
+                    save_results(results, results_file_path)
                     st.session_state.results = results
                     progress_bar.progress((i + 1) / len(queries_to_run))
 
@@ -1356,7 +1359,7 @@ def main():
                 qr["rubric_total"] = total
                 qr["evaluator_notes"] = notes
                 results["queries"][selected_query_id] = qr
-                save_results(results)
+                save_results(results, results_file_path)
                 st.session_state.results = results
                 st.success("✅ Rubric scores saved.")
 

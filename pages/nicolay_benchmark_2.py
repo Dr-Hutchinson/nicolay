@@ -830,17 +830,26 @@ def compute_bleu_rouge(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RESULTS PERSISTENCE
+# RESULTS PERSISTENCE — Google Sheets primary, session_state working store
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Streamlit Cloud has an ephemeral filesystem — local file writes do not
+# survive reruns or sleep cycles. Google Sheets is the durable store.
+#
+# Architecture:
+#   • st.session_state.results  — live working dict for the current session
+#   • benchmark_logger          — appends one row per query to "benchmark_results"
+#   • On startup: optionally reads prior rows back from Sheets to resume
+#
+# The "Results Directory" sidebar option is retained for local dev convenience
+# but is not used on Cloud. The CSV export button serialises session_state
+# directly so it works regardless of filesystem.
 
-RESULTS_FILE = "nicolay_benchmark_results.json"
+RESULTS_FILE = "nicolay_benchmark_results.json"   # local dev fallback only
 CSV_FILE = "nicolay_benchmark_summary.csv"
 
 
-def load_results(results_file: str = RESULTS_FILE) -> dict:
-    if Path(results_file).exists():
-        with open(results_file, "r") as f:
-            return json.load(f)
+def empty_results() -> dict:
     return {
         "run_metadata": {
             "date": datetime.now().strftime("%Y-%m-%d"),
@@ -855,12 +864,156 @@ def load_results(results_file: str = RESULTS_FILE) -> dict:
     }
 
 
+def load_results(results_file: str = RESULTS_FILE) -> dict:
+    """Load from local file (local dev only). Returns empty results if not found."""
+    if Path(results_file).exists():
+        try:
+            with open(results_file, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return empty_results()
+
+
 def save_results(results: dict, results_file: str = RESULTS_FILE):
-    with open(results_file, "w") as f:
-        json.dump(results, f, indent=2, default=str)
+    """Write to local file (local dev only). Silently no-ops on Cloud."""
+    try:
+        with open(results_file, "w") as f:
+            json.dump(results, f, indent=2, default=str)
+    except Exception:
+        pass  # Expected on Streamlit Cloud — Sheets is the real store
 
 
-def export_csv(results: dict, csv_file: str = CSV_FILE) -> str:
+def log_query_to_sheets(benchmark_logger, qresult: dict):
+    """
+    Append one benchmark query result row to the 'benchmark_results' Google Sheet.
+    Matches the DataLogger.record_api_outputs(record_dict) interface from data_logging.py.
+
+    Sheet columns (create these headers in your benchmark_results sheet):
+    Timestamp, QueryID, Query, Category, HayModel, NicolayModel,
+    HayTypeExpected, HayTypeGot, HayTypeCorrect, HayKeywordCount,
+    HaySpuriousFields, HayTrainingBleed, InitialAnswer, QueryAssessment,
+    RetrievedDocIDs, RetrievalSearchTypes, RerankerScores,
+    PrecisionAt5, RecallAt5, CeilingAdjustedPrecision,
+    IdealDocsHit, IdealDocsMissed,
+    NicolayTypeExpected, NicolayTypeGot, NicolayTypeCorrect,
+    SchemaComplete, FinalAnswerWordCount,
+    QuotesVerified, QuotesDisplaced, QuotesFabricated,
+    BleuMaxRetrieved, BleuAvgRetrieved,
+    Rouge1MaxRetrieved, Rouge1AvgRetrieved,
+    Rouge1MaxIdeal, Rouge1AvgIdeal,
+    Rouge1RetrievedVsIdealRatio,
+    RougeL_MaxRetrieved, RougeL_MaxIdeal,
+    CriticalMissingEvidence,
+    RubricFactualAccuracy, RubricCitationAccuracy,
+    RubricHistoriographicalDepth, RubricEpistemicCalibration,
+    RubricTotal, EvaluatorNotes
+    """
+    if benchmark_logger is None:
+        return
+
+    hay_out = qresult.get("hay_output", {})
+
+    record = {
+        "Timestamp": datetime.now().isoformat(),
+        "QueryID": qresult.get("id", ""),
+        "Query": qresult.get("query", ""),
+        "Category": qresult.get("category", ""),
+        "HayModel": HAY_MODEL,
+        "NicolayModel": NICOLAY_MODEL,
+        # Hay layer
+        "HayTypeExpected": qresult.get("expected_hay_type", ""),
+        "HayTypeGot": qresult.get("hay_task_type_raw", ""),
+        "HayTypeCorrect": str(qresult.get("hay_task_type_correct", "")),
+        "HayKeywordCount": qresult.get("hay_keyword_count", ""),
+        "HaySpuriousFields": json.dumps(qresult.get("hay_spurious_fields", [])),
+        "HayTrainingBleed": str(qresult.get("hay_training_bleed", False)),
+        "InitialAnswer": hay_out.get("initial_answer", ""),
+        "QueryAssessment": hay_out.get("query_assessment", ""),
+        # Retrieval layer
+        "RetrievedDocIDs": json.dumps(qresult.get("retrieved_doc_ids", [])),
+        "RetrievalSearchTypes": json.dumps(qresult.get("retrieval_search_types", [])),
+        "RerankerScores": json.dumps(qresult.get("reranker_scores", [])),
+        "PrecisionAt5": qresult.get("precision_at_5", ""),
+        "RecallAt5": qresult.get("recall_at_5", ""),
+        "CeilingAdjustedPrecision": qresult.get("ceiling_adjusted_precision", ""),
+        "IdealDocsHit": json.dumps(qresult.get("ideal_docs_hit", [])),
+        "IdealDocsMissed": json.dumps(qresult.get("ideal_docs_missed", [])),
+        # Nicolay layer
+        "NicolayTypeExpected": qresult.get("expected_nicolay_type", ""),
+        "NicolayTypeGot": qresult.get("nicolay_synthesis_type_raw", ""),
+        "NicolayTypeCorrect": str(qresult.get("nicolay_synthesis_type_correct", "")),
+        "SchemaComplete": str(qresult.get("nicolay_schema_complete", "")),
+        "FinalAnswerWordCount": qresult.get("nicolay_final_answer_wordcount", ""),
+        # Quote verification
+        "QuotesVerified": qresult.get("quotes_verified_count", ""),
+        "QuotesDisplaced": qresult.get("quotes_displaced_count", ""),
+        "QuotesFabricated": qresult.get("quotes_fabricated_count", ""),
+        # BLEU/ROUGE
+        "BleuMaxRetrieved": qresult.get("bleu_max_retrieved", ""),
+        "BleuAvgRetrieved": qresult.get("bleu_avg_retrieved", ""),
+        "Rouge1MaxRetrieved": qresult.get("rouge1_max_retrieved", ""),
+        "Rouge1AvgRetrieved": qresult.get("rouge1_avg_retrieved", ""),
+        "Rouge1MaxIdeal": qresult.get("rouge1_max_ideal", ""),
+        "Rouge1AvgIdeal": qresult.get("rouge1_avg_ideal", ""),
+        "Rouge1RetrievedVsIdealRatio": qresult.get("rouge1_retrieved_vs_ideal_ratio", ""),
+        "RougeL_MaxRetrieved": qresult.get("rougeL_max_retrieved", ""),
+        "RougeL_MaxIdeal": qresult.get("rougeL_max_ideal", ""),
+        # Critical missing evidence
+        "CriticalMissingEvidence": qresult.get("critical_missing_evidence", "") or "",
+        # Qualitative rubric (may be null until manually scored)
+        "RubricFactualAccuracy": qresult.get("rubric_factual_accuracy", "") if qresult.get("rubric_factual_accuracy") is not None else "",
+        "RubricCitationAccuracy": qresult.get("rubric_citation_accuracy", "") if qresult.get("rubric_citation_accuracy") is not None else "",
+        "RubricHistoriographicalDepth": qresult.get("rubric_historiographical_depth", "") if qresult.get("rubric_historiographical_depth") is not None else "",
+        "RubricEpistemicCalibration": qresult.get("rubric_epistemic_calibration", "") if qresult.get("rubric_epistemic_calibration") is not None else "",
+        "RubricTotal": qresult.get("rubric_total", "") if qresult.get("rubric_total") is not None else "",
+        "EvaluatorNotes": qresult.get("evaluator_notes", ""),
+    }
+
+    try:
+        benchmark_logger.record_api_outputs(record)
+    except Exception as e:
+        st.warning(f"⚠️ Sheets logging failed for {qresult.get('id', '?')}: {e}")
+
+
+def update_rubric_in_sheets(benchmark_logger, gc_client, qid: str, rubric_data: dict):
+    """
+    Update rubric scores for an already-logged row in benchmark_results sheet.
+    Finds the row by QueryID and updates the rubric columns in place.
+    Falls back to appending a new row if the query isn't found.
+    """
+    if benchmark_logger is None or gc_client is None:
+        return
+    try:
+        sh = gc_client.open("benchmark_results").sheet1
+        all_rows = sh.get_all_records()
+        headers = sh.row(1)  # Get header row
+
+        # Find column indices for rubric fields
+        rubric_cols = {
+            "RubricFactualAccuracy": None, "RubricCitationAccuracy": None,
+            "RubricHistoriographicalDepth": None, "RubricEpistemicCalibration": None,
+            "RubricTotal": None, "EvaluatorNotes": None
+        }
+        for i, h in enumerate(headers, 1):
+            if h in rubric_cols:
+                rubric_cols[h] = i
+
+        # Find the row with matching QueryID
+        for row_idx, row in enumerate(all_rows, 2):  # data starts at row 2
+            if row.get("QueryID") == qid:
+                for col_name, col_idx in rubric_cols.items():
+                    if col_idx and col_name in rubric_data:
+                        sh.update_value((row_idx, col_idx), str(rubric_data[col_name]))
+                return
+        # Not found — shouldn't happen but log it
+        st.warning(f"Could not find {qid} in benchmark_results sheet to update rubric.")
+    except Exception as e:
+        st.warning(f"⚠️ Rubric sheet update failed: {e}")
+
+
+def export_csv(results: dict, csv_file: str = CSV_FILE) -> bytes:
+    """Serialize results to CSV bytes for Streamlit download. No file write needed."""
     rows = []
     for qid, qdata in results.get("queries", {}).items():
         rows.append({
@@ -894,10 +1047,9 @@ def export_csv(results: dict, csv_file: str = CSV_FILE) -> str:
             "evaluator_notes": qdata.get("evaluator_notes", ""),
         })
     if not rows:
-        return ""
+        return b""
     df = pd.DataFrame(rows)
-    df.to_csv(csv_file, index=False)
-    return csv_file
+    return df.to_csv(index=False).encode("utf-8")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1045,7 +1197,35 @@ def main():
                                         value="prompts/hay_system_prompt.txt")
         nicolay_prompt_file = st.text_input("Nicolay system prompt file",
                                              value="prompts/nicolay_system_prompt.txt")
-        results_dir = st.text_input("Results directory", value=".")
+
+        st.markdown("---")
+        st.markdown("### 📊 Google Sheets Logging")
+        st.caption("Results are saved to Sheets on each query — durable across reruns on Streamlit Cloud.")
+        sheets_enabled = st.checkbox("Enable Sheets logging", value=True)
+
+        # Initialize Google Sheets logger
+        # Reads credentials from st.secrets["gcp_service_account"] (set in Streamlit Cloud secrets)
+        benchmark_logger = None
+        gc_client = None
+        if sheets_enabled:
+            try:
+                from google.oauth2 import service_account as gcp_sa
+                import pygsheets
+                if "gcp_service_account" in st.secrets:
+                    _creds = gcp_sa.Credentials.from_service_account_info(
+                        st.secrets["gcp_service_account"],
+                        scopes=["https://www.googleapis.com/auth/drive"]
+                    )
+                    gc_client = pygsheets.authorize(custom_credentials=_creds)
+                    from modules.data_logging import DataLogger
+                    benchmark_logger = DataLogger(gc=gc_client, sheet_name="benchmark_results")
+                    st.success("✅ Sheets connected")
+                else:
+                    st.warning("⚠️ No gcp_service_account in secrets — Sheets logging disabled.")
+            except ImportError:
+                st.warning("⚠️ pygsheets not installed — Sheets logging disabled.")
+            except Exception as e:
+                st.warning(f"⚠️ Sheets init failed: {e}")
 
         st.markdown("---")
         st.markdown("### 📋 Run Mode")
@@ -1064,21 +1244,17 @@ def main():
 
         st.markdown("---")
         if st.button("📁 Export CSV"):
-            results_data = st.session_state.get("results", load_results())
-            _csv_path = str(Path(results_dir) / "nicolay_benchmark_summary.csv")
-            csv_path = export_csv(results_data, _csv_path)
-            if csv_path and Path(csv_path).exists():
-                with open(csv_path, "rb") as f:
-                    st.download_button("⬇️ Download CSV", f, file_name="nicolay_benchmark_summary.csv", mime="text/csv")
+            results_data = st.session_state.get("results", empty_results())
+            csv_bytes = export_csv(results_data)
+            if csv_bytes:
+                st.download_button("⬇️ Download CSV", csv_bytes,
+                                   file_name="nicolay_benchmark_summary.csv", mime="text/csv")
 
     # ── LOAD SAVED RESULTS ────────────────────────────────────────────────────
-    # Resolve file paths from sidebar setting. Store in session_state so they
-    # remain consistent across Streamlit reruns without touching module-level constants.
-    results_file_path = str(Path(results_dir) / "nicolay_benchmark_results.json")
-    csv_file_path = str(Path(results_dir) / "nicolay_benchmark_summary.csv")
-
+    # session_state is the live working store. On Cloud, this resets on sleep/rerun.
+    # The durable record is in Google Sheets. For local dev, also try loading from file.
     if "results" not in st.session_state:
-        st.session_state.results = load_results(results_file_path)
+        st.session_state.results = load_results()  # returns empty_results() on Cloud
 
     results = st.session_state.results
 
@@ -1180,7 +1356,9 @@ def main():
                             status_cb=lambda msg: status_box.info(msg)
                         )
                     results["queries"][q["id"]] = qresult
-                    save_results(results, results_file_path)
+                    # Persist: Sheets first (durable on Cloud), then local file (dev fallback)
+                    log_query_to_sheets(benchmark_logger, qresult)
+                    save_results(results)
                     st.session_state.results = results
                     progress_bar.progress((i + 1) / len(queries_to_run))
 
@@ -1359,8 +1537,14 @@ def main():
                 qr["rubric_total"] = total
                 qr["evaluator_notes"] = notes
                 results["queries"][selected_query_id] = qr
-                save_results(results, results_file_path)
+                save_results(results)
                 st.session_state.results = results
+                # Update Sheets row in place
+                update_rubric_in_sheets(benchmark_logger, gc_client, selected_query_id, {
+                    "RubricFactualAccuracy": fa, "RubricCitationAccuracy": ca,
+                    "RubricHistoriographicalDepth": hd, "RubricEpistemicCalibration": ec,
+                    "RubricTotal": total, "EvaluatorNotes": notes
+                })
                 st.success("✅ Rubric scores saved.")
 
     # ═══════════════════════════════════════════════════════════════════════

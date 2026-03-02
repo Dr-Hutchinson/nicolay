@@ -1,0 +1,74 @@
+You will be given a user query, an initial answer from a retrieval model, and a list of five retrieved passages from Abraham Lincoln's speeches. Each passage includes a Text ID, Source, Full Text excerpt, and Relevance Score. Generate a structured chain-of-thought response in the following JSON format:
+
+{
+  "User Query Analysis": {
+    "synthesis_assessment": "Classify the synthesis task type and identify the primary reasoning challenge: (1) Direct Synthesis — one passage clearly answers the query; (2) Multi-Passage Synthesis — 2-3 passages contribute complementary evidence; (3) Absence/Partial Hit — no passage directly answers; evidence is indirect, sparse, or absent; (4) Historiographical Framing — passages support competing interpretations; surface both without premature resolution; (5) Tone Transfer / Epistemic Calibration — query involves sensitive topics (race, citizenship, colonization, violence) requiring careful framing and source-grounded restraint. State which type applies and why, based on the relevance scores and content of the retrieved passages.",
+    "Query Intent": "An analysis of what information the user is seeking.",
+    "Historical Context": "Brief context situating the query in Lincoln's era and corpus."
+  },
+  "Initial Answer Review": {
+    "Answer Evaluation": "Evaluate the initial answer's accuracy and completeness against the retrieved evidence. Where the initial answer diverges from or oversimplifies what the corpus shows, flag this explicitly.",
+    "Quote Integration Points": "Identify where direct corpus quotes would strengthen or correct the initial answer."
+  },
+  "Match Analysis": {
+    "RerankedMatch1": {
+      "Text ID": "text_id value",
+      "Source": "source string",
+      "Summary": "Brief summary of this match's relation to the query.",
+      "Key Quote": "The most analytically relevant excerpt from the Full Text for this query.",
+      "Historical Context": "Contextual information situating this passage in Lincoln's era.",
+      "Relevance Assessment": "High, Medium, or Low — with one sentence of justification."
+    },
+    "RerankedMatch2": {
+      "Text ID": "...",
+      "Source": "...",
+      "Summary": "...",
+      "Key Quote": "...",
+      "Historical Context": "...",
+      "Relevance Assessment": "..."
+    },
+    "RerankedMatch3": {
+      "Text ID": "...",
+      "Source": "...",
+      "Summary": "...",
+      "Key Quote": "...",
+      "Historical Context": "...",
+      "Relevance Assessment": "..."
+    },
+    "RerankedMatch4": {
+      "Text ID": "...",
+      "Source": "...",
+      "Summary": "...",
+      "Key Quote": "...",
+      "Historical Context": "...",
+      "Relevance Assessment": "..."
+    },
+    "RerankedMatch5": {
+      "Text ID": "...",
+      "Source": "...",
+      "Summary": "...",
+      "Key Quote": "...",
+      "Historical Context": "...",
+      "Relevance Assessment": "..."
+    }
+  },
+  "Meta Analysis": {
+    "Strategy for Response Composition": {
+      "Match1": "How Match1 content contributes to the response.",
+      "Match2": "How Match2 content contributes, or why it is discounted.",
+      "Match3": "How Match3 content contributes, or why it is discounted.",
+      "Match4": "How Match4 content contributes, or why it is discounted/excluded.",
+      "Match5": "How Match5 content contributes, or why it is discounted/excluded."
+    },
+    "Synthesis": "The integrated argument across contributing matches. Where evidence is absent or contradictory, state this rather than papering over it."
+  },
+  "FinalAnswer": {
+    "Text": "A well-written response incorporating relevant quotes with parenthetical citations. Match the epistemological confidence to the evidence: hedge where evidence is indirect, acknowledge gaps where corpus is absent, and surface historiographical tension where it exists.",
+    "References": "List of sources cited."
+  },
+  "Model Feedback": {
+    "Retrieval Quality Notes": "Evaluate whether the retrieved passages adequately address the query. Flag systematic gaps.",
+    "Critical Missing Evidence Flag": "Identify any specific Lincoln speech, letter, or corpus addition that would materially change the answer.",
+    "Suggested Improvements": "What would strengthen this response — additional corpus coverage, different query framing, or follow-up questions the user should consider."
+  }
+}

@@ -695,9 +695,20 @@ def save_results(results: dict, results_file: str = RESULTS_FILE):
 def log_query_to_sheets(benchmark_logger, qresult: dict):
     """
     Append one benchmark query result row to the 'benchmark_results' Google Sheet.
-    Matches the DataLogger.record_api_outputs(record_dict) interface from data_logging.py.
+    Uses DataLogger.record_api_outputs(record_dict) from data_logging.py.
 
-    Sheet columns (create these headers in your benchmark_results sheet):
+    DataLogger.record_api_outputs() behavior:
+    - Adds a 'Timestamp' key (datetime.now()) to the dict, overwriting any existing one
+    - Converts the dict to a single-row DataFrame
+    - Calls sheet.set_dataframe(df, (end_row, 1), copy_head=False, extend=True)
+
+    IMPORTANT: pygsheets set_dataframe with copy_head=False writes values positionally,
+    not by column name. The sheet MUST have headers already set in row 1 matching the
+    column order in the record dict. If headers are absent or mismatched, data will be
+    written to wrong columns. Set up headers manually or via init_benchmark_sheet_headers()
+    below before the first run.
+
+    Sheet columns (must be present in row 1 of benchmark_results sheet, in this order):
     Timestamp, QueryID, Query, Category, HayModel, NicolayModel,
     HayTypeExpected, HayTypeGot, HayTypeCorrect, HayKeywordCount,
     HaySpuriousFields, HayTrainingBleed, InitialAnswer, QueryAssessment,
@@ -722,66 +733,112 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
 
     hay_out = qresult.get("hay_output", {})
 
+    # Build record — do NOT include 'Timestamp' here; DataLogger adds it automatically.
+    # All values must be JSON-serializable primitives (str, int, float, bool) because
+    # pygsheets cannot write Python objects directly to cells.
     record = {
-        "Timestamp": datetime.now().isoformat(),
-        "QueryID": qresult.get("id", ""),
-        "Query": qresult.get("query", ""),
-        "Category": qresult.get("category", ""),
-        "HayModel": HAY_MODEL,
-        "NicolayModel": NICOLAY_MODEL,
+        "QueryID": str(qresult.get("id", "")),
+        "Query": str(qresult.get("query", "")),
+        "Category": str(qresult.get("category", "")),
+        "HayModel": str(HAY_MODEL),
+        "NicolayModel": str(NICOLAY_MODEL),
         # Hay layer
-        "HayTypeExpected": qresult.get("expected_hay_type", ""),
-        "HayTypeGot": qresult.get("hay_task_type_raw", ""),
+        "HayTypeExpected": str(qresult.get("expected_hay_type", "")),
+        "HayTypeGot": str(qresult.get("hay_task_type_raw", "") or ""),
         "HayTypeCorrect": str(qresult.get("hay_task_type_correct", "")),
-        "HayKeywordCount": qresult.get("hay_keyword_count", ""),
+        "HayKeywordCount": int(qresult.get("hay_keyword_count", 0) or 0),
         "HaySpuriousFields": json.dumps(qresult.get("hay_spurious_fields", [])),
         "HayTrainingBleed": str(qresult.get("hay_training_bleed", False)),
-        "InitialAnswer": hay_out.get("initial_answer", ""),
-        "QueryAssessment": hay_out.get("query_assessment", ""),
+        "InitialAnswer": str(hay_out.get("initial_answer", "")),
+        "QueryAssessment": str(hay_out.get("query_assessment", "")),
         # Retrieval layer
         "RetrievedDocIDs": json.dumps(qresult.get("retrieved_doc_ids", [])),
         "RetrievalSearchTypes": json.dumps(qresult.get("retrieval_search_types", [])),
-        "RerankerScores": json.dumps(qresult.get("reranker_scores", [])),
-        "PrecisionAt5": qresult.get("precision_at_5", ""),
-        "RecallAt5": qresult.get("recall_at_5", ""),
-        "CeilingAdjustedPrecision": qresult.get("ceiling_adjusted_precision", ""),
+        "RerankerScores": json.dumps([
+            round(s, 6) if isinstance(s, float) else s
+            for s in qresult.get("reranker_scores", [])
+        ]),
+        "PrecisionAt5": float(qresult.get("precision_at_5", 0) or 0),
+        "RecallAt5": float(qresult.get("recall_at_5", 0) or 0),
+        "CeilingAdjustedPrecision": float(qresult.get("ceiling_adjusted_precision", 0) or 0),
         "IdealDocsHit": json.dumps(qresult.get("ideal_docs_hit", [])),
         "IdealDocsMissed": json.dumps(qresult.get("ideal_docs_missed", [])),
         # Nicolay layer
-        "NicolayTypeExpected": qresult.get("expected_nicolay_type", ""),
-        "NicolayTypeGot": qresult.get("nicolay_synthesis_type_raw", ""),
+        "NicolayTypeExpected": str(qresult.get("expected_nicolay_type", "")),
+        "NicolayTypeGot": str(qresult.get("nicolay_synthesis_type_raw", "") or ""),
         "NicolayTypeCorrect": str(qresult.get("nicolay_synthesis_type_correct", "")),
         "SchemaComplete": str(qresult.get("nicolay_schema_complete", "")),
-        "FinalAnswerWordCount": qresult.get("nicolay_final_answer_wordcount", ""),
+        "FinalAnswerWordCount": int(qresult.get("nicolay_final_answer_wordcount", 0) or 0),
         # Quote verification
-        "QuotesVerified": qresult.get("quotes_verified_count", ""),
-        "QuotesDisplaced": qresult.get("quotes_displaced_count", ""),
-        "QuotesFabricated": qresult.get("quotes_fabricated_count", ""),
+        "QuotesVerified": int(qresult.get("quotes_verified_count", 0) or 0),
+        "QuotesDisplaced": int(qresult.get("quotes_displaced_count", 0) or 0),
+        "QuotesFabricated": int(qresult.get("quotes_fabricated_count", 0) or 0),
         # BLEU/ROUGE
-        "BleuMaxRetrieved": qresult.get("bleu_max_retrieved", ""),
-        "BleuAvgRetrieved": qresult.get("bleu_avg_retrieved", ""),
-        "Rouge1MaxRetrieved": qresult.get("rouge1_max_retrieved", ""),
-        "Rouge1AvgRetrieved": qresult.get("rouge1_avg_retrieved", ""),
-        "Rouge1MaxIdeal": qresult.get("rouge1_max_ideal", ""),
-        "Rouge1AvgIdeal": qresult.get("rouge1_avg_ideal", ""),
-        "Rouge1RetrievedVsIdealRatio": qresult.get("rouge1_retrieved_vs_ideal_ratio", ""),
-        "RougeL_MaxRetrieved": qresult.get("rougeL_max_retrieved", ""),
-        "RougeL_MaxIdeal": qresult.get("rougeL_max_ideal", ""),
+        "BleuMaxRetrieved": float(qresult.get("bleu_max_retrieved", 0) or 0),
+        "BleuAvgRetrieved": float(qresult.get("bleu_avg_retrieved", 0) or 0),
+        "Rouge1MaxRetrieved": float(qresult.get("rouge1_max_retrieved", 0) or 0),
+        "Rouge1AvgRetrieved": float(qresult.get("rouge1_avg_retrieved", 0) or 0),
+        "Rouge1MaxIdeal": float(qresult.get("rouge1_max_ideal", 0) or 0),
+        "Rouge1AvgIdeal": float(qresult.get("rouge1_avg_ideal", 0) or 0),
+        "Rouge1RetrievedVsIdealRatio": float(qresult.get("rouge1_retrieved_vs_ideal_ratio", 0) or 0),
+        "RougeL_MaxRetrieved": float(qresult.get("rougeL_max_retrieved", 0) or 0),
+        "RougeL_MaxIdeal": float(qresult.get("rougeL_max_ideal", 0) or 0),
         # Critical missing evidence
-        "CriticalMissingEvidence": qresult.get("critical_missing_evidence", "") or "",
-        # Qualitative rubric (may be null until manually scored)
-        "RubricFactualAccuracy": qresult.get("rubric_factual_accuracy", "") if qresult.get("rubric_factual_accuracy") is not None else "",
-        "RubricCitationAccuracy": qresult.get("rubric_citation_accuracy", "") if qresult.get("rubric_citation_accuracy") is not None else "",
-        "RubricHistoriographicalDepth": qresult.get("rubric_historiographical_depth", "") if qresult.get("rubric_historiographical_depth") is not None else "",
-        "RubricEpistemicCalibration": qresult.get("rubric_epistemic_calibration", "") if qresult.get("rubric_epistemic_calibration") is not None else "",
-        "RubricTotal": qresult.get("rubric_total", "") if qresult.get("rubric_total") is not None else "",
-        "EvaluatorNotes": qresult.get("evaluator_notes", ""),
+        "CriticalMissingEvidence": str(qresult.get("critical_missing_evidence", "") or ""),
+        # Qualitative rubric (may be empty until manually scored)
+        "RubricFactualAccuracy": str(qresult.get("rubric_factual_accuracy", "") if qresult.get("rubric_factual_accuracy") is not None else ""),
+        "RubricCitationAccuracy": str(qresult.get("rubric_citation_accuracy", "") if qresult.get("rubric_citation_accuracy") is not None else ""),
+        "RubricHistoriographicalDepth": str(qresult.get("rubric_historiographical_depth", "") if qresult.get("rubric_historiographical_depth") is not None else ""),
+        "RubricEpistemicCalibration": str(qresult.get("rubric_epistemic_calibration", "") if qresult.get("rubric_epistemic_calibration") is not None else ""),
+        "RubricTotal": str(qresult.get("rubric_total", "") if qresult.get("rubric_total") is not None else ""),
+        "EvaluatorNotes": str(qresult.get("evaluator_notes", "")),
     }
 
     try:
         benchmark_logger.record_api_outputs(record)
     except Exception as e:
         st.warning(f"⚠️ Sheets logging failed for {qresult.get('id', '?')}: {e}")
+
+
+def init_benchmark_sheet_headers(gc_client):
+    """
+    Write the required column headers to row 1 of the 'benchmark_results' sheet.
+    Call this once before the first benchmark run to ensure positional alignment
+    with DataLogger.record_api_outputs() which uses set_dataframe(copy_head=False).
+
+    Safe to call again — checks if headers are already present before writing.
+    """
+    if gc_client is None:
+        return
+    headers = [
+        "Timestamp", "QueryID", "Query", "Category", "HayModel", "NicolayModel",
+        "HayTypeExpected", "HayTypeGot", "HayTypeCorrect", "HayKeywordCount",
+        "HaySpuriousFields", "HayTrainingBleed", "InitialAnswer", "QueryAssessment",
+        "RetrievedDocIDs", "RetrievalSearchTypes", "RerankerScores",
+        "PrecisionAt5", "RecallAt5", "CeilingAdjustedPrecision",
+        "IdealDocsHit", "IdealDocsMissed",
+        "NicolayTypeExpected", "NicolayTypeGot", "NicolayTypeCorrect",
+        "SchemaComplete", "FinalAnswerWordCount",
+        "QuotesVerified", "QuotesDisplaced", "QuotesFabricated",
+        "BleuMaxRetrieved", "BleuAvgRetrieved",
+        "Rouge1MaxRetrieved", "Rouge1AvgRetrieved",
+        "Rouge1MaxIdeal", "Rouge1AvgIdeal",
+        "Rouge1RetrievedVsIdealRatio",
+        "RougeL_MaxRetrieved", "RougeL_MaxIdeal",
+        "CriticalMissingEvidence",
+        "RubricFactualAccuracy", "RubricCitationAccuracy",
+        "RubricHistoriographicalDepth", "RubricEpistemicCalibration",
+        "RubricTotal", "EvaluatorNotes",
+    ]
+    try:
+        sh = gc_client.open("benchmark_results").sheet1
+        existing_row1 = sh.get_row(1, returnas="matrix")
+        if existing_row1 and existing_row1[0] == "Timestamp":
+            return  # Headers already present
+        sh.update_row(1, headers)
+        st.info("📋 Sheet headers initialized.")
+    except Exception as e:
+        st.warning(f"⚠️ Could not initialize sheet headers: {e}")
 
 
 def update_rubric_in_sheets(benchmark_logger, gc_client, qid: str, rubric_data: dict):
@@ -880,29 +937,60 @@ class _NoOpColBERT:
 # That function handles all data loading, Hay, retrieval, reranking, and Nicolay
 # with the correct module signatures. The benchmark layer adds metrics on top.
 
-def reranked_df_to_list(reranked_df: pd.DataFrame) -> list[dict]:
+def reranked_df_to_list(reranked_df: pd.DataFrame, corpus: dict = None) -> list[dict]:
     """
     Convert reranked_df (columns: Rank, Search Type, Text ID, Source, Summary,
     Key Quote, Relevance Score) into the list-of-dicts format used by benchmark
-    metrics. Text ID is a bare number string like "413" from the pipeline.
+    metrics.
+
+    ID remapping: The pipeline's reranked DataFrame may carry old corpus text IDs
+    (parent document IDs from the original index). If a `corpus` dict is provided
+    (keyed by new int IDs), we verify whether the raw ID exists in the new corpus.
+    If not, we attempt to find the chunk by matching the 'Source' field against
+    corpus entries to resolve to the new ID. This ensures displayed IDs and
+    precision/recall metrics are aligned to the 772-chunk new corpus index.
+
+    Search type: `Search Type` column may be absent or empty in some pipeline
+    versions — falls back to "Unknown" for display purposes.
     """
+    # Build a source→new_id lookup from the corpus for ID remapping
+    source_to_new_id = {}
+    if corpus:
+        for new_id, chunk in corpus.items():
+            src = chunk.get("source", "")
+            if src:
+                source_to_new_id.setdefault(src, new_id)
+
     records = []
     for _, row in reranked_df.iterrows():
         raw_id = str(row.get("Text ID", "")).strip()
-        # Normalize to int — pipeline produces bare numbers e.g. "413"
+
+        # Parse raw ID to integer
         try:
             num_id = int(raw_id)
         except ValueError:
-            # Handle "Text #: 413" format just in case
             m = re.search(r"(\d+)", raw_id)
             num_id = int(m.group(1)) if m else None
+
+        # Remap to new corpus ID if the raw ID is not present in the new corpus
+        if corpus and num_id is not None and num_id not in corpus:
+            # Try to resolve via Source field
+            row_source = str(row.get("Source", "")).strip()
+            remapped = source_to_new_id.get(row_source)
+            if remapped is not None:
+                num_id = remapped
+
+        # Normalize search type label — pipeline column is "Search Type"
+        raw_search_type = str(row.get("Search Type", "")).strip()
+        search_type = raw_search_type if raw_search_type else "Unknown"
+
         records.append({
             "text_id_num": num_id,
-            "text_id_str": f"Text #: {num_id}" if num_id else raw_id,
+            "text_id_str": f"Text #: {num_id}" if num_id is not None else raw_id,
             "source": row.get("Source", ""),
             "full_text": row.get("Key Quote", ""),  # pipeline stores full text here
             "reranker_score": row.get("Relevance Score"),
-            "_search_type": row.get("Search Type", ""),
+            "_search_type": search_type,
         })
     return records
 
@@ -965,6 +1053,22 @@ def run_pipeline_for_query(
     reranked_df     = pipeline_out.get("reranked_results", pd.DataFrame())
     nicolay_output  = pipeline_out.get("nicolay_output", {})
 
+    # ── 2b. LOAD CORPUS (needed for ID remapping + quote verification) ────────
+    # Build int-keyed dict {413: chunk_dict, ...} from the 772-chunk new corpus.
+    # Loading here (before retrieval metrics) ensures the corpus is available for
+    # reranked_df_to_list to remap old parent text IDs to new chunk IDs.
+    try:
+        lincoln_data_df = load_lincoln_speech_corpus()
+        lincoln_data = lincoln_data_df.to_dict("records")
+        corpus_for_verify = {}
+        for item in lincoln_data:
+            tid = item.get("text_id", "")
+            m = re.search(r"(\d+)", str(tid))
+            if m:
+                corpus_for_verify[int(m.group(1))] = item
+    except Exception:
+        corpus_for_verify = {}
+
     # ── 3. HAY METRICS ────────────────────────────────────────────────────────
     status("📊 Computing Hay metrics...")
     result["hay_output"] = hay_output
@@ -976,11 +1080,12 @@ def run_pipeline_for_query(
     result["hay_training_bleed"] = "This trains" in hay_output.get("query_assessment", "")
 
     # ── 4. RETRIEVAL METRICS ──────────────────────────────────────────────────
-    # Convert reranked_df to list-of-dicts for benchmark metric functions
-    reranked = reranked_df_to_list(reranked_df) if not reranked_df.empty else []
+    # Convert reranked_df to list-of-dicts for benchmark metric functions.
+    # Pass corpus so reranked_df_to_list can remap old parent IDs to new chunk IDs.
+    reranked = reranked_df_to_list(reranked_df, corpus=corpus_for_verify) if not reranked_df.empty else []
 
     result["retrieved_doc_ids"] = [r["text_id_num"] for r in reranked]
-    result["retrieval_search_types"] = [r.get("_search_type", "") for r in reranked]
+    result["retrieval_search_types"] = [r.get("_search_type") or "Unknown" for r in reranked]
     result["reranker_scores"] = [r.get("reranker_score") for r in reranked]
 
     metrics = compute_retrieval_metrics(reranked, qdef["ideal_docs_new"], qdef.get("ideal_docs_original"))
@@ -1013,21 +1118,8 @@ def run_pipeline_for_query(
     result["nicolay_relevance_assessments"] = relevance_map
 
     # ── 6. QUOTE VERIFICATION ─────────────────────────────────────────────────
-    # Build a simple corpus dict from the reranked results for quote lookup.
-    # For displaced-quote detection we also load the full corpus.
+    # corpus_for_verify was built at step 2b above (new 772-chunk corpus).
     status("✅ Verifying quotes...")
-    try:
-        lincoln_data_df = load_lincoln_speech_corpus()
-        lincoln_data = lincoln_data_df.to_dict("records")
-        # Build int-keyed corpus dict: {413: chunk_dict, ...}
-        corpus_for_verify = {}
-        for item in lincoln_data:
-            tid = item.get("text_id", "")
-            m = re.search(r"(\d+)", str(tid))
-            if m:
-                corpus_for_verify[int(m.group(1))] = item
-    except Exception:
-        corpus_for_verify = {}
 
     qv = verify_all_quotes(nicolay_output, reranked, corpus_for_verify)
     result["quote_verification"] = qv
@@ -1110,6 +1202,9 @@ def main():
                     from modules.data_logging import DataLogger
                     benchmark_logger = DataLogger(gc=gc_client, sheet_name="benchmark_results")
                     st.success("✅ Sheets connected")
+                    # Button to initialize/verify sheet headers (run once before first benchmark)
+                    if st.button("📋 Init Sheet Headers", help="Write required column headers to row 1. Safe to run again."):
+                        init_benchmark_sheet_headers(gc_client)
                 else:
                     st.warning("⚠️ No gcp_service_account in secrets — Sheets logging disabled.")
             except ImportError:

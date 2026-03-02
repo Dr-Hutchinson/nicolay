@@ -796,8 +796,15 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
 
     try:
         benchmark_logger.record_api_outputs(record)
+        # Clear any previous error for this query
+        st.session_state[f"_debug_sheets_err_{record.get('QueryID', '')}"] = "none recorded"
     except Exception as e:
-        st.warning(f"⚠️ Sheets logging failed for {qresult.get('id', '?')}: {e}")
+        err_msg = f"Sheets logging failed for {record.get('QueryID', '?')}: {type(e).__name__}: {e}"
+        st.warning(f"⚠️ {err_msg}")
+        try:
+            st.session_state[f"_debug_sheets_err_{record.get('QueryID', '')}"] = err_msg
+        except Exception:
+            pass
 
 
 def init_benchmark_sheet_headers(gc_client):
@@ -1053,6 +1060,14 @@ def run_pipeline_for_query(
     reranked_df     = pipeline_out.get("reranked_results", pd.DataFrame())
     nicolay_output  = pipeline_out.get("nicolay_output", {})
 
+    # DEBUG: capture raw reranked_df BEFORE any transformation so the debug
+    # expander in the UI can show exactly what the pipeline returned.
+    # This is the ground truth for diagnosing column name and ID issues.
+    try:
+        st.session_state[f"_debug_reranked_df_{qid}"] = reranked_df.copy()
+    except Exception:
+        pass
+
     # ── 2b. LOAD CORPUS (needed for ID remapping + quote verification) ────────
     # Build int-keyed dict {413: chunk_dict, ...} from the 772-chunk new corpus.
     # Loading here (before retrieval metrics) ensures the corpus is available for
@@ -1069,7 +1084,11 @@ def run_pipeline_for_query(
     except Exception:
         corpus_for_verify = {}
 
-    # ── 3. HAY METRICS ────────────────────────────────────────────────────────
+    # DEBUG: log corpus key count
+    try:
+        st.session_state[f"_debug_corpus_size_{qid}"] = f"{len(corpus_for_verify)} keys (range: {min(corpus_for_verify) if corpus_for_verify else 'N/A'} – {max(corpus_for_verify) if corpus_for_verify else 'N/A'})"
+    except Exception:
+        pass
     status("📊 Computing Hay metrics...")
     result["hay_output"] = hay_output
     hay_type = extract_hay_type(hay_output.get("query_assessment", ""))
@@ -1205,6 +1224,38 @@ def main():
                     # Button to initialize/verify sheet headers (run once before first benchmark)
                     if st.button("📋 Init Sheet Headers", help="Write required column headers to row 1. Safe to run again."):
                         init_benchmark_sheet_headers(gc_client)
+                    # Standalone connection test — writes one test row to verify the
+                    # full write path works independently of a pipeline run.
+                    if st.button("🧪 Test Sheets Write", help="Write a dummy row to benchmark_results to verify the full logging path."):
+                        test_record = {
+                            "QueryID": "TEST",
+                            "Query": "Sheets connectivity test",
+                            "Category": "debug",
+                            "HayModel": HAY_MODEL, "NicolayModel": NICOLAY_MODEL,
+                            "HayTypeExpected": "", "HayTypeGot": "", "HayTypeCorrect": "",
+                            "HayKeywordCount": 0, "HaySpuriousFields": "[]",
+                            "HayTrainingBleed": "False", "InitialAnswer": "", "QueryAssessment": "",
+                            "RetrievedDocIDs": "[]", "RetrievalSearchTypes": "[]", "RerankerScores": "[]",
+                            "PrecisionAt5": 0.0, "RecallAt5": 0.0, "CeilingAdjustedPrecision": 0.0,
+                            "IdealDocsHit": "[]", "IdealDocsMissed": "[]",
+                            "NicolayTypeExpected": "", "NicolayTypeGot": "", "NicolayTypeCorrect": "",
+                            "SchemaComplete": "", "FinalAnswerWordCount": 0,
+                            "QuotesVerified": 0, "QuotesDisplaced": 0, "QuotesFabricated": 0,
+                            "BleuMaxRetrieved": 0.0, "BleuAvgRetrieved": 0.0,
+                            "Rouge1MaxRetrieved": 0.0, "Rouge1AvgRetrieved": 0.0,
+                            "Rouge1MaxIdeal": 0.0, "Rouge1AvgIdeal": 0.0,
+                            "Rouge1RetrievedVsIdealRatio": 0.0,
+                            "RougeL_MaxRetrieved": 0.0, "RougeL_MaxIdeal": 0.0,
+                            "CriticalMissingEvidence": "",
+                            "RubricFactualAccuracy": "", "RubricCitationAccuracy": "",
+                            "RubricHistoriographicalDepth": "", "RubricEpistemicCalibration": "",
+                            "RubricTotal": "", "EvaluatorNotes": "TEST ROW — delete after verification",
+                        }
+                        try:
+                            benchmark_logger.record_api_outputs(test_record)
+                            st.success("✅ Test row written successfully — check benchmark_results sheet.")
+                        except Exception as e:
+                            st.error(f"❌ Test write failed: {type(e).__name__}: {e}")
                 else:
                     st.warning("⚠️ No gcp_service_account in secrets — Sheets logging disabled.")
             except ImportError:
@@ -1361,6 +1412,44 @@ def main():
                     hit = "✅" if tid in ideal else "❌"
                     score_str = f"{score:.4f}" if score is not None else "N/A"
                     st.markdown(f"{hit} **Rank {i+1}** — Text #: {tid} &nbsp;·&nbsp; Score: {score_str} &nbsp;·&nbsp; via: _{stype}_")
+
+            # ── DEBUG EXPANDER ────────────────────────────────────────────────
+            # Surfaces raw pipeline internals so we can diagnose ID/search-type
+            # mapping failures and Sheets logging issues without guessing.
+            with st.expander("🔬 Debug: Raw Pipeline Internals", expanded=False):
+                st.caption("These values show exactly what the pipeline returned, before any transformation. Use these to diagnose ID remapping and search type issues.")
+
+                st.markdown("**A. `pipeline_out` top-level keys**")
+                # We can't store pipeline_out itself (too large), but we store
+                # the raw reranked_df snapshot in session_state for inspection.
+                raw_df = st.session_state.get(f"_debug_reranked_df_{selected_query_id}")
+                if raw_df is not None:
+                    st.markdown(f"Raw `reranked_df` shape: `{raw_df.shape}` — columns: `{list(raw_df.columns)}`")
+                    st.dataframe(raw_df, use_container_width=True)
+                else:
+                    st.info("Raw reranked_df not captured yet — re-run this query to populate debug data. (Debug capture was added in v6.)")
+
+                st.markdown("**B. `retrieved_doc_ids` (after reranked_df_to_list)**")
+                st.json(qr.get("retrieved_doc_ids", []))
+
+                st.markdown("**C. `retrieval_search_types` (after reranked_df_to_list)**")
+                st.json(qr.get("retrieval_search_types", []))
+
+                st.markdown("**D. `reranker_scores`**")
+                st.json(qr.get("reranker_scores", []))
+
+                st.markdown("**E. `ideal_docs_set_used`** (new vs original index auto-detection)")
+                st.write(qr.get("ideal_docs_set_used", "not set"))
+
+                st.markdown("**F. `corpus_for_verify` key count** (populated on re-run)")
+                st.write(st.session_state.get(f"_debug_corpus_size_{selected_query_id}", "not captured yet"))
+
+                st.markdown("**G. Last Sheets logging error**")
+                last_sheets_err = st.session_state.get(f"_debug_sheets_err_{selected_query_id}", "none recorded")
+                if last_sheets_err and last_sheets_err != "none recorded":
+                    st.error(last_sheets_err)
+                else:
+                    st.write(last_sheets_err)
 
             # Nicolay output
             with st.expander("✍️ Nicolay Output", expanded=True):

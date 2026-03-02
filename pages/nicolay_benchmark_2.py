@@ -1192,7 +1192,7 @@ def main():
                                    value=os.environ.get("COHERE_API_KEY", ""))
 
         corpus_file = st.text_input("Corpus JSON path",
-                                    value="lincoln_speech_corpus_repaired_1.json")
+                                    value="data/lincoln_speech_corpus_repaired_1.json")
         hay_prompt_file = st.text_input("Hay system prompt file",
                                         value="prompts/hay_system_prompt.txt")
         nicolay_prompt_file = st.text_input("Nicolay system prompt file",

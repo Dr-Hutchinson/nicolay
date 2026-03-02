@@ -5,7 +5,7 @@ import json
 
 @st.cache_data(persist="disk")
 def load_lincoln_speech_corpus():
-    with open('data/lincoln_speech_corpus_repaired_1.json', 'rb') as f:
+    with open('data/lincoln_speech_corpus.msgpack', 'rb') as f:
         unpacker = msgpack.Unpacker(f, raw=False)
         data = [unpacked for unpacked in unpacker][0]
         df = pd.DataFrame(data)

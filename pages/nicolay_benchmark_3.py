@@ -333,219 +333,6 @@ def call_hay(query: str, client: openai.OpenAI, system_prompt: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RETRIEVAL FUNCTIONS (wrappers around existing modules)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def run_keyword_search(query: str, hay_output: dict, lincoln_dict: dict) -> pd.DataFrame:
-    """
-    Wrapper around search_with_dynamic_weights_expanded.
-    Returns DataFrame with 'Text ID', 'score', columns or empty DataFrame on failure.
-    """
-    try:
-        from modules.keyword_search import search_with_dynamic_weights_expanded
-        results = search_with_dynamic_weights_expanded(
-            query=query,
-            weighted_keywords=hay_output.get("weighted_keywords", {}),
-            year_keywords=hay_output.get("year_keywords", []),
-            text_keywords=hay_output.get("text_keywords", []),
-            lincoln_dict=lincoln_dict
-        )
-        if results is not None and not (isinstance(results, pd.DataFrame) and results.empty):
-            if isinstance(results, pd.DataFrame):
-                results["_search_type"] = "keyword"
-            return results
-    except Exception as e:
-        st.warning(f"Keyword search error (non-fatal): {e}")
-    return pd.DataFrame()
-
-
-def run_semantic_search(query: str, hay_output: dict, lincoln_dict: dict) -> pd.DataFrame:
-    """
-    Wrapper around semantic_search.
-    FIX for dev log #43 dependency bug: semantic search runs independently
-    using hay initial_answer (HyDE pattern) regardless of keyword results.
-    Falls back to raw query if initial_answer is empty.
-    """
-    try:
-        from modules.semantic_search import semantic_search
-        hyde_query = hay_output.get("initial_answer", "") or query
-        results = semantic_search(
-            query=hyde_query,
-            lincoln_dict=lincoln_dict
-        )
-        if results is not None and not (isinstance(results, pd.DataFrame) and results.empty):
-            if isinstance(results, pd.DataFrame):
-                results["_search_type"] = "semantic"
-            return results
-    except Exception as e:
-        st.warning(f"Semantic search error (non-fatal): {e}")
-    return pd.DataFrame()
-
-
-def combine_and_deduplicate(kw_results: pd.DataFrame, sem_results: pd.DataFrame) -> pd.DataFrame:
-    """
-    Merge keyword and semantic results, deduplicate by Text ID, preserving source labels.
-    Keyword results take priority on duplicates (appear first in ranking).
-    """
-    frames = []
-    for df, label in [(kw_results, "keyword"), (sem_results, "semantic")]:
-        if df is not None and not df.empty:
-            df = df.copy()
-            if "_search_type" not in df.columns:
-                df["_search_type"] = label
-            frames.append(df)
-
-    if not frames:
-        return pd.DataFrame()
-
-    combined = pd.concat(frames, ignore_index=True)
-
-    # Deduplicate: keep first occurrence (keyword > semantic priority)
-    id_col = "Text ID" if "Text ID" in combined.columns else combined.columns[0]
-    combined = combined.drop_duplicates(subset=[id_col], keep="first")
-    return combined
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# COHERE RERANKING
-# ─────────────────────────────────────────────────────────────────────────────
-
-def run_cohere_rerank(
-    query: str,
-    combined_results: pd.DataFrame,
-    corpus: dict,
-    co_client: cohere.Client,
-    k: int = 5
-) -> list[dict]:
-    """
-    Format candidates with YAML + full chunk text, call Cohere rerank-v4.0-pro,
-    return top-k as list of dicts with keys: text_id_num, text_id_str, source,
-    full_text, reranker_score, _search_type.
-    """
-    if combined_results is None or combined_results.empty:
-        return []
-
-    # Build documents list for Cohere
-    documents = []
-    doc_metadata = []
-
-    id_col = "Text ID" if "Text ID" in combined_results.columns else combined_results.columns[0]
-
-    for _, row in combined_results.iterrows():
-        raw_id = row.get(id_col, "")
-        # Normalize to integer
-        if isinstance(raw_id, str) and "Text #:" in raw_id:
-            try:
-                num_id = int(raw_id.split("Text #:")[1].strip())
-            except ValueError:
-                continue
-        elif isinstance(raw_id, str) and raw_id.strip().isdigit():
-            num_id = int(raw_id.strip())
-        elif isinstance(raw_id, (int, float)):
-            num_id = int(raw_id)
-        else:
-            continue
-
-        chunk = corpus.get(num_id)
-        if not chunk:
-            continue
-
-        full_text = chunk.get("full_text", chunk.get("text", ""))
-        source = chunk.get("source", chunk.get("speech_name", f"Text #{num_id}"))
-        search_type = row.get("_search_type", "unknown")
-
-        # YAML format per reranking.py convention
-        doc_str = f"text_id: Text #: {num_id}\nsource: {source}\nfull_text: {full_text}"
-        documents.append(doc_str)
-        doc_metadata.append({
-            "text_id_num": num_id,
-            "text_id_str": f"Text #: {num_id}",
-            "source": source,
-            "full_text": full_text,
-            "_search_type": search_type
-        })
-
-    if not documents:
-        return []
-
-    try:
-        rerank_response = co_client.rerank(
-            model=COHERE_RERANK_MODEL,
-            query=query,
-            documents=documents,
-            top_n=k
-        )
-        results = []
-        for r in rerank_response.results:
-            meta = doc_metadata[r.index]
-            meta["reranker_score"] = r.relevance_score
-            results.append(meta)
-        return results
-    except Exception as e:
-        st.error(f"Cohere rerank error: {e}")
-        # Fallback: return top-k from combined results without reranking
-        fallback = []
-        for meta in doc_metadata[:k]:
-            meta["reranker_score"] = None
-            fallback.append(meta)
-        return fallback
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# NICOLAY API CALL
-# ─────────────────────────────────────────────────────────────────────────────
-
-def call_nicolay(
-    query: str,
-    hay_output: dict,
-    reranked: list[dict],
-    client: openai.OpenAI,
-    system_prompt: str
-) -> dict:
-    """
-    Call Nicolay v3. Constructs input from query + Hay initial_answer + top-5 reranked results.
-    Returns parsed 6-field schema with safe defaults and _raw/_error fields.
-    """
-    # Format reranked results as YAML block for model input
-    reranked_block = ""
-    for i, r in enumerate(reranked, 1):
-        reranked_block += (
-            f"\nRerankedMatch{i}:\n"
-            f"  text_id: {r.get('text_id_str', '')}\n"
-            f"  source: {r.get('source', '')}\n"
-            f"  reranker_score: {r.get('reranker_score', 'N/A')}\n"
-            f"  full_text: {r.get('full_text', '')[:2000]}\n"  # truncate for token budget
-        )
-
-    user_content = (
-        f"User Query: {query}\n\n"
-        f"Initial Answer (from Hay):\n{hay_output.get('initial_answer', '')}\n\n"
-        f"Reranked Results:\n{reranked_block}"
-    )
-
-    try:
-        response = client.chat.completions.create(
-            model=NICOLAY_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
-            temperature=0.0,
-            max_tokens=3000
-        )
-        raw_text = response.choices[0].message.content.strip()
-        raw_text_clean = re.sub(r'^```(?:json)?\s*', '', raw_text)
-        raw_text_clean = re.sub(r'\s*```$', '', raw_text_clean)
-
-        parsed = json.loads(raw_text_clean)
-        return {**parsed, "_raw": raw_text, "_error": None}
-    except json.JSONDecodeError as e:
-        return {"_raw": raw_text if 'raw_text' in dir() else "", "_error": f"JSON parse: {e}"}
-    except Exception as e:
-        return {"_raw": "", "_error": str(e)}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # METRICS CALCULATION
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1055,21 +842,58 @@ def export_csv(results: dict, csv_file: str = CSV_FILE) -> bytes:
 # ─────────────────────────────────────────────────────────────────────────────
 # FULL PIPELINE RUNNER
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Delegates entirely to run_rag_pipeline() from modules/rag_pipeline.py.
+# That function handles all data loading, Hay, retrieval, reranking, and Nicolay
+# with the correct module signatures. The benchmark layer adds metrics on top.
+
+def reranked_df_to_list(reranked_df: pd.DataFrame) -> list[dict]:
+    """
+    Convert reranked_df (columns: Rank, Search Type, Text ID, Source, Summary,
+    Key Quote, Relevance Score) into the list-of-dicts format used by benchmark
+    metrics. Text ID is a bare number string like "413" from the pipeline.
+    """
+    records = []
+    for _, row in reranked_df.iterrows():
+        raw_id = str(row.get("Text ID", "")).strip()
+        # Normalize to int — pipeline produces bare numbers e.g. "413"
+        try:
+            num_id = int(raw_id)
+        except ValueError:
+            # Handle "Text #: 413" format just in case
+            m = re.search(r"(\d+)", raw_id)
+            num_id = int(m.group(1)) if m else None
+        records.append({
+            "text_id_num": num_id,
+            "text_id_str": f"Text #: {num_id}" if num_id else raw_id,
+            "source": row.get("Source", ""),
+            "full_text": row.get("Key Quote", ""),  # pipeline stores full text here
+            "reranker_score": row.get("Relevance Score"),
+            "_search_type": row.get("Search Type", ""),
+        })
+    return records
+
 
 def run_pipeline_for_query(
     qdef: dict,
-    corpus: dict,
-    openai_client: openai.OpenAI,
-    cohere_client: cohere.Client,
-    hay_system_prompt: str,
-    nicolay_system_prompt: str,
+    openai_api_key: str,
+    cohere_api_key: str,
     status_cb=None
 ) -> dict:
     """
-    Runs the full pipeline for one query and returns a complete result record
-    ready to be stored in results["queries"][qid].
-    status_cb: optional callable(str) for progress messages.
+    Run the full Nicolay pipeline for one benchmark query and return a complete
+    result record. Delegates to run_rag_pipeline() — no retrieval reimplementation.
+
+    Parameters
+    ----------
+    qdef          : benchmark query definition dict
+    openai_api_key: passed through to run_rag_pipeline
+    cohere_api_key: passed through to run_rag_pipeline
+    status_cb     : optional callable(str) for progress UI updates
     """
+    from modules.rag_pipeline import run_rag_pipeline
+    from modules.data_utils import load_lincoln_speech_corpus
+
     def status(msg):
         if status_cb:
             status_cb(msg)
@@ -1084,12 +908,33 @@ def run_pipeline_for_query(
         "ideal_docs_new": qdef["ideal_docs_new"],
     }
 
-    # ── 1. HAY ────────────────────────────────────────────────────────────────
-    status("🔍 Calling Hay v3...")
-    hay_output = call_hay(query, openai_client, hay_system_prompt)
-    result["hay_output"] = {k: v for k, v in hay_output.items() if k not in ("_raw",)}
-    result["hay_error"] = hay_output.get("_error")
+    # ── 1. RUN FULL PIPELINE ──────────────────────────────────────────────────
+    status("🔍 Running pipeline (Hay → retrieval → rerank → Nicolay)...")
+    try:
+        pipeline_out = run_rag_pipeline(
+            user_query=query,
+            perform_keyword_search=True,
+            perform_semantic_search=True,
+            perform_colbert_search=False,   # ColBERT skipped — no Astra in benchmark
+            perform_reranking=True,
+            colbert_searcher=None,
+            openai_api_key=openai_api_key,
+            cohere_api_key=cohere_api_key,
+            top_n_results=10,               # Retrieve more candidates before reranking to k=5
+        )
+    except Exception as e:
+        result["pipeline_error"] = str(e)
+        status(f"❌ Pipeline error: {e}")
+        return result
 
+    # ── 2. UNPACK PIPELINE OUTPUT ─────────────────────────────────────────────
+    hay_output      = pipeline_out.get("hay_output", {})
+    reranked_df     = pipeline_out.get("reranked_results", pd.DataFrame())
+    nicolay_output  = pipeline_out.get("nicolay_output", {})
+
+    # ── 3. HAY METRICS ────────────────────────────────────────────────────────
+    status("📊 Computing Hay metrics...")
+    result["hay_output"] = hay_output
     hay_type = extract_hay_type(hay_output.get("query_assessment", ""))
     result["hay_task_type_raw"] = hay_type
     result["hay_task_type_correct"] = (hay_type == qdef["expected_hay_type"]) if hay_type else None
@@ -1097,37 +942,27 @@ def run_pipeline_for_query(
     result["hay_spurious_fields"] = check_hay_spurious_fields(hay_output)
     result["hay_training_bleed"] = "This trains" in hay_output.get("query_assessment", "")
 
-    # ── 2. RETRIEVAL (dev log #43 fix: runs independently) ────────────────────
-    status("📚 Keyword search...")
-    kw_results = run_keyword_search(query, hay_output, {item["text_id"] if isinstance(item.get("text_id"), str) else f"Text #: {k}": item for k, item in corpus.items()})
-
-    status("🔎 Semantic search (HyDE)...")
-    sem_results = run_semantic_search(query, hay_output, {item["text_id"] if isinstance(item.get("text_id"), str) else f"Text #: {k}": item for k, item in corpus.items()})
-
-    combined = combine_and_deduplicate(kw_results, sem_results)
-
-    # ── 3. COHERE RERANK ──────────────────────────────────────────────────────
-    status("⚡ Cohere reranking...")
-    reranked = run_cohere_rerank(query, combined, corpus, cohere_client, k=RERANK_K)
+    # ── 4. RETRIEVAL METRICS ──────────────────────────────────────────────────
+    # Convert reranked_df to list-of-dicts for benchmark metric functions
+    reranked = reranked_df_to_list(reranked_df) if not reranked_df.empty else []
 
     result["retrieved_doc_ids"] = [r["text_id_num"] for r in reranked]
     result["retrieval_search_types"] = [r.get("_search_type", "") for r in reranked]
     result["reranker_scores"] = [r.get("reranker_score") for r in reranked]
 
-    # Retrieval metrics
     metrics = compute_retrieval_metrics(reranked, qdef["ideal_docs_new"])
     result.update(metrics)
 
-    # ── 4. NICOLAY ────────────────────────────────────────────────────────────
-    status("✍️ Calling Nicolay v3...")
-    nicolay_output = call_nicolay(query, hay_output, reranked, openai_client, nicolay_system_prompt)
-    result["nicolay_output"] = {k: v for k, v in nicolay_output.items() if k not in ("_raw",)}
-    result["nicolay_error"] = nicolay_output.get("_error")
+    # ── 5. NICOLAY METRICS ────────────────────────────────────────────────────
+    status("✍️ Computing Nicolay metrics...")
+    result["nicolay_output"] = nicolay_output
 
     synth_str = get_synthesis_assessment(nicolay_output)
     nicolay_type = extract_nicolay_type(synth_str)
     result["nicolay_synthesis_type_raw"] = nicolay_type
-    result["nicolay_synthesis_type_correct"] = (nicolay_type == qdef["expected_nicolay_type"]) if nicolay_type else None
+    result["nicolay_synthesis_type_correct"] = (
+        (nicolay_type == qdef["expected_nicolay_type"]) if nicolay_type else None
+    )
 
     schema_check = check_nicolay_schema(nicolay_output)
     result["nicolay_schema_complete"] = schema_check["complete"]
@@ -1136,7 +971,6 @@ def run_pipeline_for_query(
     final_answer_text = get_final_answer_text(nicolay_output)
     result["nicolay_final_answer_wordcount"] = len(final_answer_text.split()) if final_answer_text else 0
 
-    # Relevance assessments from Match Analysis
     match_analysis = nicolay_output.get("Match Analysis", {})
     relevance_map = {}
     if isinstance(match_analysis, dict):
@@ -1145,22 +979,39 @@ def run_pipeline_for_query(
                 relevance_map[mk] = mv.get("Relevance Assessment", "")
     result["nicolay_relevance_assessments"] = relevance_map
 
-    # ── 5. QUOTE VERIFICATION ─────────────────────────────────────────────────
+    # ── 6. QUOTE VERIFICATION ─────────────────────────────────────────────────
+    # Build a simple corpus dict from the reranked results for quote lookup.
+    # For displaced-quote detection we also load the full corpus.
     status("✅ Verifying quotes...")
-    qv = verify_all_quotes(nicolay_output, reranked, corpus)
+    try:
+        lincoln_data_df = load_lincoln_speech_corpus()
+        lincoln_data = lincoln_data_df.to_dict("records")
+        # Build int-keyed corpus dict: {413: chunk_dict, ...}
+        corpus_for_verify = {}
+        for item in lincoln_data:
+            tid = item.get("text_id", "")
+            m = re.search(r"(\d+)", str(tid))
+            if m:
+                corpus_for_verify[int(m.group(1))] = item
+    except Exception:
+        corpus_for_verify = {}
+
+    qv = verify_all_quotes(nicolay_output, reranked, corpus_for_verify)
     result["quote_verification"] = qv
     outcomes = [q.get("outcome") for q in qv]
     result["quotes_verified_count"] = outcomes.count("verified")
     result["quotes_displaced_count"] = outcomes.count("displacement")
     result["quotes_fabricated_count"] = outcomes.count("fabrication")
 
-    # ── 6. BLEU / ROUGE ───────────────────────────────────────────────────────
+    # ── 7. BLEU / ROUGE ───────────────────────────────────────────────────────
     status("📊 Computing BLEU/ROUGE scores...")
-    bleu_rouge = compute_bleu_rouge(final_answer_text, reranked, corpus, qdef["ideal_docs_new"])
+    bleu_rouge = compute_bleu_rouge(
+        final_answer_text, reranked, corpus_for_verify, qdef["ideal_docs_new"]
+    )
     result.update({k: v for k, v in bleu_rouge.items() if k != "_note"})
     result["bleu_rouge_note"] = bleu_rouge.get("_note", "")
 
-    # ── 7. QUALITATIVE RUBRIC (filled manually in UI) ─────────────────────────
+    # ── 8. QUALITATIVE RUBRIC (filled manually in UI) ─────────────────────────
     result["rubric_factual_accuracy"] = None
     result["rubric_citation_accuracy"] = None
     result["rubric_historiographical_depth"] = None
@@ -1191,13 +1042,13 @@ def main():
         cohere_key = st.text_input("Cohere API Key", type="password",
                                    value=os.environ.get("COHERE_API_KEY", ""))
 
-        corpus_file = st.text_input("Corpus JSON path",
-                                    value="data/lincoln_speech_corpus_repaired_1.json")
-        hay_prompt_file = st.text_input("Hay system prompt file",
-                                        value="prompts/hay_system_prompt.txt")
-        nicolay_prompt_file = st.text_input("Nicolay system prompt file",
-                                             value="prompts/nicolay_system_prompt.txt")
-
+        # Auto-detect corpus across common repo layouts (root, Data/, data/)
+        _cf = "lincoln_speech_corpus_repaired_1.json"
+        _corpus_default = next(
+            (p for p in [f"Data/{_cf}", f"data/{_cf}", _cf] if Path(p).exists()),
+            f"Data/{_cf}"
+        )
+        corpus_file = st.text_input("Corpus JSON path", value=_corpus_default)
         st.markdown("---")
         st.markdown("### 📊 Google Sheets Logging")
         st.caption("Results are saved to Sheets on each query — durable across reruns on Streamlit Cloud.")
@@ -1300,43 +1151,19 @@ def main():
             if pending and st.button("▶️ Resume", type="primary"):
                 do_run = "resume"
 
-        # Validate prerequisites
-        def get_clients():
+        # Validate prerequisites — run_rag_pipeline loads its own data, so we
+        # only need to verify API keys are present before dispatching.
+        def can_run():
             if not openai_key:
                 st.error("OpenAI API key required.")
-                return None, None
+                return False
             if not cohere_key:
                 st.error("Cohere API key required.")
-                return None, None
-            if not Path(corpus_file).exists():
-                st.error(f"Corpus file not found: {corpus_file}")
-                return None, None
-            oc = openai.OpenAI(api_key=openai_key)
-            cc = cohere.Client(api_key=cohere_key)
-            return oc, cc
-
-        def load_prompt(path: str, fallback: str) -> str:
-            if Path(path).exists():
-                return Path(path).read_text(encoding="utf-8")
-            return fallback
-
-        HAY_FALLBACK_PROMPT = (
-            "You are Hay, a specialized query analysis model for Lincoln's speeches corpus. "
-            "Output valid JSON with keys: initial_answer, weighted_keywords, year_keywords, text_keywords, query_assessment."
-        )
-        NICOLAY_FALLBACK_PROMPT = (
-            "You are Nicolay, a specialized synthesis model for Lincoln's speeches corpus. "
-            "Output valid JSON with the six required sections: User Query Analysis, Initial Answer Review, "
-            "Match Analysis, Meta Analysis, FinalAnswer, Model Feedback."
-        )
+                return False
+            return True
 
         if do_run:
-            oc, cc = get_clients()
-            if oc and cc:
-                corpus = load_corpus(corpus_file)
-                hay_prompt = load_prompt(hay_prompt_file, HAY_FALLBACK_PROMPT)
-                nicolay_prompt = load_prompt(nicolay_prompt_file, NICOLAY_FALLBACK_PROMPT)
-
+            if can_run():
                 queries_to_run = []
                 if do_run == "all":
                     queries_to_run = BENCHMARK_QUERIES
@@ -1352,7 +1179,9 @@ def main():
                     status_box.info(f"Running {q['id']} ({i+1}/{len(queries_to_run)})...")
                     with st.spinner(f"Processing {q['id']}..."):
                         qresult = run_pipeline_for_query(
-                            q, corpus, oc, cc, hay_prompt, nicolay_prompt,
+                            q,
+                            openai_api_key=openai_key,
+                            cohere_api_key=cohere_key,
                             status_cb=lambda msg: status_box.info(msg)
                         )
                     results["queries"][q["id"]] = qresult

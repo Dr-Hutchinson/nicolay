@@ -1006,6 +1006,7 @@ def run_pipeline_for_query(
     qdef: dict,
     openai_api_key: str,
     cohere_api_key: str,
+    corpus_file: str = "",
     status_cb=None
 ) -> dict:
     """
@@ -1017,10 +1018,14 @@ def run_pipeline_for_query(
     qdef          : benchmark query definition dict
     openai_api_key: passed through to run_rag_pipeline
     cohere_api_key: passed through to run_rag_pipeline
+    corpus_file   : path to lincoln_speech_corpus_repaired_1.json (772-chunk corpus).
+                    Used here for metrics and quote verification. Note: run_rag_pipeline()
+                    loads its own corpus internally via load_lincoln_speech_corpus() in
+                    data_utils.py — if retrieval returns only ~80 documents, that function
+                    is also pointing at the wrong file and must be fixed there too.
     status_cb     : optional callable(str) for progress UI updates
     """
     from modules.rag_pipeline import run_rag_pipeline
-    from modules.data_utils import load_lincoln_speech_corpus
 
     def status(msg):
         if status_cb:
@@ -1068,27 +1073,35 @@ def run_pipeline_for_query(
     except Exception:
         pass
 
-    # ── 2b. LOAD CORPUS (needed for ID remapping + quote verification) ────────
-    # Build int-keyed dict {413: chunk_dict, ...} from the 772-chunk new corpus.
-    # Loading here (before retrieval metrics) ensures the corpus is available for
-    # reranked_df_to_list to remap old parent text IDs to new chunk IDs.
-    try:
-        lincoln_data_df = load_lincoln_speech_corpus()
-        lincoln_data = lincoln_data_df.to_dict("records")
-        corpus_for_verify = {}
-        for item in lincoln_data:
-            tid = item.get("text_id", "")
-            m = re.search(r"(\d+)", str(tid))
-            if m:
-                corpus_for_verify[int(m.group(1))] = item
-    except Exception:
-        corpus_for_verify = {}
+    # ── 2b. LOAD CORPUS for metrics and quote verification ────────────────────
+    # Load directly from corpus_file (the 772-chunk repaired JSON) rather than
+    # via load_lincoln_speech_corpus(), which points at the old 80-doc corpus.
+    corpus_for_verify = {}
+    corpus_load_error = None
+    if corpus_file and Path(corpus_file).exists():
+        try:
+            with open(corpus_file, "r", encoding="utf-8") as _f:
+                _raw = json.load(_f)
+            for item in _raw:
+                tid = item.get("text_id", "")
+                m = re.search(r"(\d+)", str(tid))
+                if m:
+                    corpus_for_verify[int(m.group(1))] = item
+        except Exception as e:
+            corpus_load_error = str(e)
+    else:
+        corpus_load_error = f"corpus_file not found or not set: {repr(corpus_file)}"
 
-    # DEBUG: log corpus key count
+    # DEBUG: log corpus key count and any load error
     try:
-        st.session_state[f"_debug_corpus_size_{qid}"] = f"{len(corpus_for_verify)} keys (range: {min(corpus_for_verify) if corpus_for_verify else 'N/A'} – {max(corpus_for_verify) if corpus_for_verify else 'N/A'})"
+        _size_msg = f"{len(corpus_for_verify)} keys (range: {min(corpus_for_verify) if corpus_for_verify else 'N/A'} – {max(corpus_for_verify) if corpus_for_verify else 'N/A'})"
+        if corpus_load_error:
+            _size_msg += f" ⚠️ LOAD ERROR: {corpus_load_error}"
+        st.session_state[f"_debug_corpus_size_{qid}"] = _size_msg
     except Exception:
         pass
+
+    # ── 3. HAY METRICS ────────────────────────────────────────────────────────
     status("📊 Computing Hay metrics...")
     result["hay_output"] = hay_output
     hay_type = extract_hay_type(hay_output.get("query_assessment", ""))
@@ -1199,6 +1212,19 @@ def main():
             f"Data/{_cf}"
         )
         corpus_file = st.text_input("Corpus JSON path", value=_corpus_default)
+        if corpus_file and not Path(corpus_file).exists():
+            st.error(f"⚠️ Corpus file not found: {corpus_file}")
+        elif corpus_file and Path(corpus_file).exists():
+            st.caption(f"✅ Corpus file found")
+        st.warning(
+            "**Pipeline corpus note:** The benchmark script loads the corpus above "
+            "for metrics and quote verification. But `run_rag_pipeline()` loads its "
+            "own corpus internally via `modules/data_utils.py → load_lincoln_speech_corpus()`. "
+            "If retrieval returns IDs only in the 0–79 range, that function is pointing "
+            "at the old 80-doc corpus — fix the path in `data_utils.py` to point at "
+            "`lincoln_speech_corpus_repaired_1.json`.",
+            icon="⚠️"
+        )
         st.markdown("---")
         st.markdown("### 📊 Google Sheets Logging")
         st.caption("Results are saved to Sheets on each query — durable across reruns on Streamlit Cloud.")
@@ -1221,41 +1247,75 @@ def main():
                     from modules.data_logging import DataLogger
                     benchmark_logger = DataLogger(gc=gc_client, sheet_name="benchmark_results")
                     st.success("✅ Sheets connected")
-                    # Button to initialize/verify sheet headers (run once before first benchmark)
-                    if st.button("📋 Init Sheet Headers", help="Write required column headers to row 1. Safe to run again."):
+
+                    # ── SHEETS DIAGNOSTICS ────────────────────────────────
+                    if st.button("📋 Init Sheet Headers"):
                         init_benchmark_sheet_headers(gc_client)
-                    # Standalone connection test — writes one test row to verify the
-                    # full write path works independently of a pipeline run.
-                    if st.button("🧪 Test Sheets Write", help="Write a dummy row to benchmark_results to verify the full logging path."):
-                        test_record = {
-                            "QueryID": "TEST",
-                            "Query": "Sheets connectivity test",
-                            "Category": "debug",
-                            "HayModel": HAY_MODEL, "NicolayModel": NICOLAY_MODEL,
-                            "HayTypeExpected": "", "HayTypeGot": "", "HayTypeCorrect": "",
-                            "HayKeywordCount": 0, "HaySpuriousFields": "[]",
-                            "HayTrainingBleed": "False", "InitialAnswer": "", "QueryAssessment": "",
-                            "RetrievedDocIDs": "[]", "RetrievalSearchTypes": "[]", "RerankerScores": "[]",
-                            "PrecisionAt5": 0.0, "RecallAt5": 0.0, "CeilingAdjustedPrecision": 0.0,
-                            "IdealDocsHit": "[]", "IdealDocsMissed": "[]",
-                            "NicolayTypeExpected": "", "NicolayTypeGot": "", "NicolayTypeCorrect": "",
-                            "SchemaComplete": "", "FinalAnswerWordCount": 0,
-                            "QuotesVerified": 0, "QuotesDisplaced": 0, "QuotesFabricated": 0,
-                            "BleuMaxRetrieved": 0.0, "BleuAvgRetrieved": 0.0,
-                            "Rouge1MaxRetrieved": 0.0, "Rouge1AvgRetrieved": 0.0,
-                            "Rouge1MaxIdeal": 0.0, "Rouge1AvgIdeal": 0.0,
-                            "Rouge1RetrievedVsIdealRatio": 0.0,
-                            "RougeL_MaxRetrieved": 0.0, "RougeL_MaxIdeal": 0.0,
-                            "CriticalMissingEvidence": "",
-                            "RubricFactualAccuracy": "", "RubricCitationAccuracy": "",
-                            "RubricHistoriographicalDepth": "", "RubricEpistemicCalibration": "",
-                            "RubricTotal": "", "EvaluatorNotes": "TEST ROW — delete after verification",
-                        }
+
+                    if st.button("🔍 List All Accessible Spreadsheets"):
                         try:
-                            benchmark_logger.record_api_outputs(test_record)
-                            st.success("✅ Test row written successfully — check benchmark_results sheet.")
+                            all_sheets = gc_client.spreadsheet_titles()
+                            st.write("**Spreadsheets visible to service account:**")
+                            for title in all_sheets:
+                                marker = " ← THIS ONE" if title == "benchmark_results" else ""
+                                st.write(f"• `{repr(title)}`{marker}")
+                            if "benchmark_results" not in all_sheets:
+                                st.error("❌ No spreadsheet titled exactly 'benchmark_results' found. Check title spelling and sharing permissions.")
                         except Exception as e:
-                            st.error(f"❌ Test write failed: {type(e).__name__}: {e}")
+                            st.error(f"❌ Could not list spreadsheets: {type(e).__name__}: {e}")
+
+                    if st.button("🧪 Test Sheets Write (with verification)"):
+                        try:
+                            # Step 1: Open sheet and show exactly which file it resolved to
+                            sh = gc_client.open("benchmark_results")
+                            st.write(f"**Resolved spreadsheet title:** `{sh.title}`")
+                            st.write(f"**Spreadsheet ID (URL):** `{sh.id}`")
+                            ws = sh.sheet1
+                            st.write(f"**Sheet tab name:** `{ws.title}`  |  **Rows before write:** `{ws.rows}`")
+
+                            # Step 2: Direct low-level write — bypass DataLogger entirely
+                            # to confirm pygsheets itself can write to this sheet.
+                            next_row = len(ws.get_all_records()) + 2
+                            ws.update_value(f"A{next_row}", f"DIRECT_TEST_{datetime.now().isoformat()}")
+                            st.success(f"✅ Direct write succeeded at row {next_row} — check column A of the sheet.")
+
+                            # Step 3: Now test DataLogger path
+                            test_record = {
+                                "QueryID": "TEST_DATALOGGER",
+                                "Query": "DataLogger path test",
+                                "Category": "debug",
+                                "HayModel": HAY_MODEL, "NicolayModel": NICOLAY_MODEL,
+                                "HayTypeExpected": "", "HayTypeGot": "", "HayTypeCorrect": "",
+                                "HayKeywordCount": 0, "HaySpuriousFields": "[]",
+                                "HayTrainingBleed": "False", "InitialAnswer": "", "QueryAssessment": "",
+                                "RetrievedDocIDs": "[]", "RetrievalSearchTypes": "[]", "RerankerScores": "[]",
+                                "PrecisionAt5": 0.0, "RecallAt5": 0.0, "CeilingAdjustedPrecision": 0.0,
+                                "IdealDocsHit": "[]", "IdealDocsMissed": "[]",
+                                "NicolayTypeExpected": "", "NicolayTypeGot": "", "NicolayTypeCorrect": "",
+                                "SchemaComplete": "", "FinalAnswerWordCount": 0,
+                                "QuotesVerified": 0, "QuotesDisplaced": 0, "QuotesFabricated": 0,
+                                "BleuMaxRetrieved": 0.0, "BleuAvgRetrieved": 0.0,
+                                "Rouge1MaxRetrieved": 0.0, "Rouge1AvgRetrieved": 0.0,
+                                "Rouge1MaxIdeal": 0.0, "Rouge1AvgIdeal": 0.0,
+                                "Rouge1RetrievedVsIdealRatio": 0.0,
+                                "RougeL_MaxRetrieved": 0.0, "RougeL_MaxIdeal": 0.0,
+                                "CriticalMissingEvidence": "",
+                                "RubricFactualAccuracy": "", "RubricCitationAccuracy": "",
+                                "RubricHistoriographicalDepth": "", "RubricEpistemicCalibration": "",
+                                "RubricTotal": "", "EvaluatorNotes": "DataLogger path test",
+                            }
+                            rows_before = len(ws.get_all_records())
+                            benchmark_logger.record_api_outputs(test_record)
+                            rows_after = len(ws.get_all_records())
+                            if rows_after > rows_before:
+                                st.success(f"✅ DataLogger write succeeded — rows went from {rows_before} to {rows_after}.")
+                            else:
+                                st.error(f"❌ DataLogger write appeared to succeed but row count unchanged ({rows_before} → {rows_after}). Data may be going to a different sheet tab.")
+                                st.write(f"DataLogger's internal sheet object tab: `{benchmark_logger.sheet.title}`")
+                        except Exception as e:
+                            st.error(f"❌ Test failed at: {type(e).__name__}: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
                 else:
                     st.warning("⚠️ No gcp_service_account in secrets — Sheets logging disabled.")
             except ImportError:
@@ -1367,6 +1427,7 @@ def main():
                             q,
                             openai_api_key=openai_key,
                             cohere_api_key=cohere_key,
+                            corpus_file=corpus_file,
                             status_cb=lambda msg: status_box.info(msg)
                         )
                     results["queries"][q["id"]] = qresult

@@ -108,7 +108,7 @@ BENCHMARK_QUERIES = [
         "query": "Lincoln noted how many voters from Kansas and Nevada participated in the 1864 election",
         "category": "factual_retrieval",
         "expected_hay_type": "A", "expected_nicolay_type": "T1",
-        "ideal_docs_new": [413, 414], "ideal_docs_count": 2,
+        "ideal_docs_new": [413, 414], "ideal_docs_original": [77], "ideal_docs_count": 2,
         "critical_missing_evidence": None,
         "watchlist": ["Hay spurious field", "Hay hallucination propagation (33,762 figure)"],
     },
@@ -117,7 +117,7 @@ BENCHMARK_QUERIES = [
         "query": "How does Russia factor into Lincoln's speeches?",
         "category": "factual_retrieval",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        "ideal_docs_new": [305, 351, 381], "ideal_docs_count": 3,
+        "ideal_docs_new": [305, 351, 381], "ideal_docs_original": [52, 63, 68], "ideal_docs_count": 3,
         "critical_missing_evidence": "Eduard de Stoeckl, Alaska purchase negotiations",
         "watchlist": ["Chunk 351 Russia/Japan retrieval gap"],
     },
@@ -126,7 +126,7 @@ BENCHMARK_QUERIES = [
         "query": "In what ways did Lincoln highlight the contributions of immigrants during the Civil War?",
         "category": "factual_retrieval",
         "expected_hay_type": "D", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [390, 349, 350], "ideal_docs_count": 3,
+        "ideal_docs_new": [390, 349, 350], "ideal_docs_original": [62, 63, 69], "ideal_docs_count": 3,
         "critical_missing_evidence": None,
         "watchlist": [],
     },
@@ -135,7 +135,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln incorporate allusions in his Second Inaugural Address?",
         "category": "analysis",
         "expected_hay_type": "A", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [419, 420, 421, 422], "ideal_docs_count": 4,
+        "ideal_docs_new": [419, 420, 421, 422], "ideal_docs_original": [77, 78], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
         "watchlist": ["Biblical allusion depth in chunks 421-422"],
     },
@@ -144,7 +144,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln characterize the implications of major Supreme Court decisions before the Civil War?",
         "category": "analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [88, 95, 101], "ideal_docs_count": 3,
+        "ideal_docs_new": [88, 95, 101], "ideal_docs_original": [15, 16, 17], "ideal_docs_count": 3,
         "critical_missing_evidence": None,
         "watchlist": [],
     },
@@ -153,7 +153,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln explain his administration's approach to the Fugitive Slave Law?",
         "category": "analysis",
         "expected_hay_type": "A", "expected_nicolay_type": "T1",
-        "ideal_docs_new": [185, 191, 197, 202], "ideal_docs_count": 4,
+        "ideal_docs_new": [185, 191, 197, 202], "ideal_docs_original": [33, 34, 35, 36], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
         "watchlist": [],
     },
@@ -162,7 +162,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln's discussion of slavery evolve between his House Divided speech and his Second Inaugural Address?",
         "category": "comparative_analysis",
         "expected_hay_type": "E", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [88, 95, 101, 419, 420, 421, 422], "ideal_docs_count": 7,
+        "ideal_docs_new": [88, 95, 101, 419, 420, 421, 422], "ideal_docs_original": [15, 16, 17, 77, 78], "ideal_docs_count": 7,
         "critical_missing_evidence": None,
         "watchlist": ["Lincoln-Douglas Debate chunk retrieval", "Hay Contrastive over-classification"],
     },
@@ -171,7 +171,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln's justification for the Civil War evolve between his First Inaugural and Second Inaugural?",
         "category": "comparative_analysis",
         "expected_hay_type": "E", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [185, 191, 197, 202, 419, 420, 421, 422], "ideal_docs_count": 8,
+        "ideal_docs_new": [185, 191, 197, 202, 419, 420, 421, 422], "ideal_docs_original": [33, 34, 35, 36, 77, 78], "ideal_docs_count": 8,
         "critical_missing_evidence": None,
         "watchlist": ["Hay Contrastive over-classification"],
     },
@@ -180,7 +180,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln's views of African American soldiers change or remain the same over time?",
         "category": "comparative_analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        "ideal_docs_new": [288, 295, 367, 374], "ideal_docs_count": 4,
+        "ideal_docs_new": [288, 295, 367, 374], "ideal_docs_original": [51, 52, 65, 66], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
         "watchlist": ["295 soldiers passage", "374 100,000 in service"],
     },
@@ -189,7 +189,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln develop the theme of divine providence throughout his wartime speeches?",
         "category": "synthesis",
         "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [298, 418, 419, 420, 421, 422], "ideal_docs_count": 6,
+        "ideal_docs_new": [298, 418, 419, 420, 421, 422], "ideal_docs_original": [53, 76, 77, 78], "ideal_docs_count": 6,
         "critical_missing_evidence": None,
         "watchlist": ["Chunk 298 Second Annual opening providence language"],
     },
@@ -198,7 +198,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln consistently frame the relationship between liberty and law?",
         "category": "synthesis",
         "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [153, 159, 185, 191, 418, 419], "ideal_docs_count": 6,
+        "ideal_docs_new": [153, 159, 185, 191, 418, 419], "ideal_docs_original": [27, 28, 33, 34, 76, 77], "ideal_docs_count": 6,
         "critical_missing_evidence": None,
         "watchlist": [],
     },
@@ -207,7 +207,7 @@ BENCHMARK_QUERIES = [
         "query": "What themes did Lincoln consistently employ when discussing the Constitution's relationship to slavery?",
         "category": "synthesis",
         "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [153, 159, 185, 191], "ideal_docs_count": 4,
+        "ideal_docs_new": [153, 159, 185, 191], "ideal_docs_original": [27, 28, 33, 34], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
         "watchlist": ["Lincoln-Douglas Debate chunk retrieval", "Cooper Union additional chunks"],
     },
@@ -216,7 +216,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
         "category": "race_citizenship",
         "expected_hay_type": "E", "expected_nicolay_type": "T5",
-        "ideal_docs_new": [288, 295, 367, 374, 413, 414, 419], "ideal_docs_count": 7,
+        "ideal_docs_new": [288, 295, 367, 374, 413, 414, 419], "ideal_docs_original": [51, 52, 65, 66, 77, 78], "ideal_docs_count": 7,
         "critical_missing_evidence": "Last Public Address (Apr 11, 1865) — conditional suffrage statement NOT IN CORPUS",
         "watchlist": [
             "Jonesboro chunks 517-518 retrieval (racial hierarchy statement)",
@@ -230,7 +230,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln justify the naval blockade of Confederate ports?",
         "category": "analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        "ideal_docs_new": [218, 272, 300, 345, 359], "ideal_docs_count": 5,
+        "ideal_docs_new": [218, 272, 300, 345, 359], "ideal_docs_original": [39, 48, 53, 61, 63], "ideal_docs_count": 5,
         "critical_missing_evidence": "Trent Affair entirely absent from corpus — Mason, Slidell, San Jacinto references NOT IN CORPUS",
         "watchlist": ["Trent Affair gap recognition by Nicolay"],
     },
@@ -239,7 +239,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln describe U.S. relations with Great Britain during the Civil War?",
         "category": "comparative_analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        "ideal_docs_new": [242, 243, 247, 300, 301, 345, 346, 388], "ideal_docs_count": 8,
+        "ideal_docs_new": [242, 243, 247, 300, 301, 345, 346, 388], "ideal_docs_original": [43, 44, 53, 54, 61, 62, 69], "ideal_docs_count": 8,
         "critical_missing_evidence": "Trent Affair absent (most diplomatically significant U.S.-British episode of the war)",
         "watchlist": ["Trent Affair gap recognition by Nicolay"],
     },
@@ -248,7 +248,7 @@ BENCHMARK_QUERIES = [
         "query": "How did Lincoln report on the financial condition of the Post Office Department during the war?",
         "category": "factual_retrieval",
         "expected_hay_type": "D", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [311, 312, 364, 365, 401], "ideal_docs_count": 5,
+        "ideal_docs_new": [311, 312, 364, 365, 401], "ideal_docs_original": [55, 56, 64, 65, 71], "ideal_docs_count": 5,
         "critical_missing_evidence": None,
         "watchlist": ["Numerical progression: $8.3M → near-self-sustaining → $12.4M"],
     },
@@ -348,17 +348,28 @@ def extract_nicolay_type(synthesis_assessment: str) -> Optional[str]:
     return f"T{m.group(1)}" if m else None
 
 
-def compute_retrieval_metrics(reranked: list[dict], ideal_docs: list[int]) -> dict:
+def compute_retrieval_metrics(reranked: list[dict], ideal_docs: list[int],
+                               ideal_docs_original: list[int] = None) -> dict:
     """
     Compute precision@5, recall@5, ceiling-adjusted precision.
-    ideal_docs: list of integer text_id values.
+    Auto-detects which ID set matches the corpus in use:
+    - If retrieved IDs overlap with ideal_docs_original → use original IDs
+    - Otherwise use ideal_docs (772-chunk new IDs)
     """
     if not reranked:
         return {
             "precision_at_5": 0.0, "recall_at_5": 0.0,
             "ceiling_adjusted_precision": 0.0,
-            "ideal_docs_hit": [], "ideal_docs_missed": list(ideal_docs)
+            "ideal_docs_hit": [], "ideal_docs_missed": list(ideal_docs),
+            "ideal_docs_set_used": "new"
         }
+    # Auto-detect: check if any retrieved ID appears in original IDs
+    retrieved_ids_set = {r["text_id_num"] for r in reranked if r.get("text_id_num")}
+    if ideal_docs_original and retrieved_ids_set & set(ideal_docs_original):
+        ideal_docs = ideal_docs_original
+        id_set_label = "original"
+    else:
+        id_set_label = "new"
 
     retrieved_ids = [r["text_id_num"] for r in reranked]
     ideal_set = set(ideal_docs)
@@ -380,7 +391,8 @@ def compute_retrieval_metrics(reranked: list[dict], ideal_docs: list[int]) -> di
         "recall_at_5": round(recall, 4),
         "ceiling_adjusted_precision": round(ceiling_adj, 4),
         "ideal_docs_hit": sorted(hits),
-        "ideal_docs_missed": sorted(misses)
+        "ideal_docs_missed": sorted(misses),
+        "ideal_docs_set_used": id_set_label
     }
 
 
@@ -407,9 +419,15 @@ def get_final_answer_text(nicolay_output: dict) -> str:
 
 
 def get_synthesis_assessment(nicolay_output: dict) -> str:
-    meta = nicolay_output.get("Meta Analysis", {})
-    if isinstance(meta, dict):
-        return meta.get("synthesis_assessment", "")
+    # In Nicolay v3, synthesis_assessment is under "User Query Analysis"
+    # (confirmed from log_nicolay_model_output in main app).
+    # Also check "Meta Analysis" as fallback for older schema variants.
+    for section in ["User Query Analysis", "Meta Analysis"]:
+        val = nicolay_output.get(section, {})
+        if isinstance(val, dict):
+            s = val.get("synthesis_assessment", "")
+            if s:
+                return s
     return ""
 
 
@@ -488,15 +506,18 @@ def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) 
         if not isinstance(match_val, dict):
             continue
 
-        key_passage = match_val.get("Key Passage", "")
+        key_passage = match_val.get("Key Quote", match_val.get("Key Passage", ""))  # v3 uses "Key Quote"
         text_id_str = match_val.get("Text ID", "")
 
-        # Parse integer from "Text #: 413"
+        # Parse integer from either "Text #: 77" or bare "77"
         cited_chunk = None
         try:
-            if "Text #:" in str(text_id_str):
-                num = int(str(text_id_str).split("Text #:")[1].strip())
-                cited_chunk = corpus.get(num)
+            tid = str(text_id_str).strip()
+            if "Text #:" in tid:
+                num = int(tid.split("Text #:")[1].strip())
+            else:
+                num = int(tid)
+            cited_chunk = corpus.get(num)
         except (ValueError, IndexError):
             pass
 
@@ -962,7 +983,7 @@ def run_pipeline_for_query(
     result["retrieval_search_types"] = [r.get("_search_type", "") for r in reranked]
     result["reranker_scores"] = [r.get("reranker_score") for r in reranked]
 
-    metrics = compute_retrieval_metrics(reranked, qdef["ideal_docs_new"])
+    metrics = compute_retrieval_metrics(reranked, qdef["ideal_docs_new"], qdef.get("ideal_docs_original"))
     result.update(metrics)
 
     # ── 5. NICOLAY METRICS ────────────────────────────────────────────────────
@@ -1017,8 +1038,14 @@ def run_pipeline_for_query(
 
     # ── 7. BLEU / ROUGE ───────────────────────────────────────────────────────
     status("📊 Computing BLEU/ROUGE scores...")
+    # Use whichever ideal ID set matches the live corpus
+    _ideal_for_bleu = (
+        qdef.get("ideal_docs_original")
+        if metrics.get("ideal_docs_set_used") == "original"
+        else qdef["ideal_docs_new"]
+    )
     bleu_rouge = compute_bleu_rouge(
-        final_answer_text, reranked, corpus_for_verify, qdef["ideal_docs_new"]
+        final_answer_text, reranked, corpus_for_verify, _ideal_for_bleu
     )
     result.update({k: v for k, v in bleu_rouge.items() if k != "_note"})
     result["bleu_rouge_note"] = bleu_rouge.get("_note", "")

@@ -843,7 +843,19 @@ def export_csv(results: dict, csv_file: str = CSV_FILE) -> bytes:
 # FULL PIPELINE RUNNER
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# Delegates entirely to run_rag_pipeline() from modules/rag_pipeline.py.
+# Delegates entirely to run_rag_pipeline()
+
+class _NoOpColBERT:
+    """
+    Stub ColBERT object passed to run_rag_pipeline() so it never tries to
+    instantiate ColBERTSearcher (which would trigger Astra DB initialization).
+    The pipeline checks `colbert_searcher is not None` before instantiating —
+    passing this stub satisfies that check. perform_colbert_search=False ensures
+    the stub's search() method is never actually called.
+    """
+    def search(self, *args, **kwargs):
+        return pd.DataFrame()
+
 # That function handles all data loading, Hay, retrieval, reranking, and Nicolay
 # with the correct module signatures. The benchmark layer adds metrics on top.
 
@@ -917,7 +929,7 @@ def run_pipeline_for_query(
             perform_semantic_search=True,
             perform_colbert_search=False,   # ColBERT skipped — no Astra in benchmark
             perform_reranking=True,
-            colbert_searcher=None,
+            colbert_searcher=_NoOpColBERT(),  # Stub prevents Astra init in rag_pipeline.py
             openai_api_key=openai_api_key,
             cohere_api_key=cohere_api_key,
             top_n_results=10,               # Retrieve more candidates before reranking to k=5

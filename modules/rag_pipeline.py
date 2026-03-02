@@ -98,7 +98,18 @@ def run_rag_pipeline(
         lincoln_index_df = load_lincoln_index_embedded()
 
         lincoln_data = lincoln_data_df.to_dict("records")
-        lincoln_dict = {item["text_id"]: item for item in lincoln_data}
+        # Build a dual-key lookup so lookups succeed regardless of text_id format.
+        # The repaired 772-chunk corpus uses "Text #: N" string keys. The embedded
+        # index may carry bare integers or "N" strings. Both are registered here.
+        lincoln_dict = {}
+        for item in lincoln_data:
+            tid = item["text_id"]
+            lincoln_dict[tid] = item                        # "Text #: N"  (native key)
+            m = re.search(r"(\d+)", str(tid))
+            if m:
+                num = int(m.group(1))
+                lincoln_dict[num] = item                    # integer key  (for index lookups)
+                lincoln_dict[str(num)] = item               # bare string  (e.g. "77")
 
         # Use the provided colbert_searcher instance or create a local one if needed
         if colbert_searcher is None:
@@ -245,11 +256,11 @@ def run_rag_pipeline(
                 st.error(f"Error in ColBERT search: {str(e)}")
 
         # 8. Combine Results & Rerank
-        combined_df = pd.concat([
-            search_results_df,
-            semantic_matches_df,
-            colbert_matches_df
-        ])
+        _frames_to_combine = [
+            df for df in [search_results_df, semantic_matches_df, colbert_matches_df]
+            if not df.empty
+        ]
+        combined_df = pd.concat(_frames_to_combine, ignore_index=True) if _frames_to_combine else pd.DataFrame()
 
         combined_df = combined_df.drop_duplicates(subset=["text_id"]) if not combined_df.empty else combined_df
 

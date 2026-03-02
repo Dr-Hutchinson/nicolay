@@ -19,6 +19,69 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import pandas as pd
+import msgpack
+
+
+def _decode_bytes(obj):
+    """Recursively convert bytes to str for msgpack-loaded objects."""
+    if isinstance(obj, (bytes, bytearray)):
+        try:
+            return obj.decode("utf-8")
+        except Exception:
+            return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, dict):
+        return { _decode_bytes(k): _decode_bytes(v) for k,v in obj.items() }
+    if isinstance(obj, list):
+        return [ _decode_bytes(x) for x in obj ]
+    return obj
+
+
+def load_corpus_any(corpus_path: str) -> list[dict]:
+    """Load corpus from JSON or msgpack and return list-of-dict items."""
+    p = Path(corpus_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Corpus path not found: {corpus_path}")
+    suffix = p.suffix.lower()
+
+    if suffix == ".json":
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+            data = data["data"]
+        if not isinstance(data, list):
+            raise ValueError(f"JSON corpus must be a list of records; got {type(data)}")
+        return data
+
+    if suffix in {".msgpack", ".mpack"}:
+        with open(p, "rb") as f:
+            unpacker = msgpack.Unpacker(f, raw=False)
+            objs = [o for o in unpacker]
+        if not objs:
+            raise ValueError("Msgpack corpus is empty (no top-level objects).")
+        data = objs[-1]  # tolerate header/metadata objects in the stream
+        data = _decode_bytes(data)
+        if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+            data = data["data"]
+        if not isinstance(data, list):
+            raise ValueError(f"Msgpack corpus must be a list of records; got {type(data)}")
+        return data
+
+    # Fallback: try JSON then msgpack
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+
+    with open(p, "rb") as f:
+        data = msgpack.unpackb(f.read(), raw=False)
+    data = _decode_bytes(data)
+    if not isinstance(data, list):
+        raise ValueError(f"Unsupported corpus format at {corpus_path} (suffix={suffix})")
+    return data
+
 
 # NLP evaluation
 import nltk
@@ -838,7 +901,7 @@ def init_benchmark_sheet_headers(gc_client):
         "RubricTotal", "EvaluatorNotes",
     ]
     try:
-        sh = gc_client.open("benchmark_results_data").sheet1
+        sh = gc_client.open("benchmark_results").sheet1
         existing_row1 = sh.get_row(1, returnas="matrix")
         if existing_row1 and existing_row1[0] == "Timestamp":
             return  # Headers already present
@@ -1018,7 +1081,7 @@ def run_pipeline_for_query(
     qdef          : benchmark query definition dict
     openai_api_key: passed through to run_rag_pipeline
     cohere_api_key: passed through to run_rag_pipeline
-    corpus_file   : path to lincoln_speech_corpus_repaired_1.json (772-chunk corpus).
+    corpus_file   : path to lincoln_speech_corpus_repaired_1.(json|msgpack) (772-chunk corpus).
                     Used here for metrics and quote verification. Note: run_rag_pipeline()
                     loads its own corpus internally via load_lincoln_speech_corpus() in
                     data_utils.py — if retrieval returns only ~80 documents, that function
@@ -1080,8 +1143,7 @@ def run_pipeline_for_query(
     corpus_load_error = None
     if corpus_file and Path(corpus_file).exists():
         try:
-            with open(corpus_file, "r", encoding="utf-8") as _f:
-                _raw = json.load(_f)
+            _raw = load_corpus_any(corpus_file)
             for item in _raw:
                 tid = item.get("text_id", "")
                 m = re.search(r"(\d+)", str(tid))
@@ -1206,12 +1268,13 @@ def main():
                                    value=os.environ.get("COHERE_API_KEY", ""))
 
         # Auto-detect corpus across common repo layouts (root, Data/, data/)
-        _cf = "lincoln_speech_corpus_repaired_1.json"
-        _corpus_default = next(
-            (p for p in [f"Data/{_cf}", f"data/{_cf}", _cf] if Path(p).exists()),
-            f"Data/{_cf}"
-        )
-        corpus_file = st.text_input("Corpus JSON path", value=_corpus_default)
+        _base = "lincoln_speech_corpus_repaired_1"
+        _candidates = [
+            f"Data/{_base}.json", f"data/{_base}.json", f"{_base}.json",
+            f"Data/{_base}.msgpack", f"data/{_base}.msgpack", f"{_base}.msgpack",
+        ]
+        _corpus_default = next((p for p in _candidates if Path(p).exists()), f"Data/{_base}.msgpack")
+        corpus_file = st.text_input("Corpus path (JSON or MSGPACK)", value=_corpus_default)
         if corpus_file and not Path(corpus_file).exists():
             st.error(f"⚠️ Corpus file not found: {corpus_file}")
         elif corpus_file and Path(corpus_file).exists():

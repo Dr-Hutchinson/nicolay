@@ -838,7 +838,7 @@ def init_benchmark_sheet_headers(gc_client):
         "RubricTotal", "EvaluatorNotes",
     ]
     try:
-        sh = gc_client.open("benchmark_results").sheet1
+        sh = gc_client.open("benchmark_results_data").sheet1
         existing_row1 = sh.get_row(1, returnas="matrix")
         if existing_row1 and existing_row1[0] == "Timestamp":
             return  # Headers already present

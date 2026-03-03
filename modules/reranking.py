@@ -4,6 +4,27 @@ import cohere
 import yaml
 import pandas as pd
 import streamlit as st
+import re
+
+
+
+def _normalize_text_id(text_id_value):
+    """Normalize a text_id into the canonical 'Text #: N' form.
+
+    Returns:
+        (text_id_norm: str|None, text_id_num: int|None)
+    """
+    s = str(text_id_value).strip() if text_id_value is not None else ""
+    if not s:
+        return None, None
+
+    # Accept already-normalized ids like "Text #: 413" as well as raw ints/strings.
+    m = re.search(r"(\d+)", s)
+    if not m:
+        return s, None
+
+    n = int(m.group(1))
+    return f"Text #: {n}", n
 
 
 def prepare_documents_for_reranking(combined_df, user_query, lincoln_dict=None):
@@ -29,9 +50,12 @@ def prepare_documents_for_reranking(combined_df, user_query, lincoln_dict=None):
     documents = []
     for idx, row in combined_df.iterrows():
         try:
-            search_type = row.get("search_type", "Unknown")
-            if pd.isna(search_type):
-                search_type = "Keyword" if "key_quote" in row and pd.notna(row["key_quote"]) else "Semantic"
+            search_type = row.get("search_type", None)
+            search_type_str = "" if search_type is None or pd.isna(search_type) else str(search_type).strip()
+            if not search_type_str or search_type_str.lower() == "unknown":
+                # Heuristic fallback when upstream did not label provenance.
+                search_type_str = "Keyword" if ("key_quote" in row and pd.notna(row.get("key_quote"))) else "Semantic"
+            search_type = search_type_str
 
             text_id = str(row.get("text_id", "")).strip()
 
@@ -43,9 +67,19 @@ def prepare_documents_for_reranking(combined_df, user_query, lincoln_dict=None):
             # Falls back to key quote window if lincoln_dict not provided or lookup fails.
             full_text = None
             if lincoln_dict is not None:
-                lookup_key = f"Text #: {text_id}"
-                corpus_entry = lincoln_dict.get(lookup_key, {})
-                full_text = corpus_entry.get("full_text", None)
+                text_id_norm, text_id_num = _normalize_text_id(text_id)
+                corpus_entry = None
+
+                # Try multiple key styles to tolerate mixed dict keying (e.g., "Text #: 413", 413, "413").
+                for k in (text_id, text_id_norm, str(text_id_num) if text_id_num is not None else None, text_id_num):
+                    if k is None:
+                        continue
+                    if k in lincoln_dict:
+                        corpus_entry = lincoln_dict.get(k)
+                        break
+
+                if isinstance(corpus_entry, dict):
+                    full_text = corpus_entry.get("full_text", None)
 
             if not full_text:
                 # Fallback: use the key quote window or TopSegment from the search result
@@ -179,9 +213,18 @@ def format_reranked_results_for_model_input(reranked_results, max_results=5, lin
             # Falls back to the key quote window if lookup fails or lincoln_dict is not provided.
             full_text = None
             if lincoln_dict is not None:
-                lookup_key = f"Text #: {text_id}"
-                corpus_entry = lincoln_dict.get(lookup_key, {})
-                full_text = corpus_entry.get('full_text', None)
+                text_id_norm, text_id_num = _normalize_text_id(text_id)
+                corpus_entry = None
+
+                for k in (text_id, text_id_norm, str(text_id_num) if text_id_num is not None else None, text_id_num):
+                    if k is None:
+                        continue
+                    if k in lincoln_dict:
+                        corpus_entry = lincoln_dict.get(k)
+                        break
+
+                if isinstance(corpus_entry, dict):
+                    full_text = corpus_entry.get("full_text", None)
 
             if full_text:
                 text_field_label = "Full Text (select the most relevant passage to quote directly)"

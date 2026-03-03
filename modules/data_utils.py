@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 import json
 import msgpack
@@ -17,6 +18,40 @@ def _decode_bytes(obj):
     if isinstance(obj, list):
         return [_decode_bytes(x) for x in obj]
     return obj
+
+def _normalize_text_id(text_id_val):
+    """Normalize a text_id value to the canonical 'Text #: N' form when possible."""
+    if text_id_val is None:
+        return None
+    try:
+        import pandas as _pd
+        if _pd.isna(text_id_val):
+            return None
+    except Exception:
+        pass
+
+    s = str(text_id_val).strip()
+    if not s:
+        return None
+    m = re.search(r"(\d+)", s)
+    if not m:
+        return s
+    return f"Text #: {int(m.group(1))}"
+
+
+def _extract_full_text_from_combined(combined_val: str) -> str:
+    """Extract the chunk's Full Text block from the 'combined' field (best-effort)."""
+    if not isinstance(combined_val, str):
+        return ""
+    # Expected shape:
+    # Text #: N
+    # Source: ...
+    # Full Text:
+    # <chunk text>
+    # Summary: ...
+    m = re.search(r"Full Text:\s*\n(.*?)(?:\n\s*Summary:|\Z)", combined_val, flags=re.S)
+    return m.group(1).strip() if m else ""
+
 
 
 def _find_first_existing(paths: list[str]) -> str:
@@ -95,15 +130,42 @@ def load_voyant_word_counts() -> pd.DataFrame:
 
 
 @st.cache_data(persist="disk")
+def _load_lincoln_index_embedded_cached(path: str, mtime: float) -> pd.DataFrame:
+    """Load the semantic embedding index parquet and normalize required fields.
+
+    Note: the `mtime` argument intentionally participates in the cache key so updates
+    to the parquet file invalidate Streamlit's cache automatically.
+    """
+    df = pd.read_parquet(path)
+
+    # --- text_id normalization ---
+    # Prefer an existing text_id column; do NOT overwrite it from `combined` (which may be stale).
+    if "text_id" in df.columns:
+        df["text_id"] = df["text_id"].apply(_normalize_text_id)
+    elif "combined" in df.columns:
+        df["text_id"] = df["combined"].str.extract(r"(Text #: \d+)")
+    else:
+        df = df.reset_index().rename(columns={"index": "text_id"})
+        df["text_id"] = df["text_id"].apply(_normalize_text_id)
+
+    # --- full_text extraction (load-time) ---
+    # The pipeline's semantic segmentation expects df['full_text'].
+    if "full_text" not in df.columns:
+        if "combined" in df.columns:
+            df["full_text"] = df["combined"].apply(_extract_full_text_from_combined)
+        else:
+            df["full_text"] = ""
+
+    # Ensure full_text is a string and not NaN
+    df["full_text"] = df["full_text"].fillna("").astype(str)
+
+    return df
+
+
 def load_lincoln_index_embedded() -> pd.DataFrame:
     path = _find_first_existing([
-        "data/lincoln_index_embedded_reindexed.parquet", "Data/lincoln_index_embedded_reindexed.parquet", "lincoln_index_embedded_reindexed.parquet"
+        "data/lincoln_index_embedded_reindex.parquet", "Data/lincoln_index_embedded_reindex.parquet", "lincoln_index_embedded_reindex.parquet",
+        "data/lincoln_index_embedded.parquet", "Data/lincoln_index_embedded.parquet", "lincoln_index_embedded.parquet"
     ])
-    df = pd.read_parquet(path)
-    # Normalize text_id to match the corpus convention ("Text #: N")
-    if "combined" in df.columns:
-        df["text_id"] = df["combined"].str.extract(r"(Text #: \d+)")
-    elif "text_id" not in df.columns:
-        # Last resort: ensure there is a text_id column, even if it is just the index
-        df = df.reset_index().rename(columns={"index": "text_id"})
-    return df
+    mtime = os.path.getmtime(path)
+    return _load_lincoln_index_embedded_cached(path, mtime)

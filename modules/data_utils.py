@@ -97,7 +97,7 @@ def load_voyant_word_counts() -> pd.DataFrame:
 @st.cache_data(persist="disk")
 def load_lincoln_index_embedded() -> pd.DataFrame:
     path = _find_first_existing([
-        "data/lincoln_index_embedded.parquet", "Data/lincoln_index_embedded.parquet", "lincoln_index_embedded.parquet"
+        "data/lincoln_index_embedded_reindexed.parquet", "Data/lincoln_index_embedded_reindexed.parquet", "lincoln_index_embedded_reindexed.parquet"
     ])
     df = pd.read_parquet(path)
     # Normalize text_id to match the corpus convention ("Text #: N")

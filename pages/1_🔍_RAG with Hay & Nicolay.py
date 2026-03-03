@@ -278,7 +278,7 @@ with st.form("Search Interface"):
             #lincoln_speeches_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\lincoln-speeches_final_formatted.json'
             lincoln_speeches_file_path = 'data/lincoln_speech_corpus_repaired_1.json'
             keyword_frequency_file_path = 'data/voyant_word_counts.json'
-            lincoln_speeches_embedded = "lincoln_index_embedded_repaired.csv"
+            lincoln_speeches_embedded = "data/lincoln_index_embedded_repaired.csv"
 
             # define functions
             def load_json(file_path):

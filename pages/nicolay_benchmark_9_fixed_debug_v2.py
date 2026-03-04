@@ -565,29 +565,93 @@ def get_synthesis_assessment(nicolay_output: dict) -> str:
 # QUOTE VERIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def normalize_for_quote_matching(text: str) -> str:
     """
     Normalize text for robust quote matching.
-    Handles backtick quotes, em-dash variants, editorial brackets,
-    whitespace, and unicode normalization.
+
+    Key goals:
+    - Make matching resilient to unicode punctuation and dash variants
+    - Ignore editorial brackets
+    - Collapse whitespace
+    - **Do NOT** keep ellipsis as literal characters (models often include "..." or "…" to indicate truncation)
     """
     if not text:
         return ""
     # Unicode normalization
-    text = unicodedata.normalize("NFKD", text)
-    # Backtick quotes → standard
+    text = unicodedata.normalize("NFKD", str(text))
+
+    # Normalize common quote glyphs
     text = text.replace("`", "'")
-    # Curly quotes → straight
     text = text.replace("\u2018", "'").replace("\u2019", "'")
     text = text.replace("\u201c", '"').replace("\u201d", '"')
-    # Double/triple hyphens and em-dashes → space
+
+    # Ellipsis variants -> sentinel (we will strip in segmenting, but also remove here for plain substring matches)
+    text = text.replace("…", "...")
+
+    # Dashes: collapse multi-dash runs and single dashes to spaces
     text = re.sub(r'[-\u2013\u2014]{2,}', ' ', text)
     text = re.sub(r'[-\u2013\u2014]', ' ', text)
+
     # Editorial brackets
     text = re.sub(r'\[.*?\]', '', text)
-    # Whitespace
+
+    # Collapse whitespace
     text = re.sub(r'\s+', ' ', text).strip()
+
     return text.lower()
+
+
+def _quote_segments_for_matching(passage: str) -> list[str]:
+    """
+    Convert a possibly-truncated "quote" (often containing .../…) into
+    a list of normalized segments that should appear **in order**.
+
+    This solves the exact bug you hit in Q8:
+    Nicolay's Key Quote often ends with "..." which is not present in the corpus,
+    causing false "fabrication" even when the quote is present verbatim.
+    """
+    if not passage:
+        return []
+
+    # Normalize first (includes converting … -> ...)
+    p = unicodedata.normalize("NFKD", str(passage)).strip()
+
+    # Strip common surrounding quotation marks
+    p = p.strip().strip('"').strip("'").strip()
+
+    # Split on ellipsis markers (internal or trailing)
+    parts = re.split(r'(?:\.\.\.|…)', p)
+
+    # Normalize each part and keep non-trivial segments
+    segs = []
+    for part in parts:
+        s = normalize_for_quote_matching(part)
+        # Skip tiny fragments (e.g., a single cutoff word)
+        if len(s) >= 10:
+            segs.append(s)
+
+    # If everything was tiny (rare), fall back to the whole normalized string with ellipses removed
+    if not segs:
+        p2 = re.sub(r'(?:\.\.\.|…)+', ' ', p)
+        s2 = normalize_for_quote_matching(p2)
+        if s2:
+            segs = [s2]
+
+    return segs
+
+
+def _contains_segments_in_order(haystack_norm: str, segs_norm: list[str]) -> bool:
+    """Return True iff all segments occur in haystack in order."""
+    if not haystack_norm or not segs_norm:
+        return False
+    i = 0
+    for s in segs_norm:
+        pos = haystack_norm.find(s, i)
+        if pos == -1:
+            return False
+        i = pos + len(s)
+    return True
 
 
 def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
@@ -597,8 +661,9 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
     - displacement: passage found in corpus but in a different chunk
     - fabrication:  passage not found anywhere in corpus
 
-    This function is intentionally *debug-forward* — it returns enough metadata to
-    quickly diagnose corpus mismatch, missing full_text fields, or ID drift.
+    IMPORTANT: We treat "..." / "…" as *truncation markers* (not literal text).
+    We therefore match by checking that all non-trivial segments of the passage
+    appear in order in the cited chunk (or elsewhere in the corpus).
     """
     cited_chunk_present = bool(cited_chunk)
     cited_text = cited_chunk.get("full_text", cited_chunk.get("text", "")) if cited_chunk else ""
@@ -619,11 +684,11 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
             "cited_chunk_text_len": len(cited_text) if cited_text else 0,
         }
 
-    # Normalize
-    norm_passage = normalize_for_quote_matching(str(cited_passage))
+    segs = _quote_segments_for_matching(cited_passage)
+    cited_norm = normalize_for_quote_matching(cited_text) if cited_text else ""
 
     # Check cited chunk first
-    if cited_text and norm_passage in normalize_for_quote_matching(cited_text):
+    if cited_norm and _contains_segments_in_order(cited_norm, segs):
         return {
             "outcome": "verified",
             "in_cited_chunk": True,
@@ -636,16 +701,18 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
             "cited_chunk_text_id": cited_text_id,
             "cited_chunk_text_len": len(cited_text),
             "cited_chunk_preview": _safe_preview(cited_text, 140),
-            "norm_passage_len": len(norm_passage),
+            "norm_segments": segs[:3],
+            "num_segments": len(segs),
         }
 
-    # Search full corpus (return the *corpus key* so we can tell if IDs drifted)
-    if corpus:
+    # Search full corpus for displacement
+    if corpus and segs:
         for cid, chunk in corpus.items():
             chunk_text = chunk.get("full_text", chunk.get("text", "")) or ""
             if not chunk_text:
                 continue
-            if norm_passage in normalize_for_quote_matching(chunk_text):
+            chunk_norm = normalize_for_quote_matching(chunk_text)
+            if _contains_segments_in_order(chunk_norm, segs):
                 return {
                     "outcome": "displacement",
                     "in_cited_chunk": False,
@@ -661,7 +728,8 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
                     "cited_chunk_text_id": cited_text_id,
                     "cited_chunk_text_len": len(cited_text) if cited_text else 0,
                     "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
-                    "norm_passage_len": len(norm_passage),
+                    "norm_segments": segs[:3],
+                    "num_segments": len(segs),
                 }
 
     return {
@@ -676,10 +744,9 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
         "cited_chunk_text_id": cited_text_id,
         "cited_chunk_text_len": len(cited_text) if cited_text else 0,
         "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
-        "norm_passage_len": len(norm_passage),
+        "norm_segments": segs[:3],
+        "num_segments": len(segs),
     }
-
-
 def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) -> list[dict]:
     """Run quote verification for all Match Analysis entries (with debug metadata)."""
     match_analysis = nicolay_output.get("Match Analysis", {})

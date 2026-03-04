@@ -731,9 +731,9 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
     """
     Quote verification with 5 outcomes:
 
-    - verified:               strict (punctuation-sensitive) match in cited chunk
-    - approximate_quote:      match in cited chunk under loose normalization or high token coverage
-    - displacement:           strict match found in a different chunk
+    - verified:               match in cited chunk (strict OR punctuation-insensitive normalization)
+    - approximate_quote:      likely paraphrase: high token overlap without an exact segments-in-order match
+    - displacement:           match found in a different chunk (strict OR punctuation-insensitive normalization)
     - approximate_displacement: loose match or high token coverage found in a different chunk
     - fabrication:            no match found
 
@@ -782,19 +782,19 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
             "num_segments": len(segs_strict),
         }
 
-    # ── Loose match (punctuation-tolerant) inside cited chunk -> approximate_quote
+    # ── Punctuation-insensitive match inside cited chunk -> VERIFIED (still verbatim content; ignores punctuation/quote glyphs)
     segs_loose = _quote_segments_for_matching_loose(cited_passage)
     cited_norm_loose = normalize_for_quote_matching_loose(cited_text) if cited_text else ""
 
     if cited_norm_loose and _contains_segments_in_order(cited_norm_loose, segs_loose):
         return {
-            "outcome": "approximate_quote",
+            "outcome": "verified",
             "in_cited_chunk": True,
             "in_any_chunk": True,
             "fabricated": False,
             "match_source_id": cited_text_id or "unknown",
             "match_method": "loose_segments",
-            "note": "APPROXIMATE — found in cited chunk under loose normalization",
+            "note": "VERIFIED — punctuation-insensitive match in cited chunk",
             # debug
             "cited_chunk_present": cited_chunk_present,
             "cited_chunk_source": cited_source,
@@ -842,7 +842,7 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
             chunk_norm_loose = normalize_for_quote_matching_loose(chunk_text)
             if _contains_segments_in_order(chunk_norm_loose, segs_loose):
                 return {
-                    "outcome": "approximate_displacement",
+                    "outcome": "displacement",
                     "in_cited_chunk": False,
                     "in_any_chunk": True,
                     "fabricated": False,
@@ -850,7 +850,7 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
                     "match_chunk_num": cid,
                     "match_chunk_source": str(chunk.get("source", "")),
                     "match_method": "loose_segments",
-                    "note": "APPROXIMATE DISPLACEMENT — found in different chunk under loose normalization",
+                    "note": "DISPLACEMENT — punctuation-insensitive match found in different chunk",
                     # debug
                     "cited_chunk_present": cited_chunk_present,
                     "cited_chunk_source": cited_source,
@@ -866,6 +866,24 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
     if cited_norm_loose:
         quote_loose = " ".join(segs_loose) if segs_loose else normalize_for_quote_matching_loose(cited_passage)
         cov = _token_coverage(quote_loose, cited_norm_loose)
+        if cov >= 0.95:
+            return {
+                "outcome": "verified",
+                "in_cited_chunk": True,
+                "in_any_chunk": True,
+                "fabricated": False,
+                "match_source_id": cited_text_id or "unknown",
+                "match_method": "token_coverage",
+                "approx_score": float(cov),
+                "note": "VERIFIED — near-exact token coverage in cited chunk",
+                # debug
+                "cited_chunk_present": cited_chunk_present,
+                "cited_chunk_source": cited_source,
+                "cited_chunk_text_id": cited_text_id,
+                "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+                "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+            }
+
         if cov >= 0.86:
             return {
                 "outcome": "approximate_quote",
@@ -896,7 +914,27 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
             cov = _token_coverage(quote_loose, cn)
             if cov > best[0]:
                 best = (cov, cid, str(chunk.get("text_id", "")), str(chunk.get("source", "")))
-        if best[0] >= 0.90 and best[1] is not None:
+        if best[1] is not None and best[0] >= 0.95:
+            return {
+                "outcome": "displacement",
+                "in_cited_chunk": False,
+                "in_any_chunk": True,
+                "fabricated": False,
+                "match_source_id": best[2],
+                "match_chunk_num": best[1],
+                "match_chunk_source": best[3],
+                "match_method": "token_coverage",
+                "approx_score": float(best[0]),
+                "note": "DISPLACEMENT — near-exact token coverage in different chunk",
+                # debug
+                "cited_chunk_present": cited_chunk_present,
+                "cited_chunk_source": cited_source,
+                "cited_chunk_text_id": cited_text_id,
+                "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+                "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+            }
+
+        if best[1] is not None and best[0] >= 0.90:
             return {
                 "outcome": "approximate_displacement",
                 "in_cited_chunk": False,

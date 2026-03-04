@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 import msgpack
+import hashlib
 
 
 def _decode_bytes(obj):
@@ -81,6 +82,72 @@ def load_corpus_any(corpus_path: str) -> list[dict]:
     if not isinstance(data, list):
         raise ValueError(f"Unsupported corpus format at {corpus_path} (suffix={suffix})")
     return data
+
+
+def _safe_preview(text: str, n: int = 160) -> str:
+    """One-line preview for debugging tables."""
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", str(text)).strip()
+    return (text[:n] + "…") if len(text) > n else text
+
+
+def _sha1_10(text: str) -> str:
+    """Short content fingerprint used to spot corpus/index mismatches."""
+    if text is None:
+        text = ""
+    h = hashlib.sha1(str(text).encode("utf-8", errors="replace")).hexdigest()
+    return h[:10]
+
+
+def _chunk_signature(corpus: dict, tid: int) -> dict:
+    """Summarize what *this corpus* thinks chunk `tid` is."""
+    chunk = corpus.get(tid) if corpus else None
+    if not chunk:
+        return {
+            "tid": tid, "exists": False, "source": "", "text_id": "",
+            "len": 0, "sha1_10": "", "preview": ""
+        }
+    full_text = chunk.get("full_text", chunk.get("text", "")) or ""
+    return {
+        "tid": tid,
+        "exists": True,
+        "source": str(chunk.get("source", "")),
+        "text_id": str(chunk.get("text_id", "")),
+        "len": int(len(full_text)),
+        "sha1_10": _sha1_10(full_text),
+        "preview": _safe_preview(full_text, 160),
+    }
+
+
+def _extract_int_from_text_id(val) -> Optional[int]:
+    """Parse an int from 'Text #: 420' or '420' or any string containing digits."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    m = re.search(r"(\d+)", s)
+    return int(m.group(1)) if m else None
+
+
+def _extract_cited_ids(nicolay_output: dict) -> list[int]:
+    """Extract all integer Text IDs Nicolay claims in Match Analysis."""
+    ma = nicolay_output.get("Match Analysis", {}) if isinstance(nicolay_output, dict) else {}
+    if not isinstance(ma, dict):
+        return []
+    out = []
+    for _, mv in ma.items():
+        if isinstance(mv, dict):
+            num = _extract_int_from_text_id(mv.get("Text ID", ""))
+            if num is not None:
+                out.append(num)
+    # Preserve order but unique
+    seen = set()
+    uniq = []
+    for x in out:
+        if x not in seen:
+            uniq.append(x); seen.add(x)
+    return uniq
+
 
 
 # NLP evaluation
@@ -526,44 +593,102 @@ def normalize_for_quote_matching(text: str) -> str:
 def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
     """
     Three-outcome quote verification:
-    - in_cited_chunk: passage found in the chunk Nicolay cited
-    - in_any_chunk but different chunk: displacement
-    - in neither: fabrication
-    NOTE: The prior pipeline's quote_match TRUE/FALSE logging has a known logic bug —
-    this normalization-based approach is the first accurate quote check the system has had.
-    """
-    if not cited_passage or len(cited_passage.strip()) < 5:
-        return {"outcome": "too_short", "in_cited_chunk": None, "in_any_chunk": None,
-                "fabricated": None, "note": "Passage too short to verify"}
+    - verified:     passage found in the chunk Nicolay cited
+    - displacement: passage found in corpus but in a different chunk
+    - fabrication:  passage not found anywhere in corpus
 
-    norm_passage = normalize_for_quote_matching(cited_passage)
+    This function is intentionally *debug-forward* — it returns enough metadata to
+    quickly diagnose corpus mismatch, missing full_text fields, or ID drift.
+    """
+    cited_chunk_present = bool(cited_chunk)
+    cited_text = cited_chunk.get("full_text", cited_chunk.get("text", "")) if cited_chunk else ""
+    cited_source = str(cited_chunk.get("source", "")) if cited_chunk else ""
+    cited_text_id = str(cited_chunk.get("text_id", "")) if cited_chunk else ""
+
+    if not cited_passage or len(str(cited_passage).strip()) < 5:
+        return {
+            "outcome": "too_short",
+            "in_cited_chunk": None,
+            "in_any_chunk": None,
+            "fabricated": None,
+            "note": "Passage too short to verify",
+            # debug
+            "cited_chunk_present": cited_chunk_present,
+            "cited_chunk_source": cited_source,
+            "cited_chunk_text_id": cited_text_id,
+            "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+        }
+
+    # Normalize
+    norm_passage = normalize_for_quote_matching(str(cited_passage))
 
     # Check cited chunk first
-    cited_text = cited_chunk.get("full_text", cited_chunk.get("text", "")) if cited_chunk else ""
     if cited_text and norm_passage in normalize_for_quote_matching(cited_text):
-        return {"outcome": "verified", "in_cited_chunk": True, "in_any_chunk": True,
-                "fabricated": False, "match_source_id": cited_chunk.get("text_id", "unknown")}
+        return {
+            "outcome": "verified",
+            "in_cited_chunk": True,
+            "in_any_chunk": True,
+            "fabricated": False,
+            "match_source_id": cited_text_id or "unknown",
+            # debug
+            "cited_chunk_present": cited_chunk_present,
+            "cited_chunk_source": cited_source,
+            "cited_chunk_text_id": cited_text_id,
+            "cited_chunk_text_len": len(cited_text),
+            "cited_chunk_preview": _safe_preview(cited_text, 140),
+            "norm_passage_len": len(norm_passage),
+        }
 
-    # Search full corpus
-    for chunk in corpus.values():
-        norm_chunk = normalize_for_quote_matching(chunk.get("full_text", chunk.get("text", "")))
-        if norm_passage in norm_chunk:
-            return {"outcome": "displacement", "in_cited_chunk": False, "in_any_chunk": True,
-                    "fabricated": False, "match_source_id": chunk.get("text_id", ""),
-                    "note": "DISPLACEMENT — passage found in different chunk"}
+    # Search full corpus (return the *corpus key* so we can tell if IDs drifted)
+    if corpus:
+        for cid, chunk in corpus.items():
+            chunk_text = chunk.get("full_text", chunk.get("text", "")) or ""
+            if not chunk_text:
+                continue
+            if norm_passage in normalize_for_quote_matching(chunk_text):
+                return {
+                    "outcome": "displacement",
+                    "in_cited_chunk": False,
+                    "in_any_chunk": True,
+                    "fabricated": False,
+                    "match_source_id": str(chunk.get("text_id", "")),
+                    "match_chunk_num": cid,
+                    "match_chunk_source": str(chunk.get("source", "")),
+                    "note": "DISPLACEMENT — passage found in different chunk",
+                    # debug
+                    "cited_chunk_present": cited_chunk_present,
+                    "cited_chunk_source": cited_source,
+                    "cited_chunk_text_id": cited_text_id,
+                    "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+                    "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+                    "norm_passage_len": len(norm_passage),
+                }
 
-    return {"outcome": "fabrication", "in_cited_chunk": False, "in_any_chunk": False,
-            "fabricated": True, "note": "FABRICATION — passage not found in corpus"}
+    return {
+        "outcome": "fabrication",
+        "in_cited_chunk": False,
+        "in_any_chunk": False,
+        "fabricated": True,
+        "note": "FABRICATION — passage not found in corpus",
+        # debug
+        "cited_chunk_present": cited_chunk_present,
+        "cited_chunk_source": cited_source,
+        "cited_chunk_text_id": cited_text_id,
+        "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+        "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+        "norm_passage_len": len(norm_passage),
+    }
 
 
 def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) -> list[dict]:
-    """Run quote verification for all Match Analysis entries."""
+    """Run quote verification for all Match Analysis entries (with debug metadata)."""
     match_analysis = nicolay_output.get("Match Analysis", {})
     if not isinstance(match_analysis, dict):
         return []
 
-    reranked_by_num = {r["text_id_num"]: r for r in reranked}
-    results = []
+    # Helpful for diagnosing: is Nicolay citing an ID that wasn't even retrieved?
+    reranked_by_num = {r.get("text_id_num"): r for r in (reranked or []) if r.get("text_id_num") is not None}
+    results: list[dict] = []
 
     for match_key, match_val in match_analysis.items():
         if not isinstance(match_val, dict):
@@ -572,24 +697,26 @@ def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) 
         key_passage = match_val.get("Key Quote", match_val.get("Key Passage", ""))  # v3 uses "Key Quote"
         text_id_str = match_val.get("Text ID", "")
 
-        # Parse integer from either "Text #: 77" or bare "77"
-        cited_chunk = None
-        try:
-            tid = str(text_id_str).strip()
-            if "Text #:" in tid:
-                num = int(tid.split("Text #:")[1].strip())
-            else:
-                num = int(tid)
-            cited_chunk = corpus.get(num)
-        except (ValueError, IndexError):
-            pass
+        cited_num = _extract_int_from_text_id(text_id_str)
+        cited_chunk = corpus.get(cited_num) if (cited_num is not None and corpus) else None
+        cited_present = bool(cited_chunk)
 
         verification = verify_quote(key_passage, cited_chunk, corpus)
+
+        # Was this ID actually part of the reranked top-k list?
+        reranked_rec = reranked_by_num.get(cited_num) if cited_num is not None else None
+
         results.append({
             "match": match_key,
             "text_id": text_id_str,
+            "cited_num": cited_num,
+            "cited_chunk_present": cited_present,
+            "cited_chunk_source": str(cited_chunk.get("source", "")) if cited_chunk else "",
+            "cited_chunk_text_id": str(cited_chunk.get("text_id", "")) if cited_chunk else "",
             "cited_passage": key_passage,
-            **verification
+            "cited_in_reranked_topk": bool(reranked_rec),
+            "cited_reranked_rank": reranked_rec.get("rank") if isinstance(reranked_rec, dict) else None,
+            **verification,
         })
 
     return results
@@ -1013,54 +1140,66 @@ def reranked_df_to_list(reranked_df: pd.DataFrame, corpus: dict = None) -> list[
     Key Quote, Relevance Score) into the list-of-dicts format used by benchmark
     metrics.
 
-    ID remapping: The pipeline's reranked DataFrame may carry old corpus text IDs
-    (parent document IDs from the original index). If a `corpus` dict is provided
-    (keyed by new int IDs), we verify whether the raw ID exists in the new corpus.
-    If not, we attempt to find the chunk by matching the 'Source' field against
-    corpus entries to resolve to the new ID. This ensures displayed IDs and
-    precision/recall metrics are aligned to the 772-chunk new corpus index.
+    DEBUG goals:
+      • Preserve the raw Text ID emitted by the pipeline.
+      • Record how/if we remapped IDs (and why).
+      • Surface cases where multiple chunks share a Source label (lossy mapping risk).
 
-    Search type: `Search Type` column may be absent or empty in some pipeline
-    versions — falls back to "Unknown" for display purposes.
+    ID remapping:
+      If a `corpus` dict is provided (keyed by *new* int IDs), we verify whether the
+      parsed ID exists in that corpus. If it does not, we attempt to resolve via
+      Source→new_id mapping (best-effort, but potentially lossy if Source is not unique).
     """
-    # Build a source→new_id lookup from the corpus for ID remapping
+    # Build a source→new_id lookup from the corpus for ID remapping (best-effort)
     source_to_new_id = {}
     if corpus:
         for new_id, chunk in corpus.items():
-            src = chunk.get("source", "")
+            src = str(chunk.get("source", "")).strip()
             if src:
                 source_to_new_id.setdefault(src, new_id)
 
-    records = []
+    records: list[dict] = []
     for _, row in reranked_df.iterrows():
         raw_id = str(row.get("Text ID", "")).strip()
+        row_source = str(row.get("Source", "")).strip()
+        rank = row.get("Rank", None)
 
         # Parse raw ID to integer
-        try:
-            num_id = int(raw_id)
-        except ValueError:
-            m = re.search(r"(\d+)", raw_id)
-            num_id = int(m.group(1)) if m else None
+        parsed_id = _extract_int_from_text_id(raw_id)
 
-        # Remap to new corpus ID if the raw ID is not present in the new corpus
-        if corpus and num_id is not None and num_id not in corpus:
-            # Try to resolve via Source field
-            row_source = str(row.get("Source", "")).strip()
+        # Remap to new corpus ID if the parsed ID is not present in the new corpus
+        remapped_id = parsed_id
+        remap_reason = None
+        if corpus and parsed_id is not None and parsed_id not in corpus:
             remapped = source_to_new_id.get(row_source)
             if remapped is not None:
-                num_id = remapped
+                remapped_id = remapped
+                remap_reason = "source_match"
+            else:
+                remap_reason = "missing_in_corpus_no_source_match"
 
         # Normalize search type label — pipeline column is "Search Type"
         raw_search_type = str(row.get("Search Type", "")).strip()
         search_type = raw_search_type if raw_search_type else "Unknown"
 
         records.append({
-            "text_id_num": num_id,
-            "text_id_str": f"Text #: {num_id}" if num_id is not None else raw_id,
+            # Canonical fields used by metrics
+            "rank": rank,
+            "text_id_num": remapped_id,
+            "text_id_str": f"Text #: {remapped_id}" if remapped_id is not None else raw_id,
             "source": row.get("Source", ""),
-            "full_text": row.get("Key Quote", ""),  # pipeline stores full text here
+            "full_text": row.get("Key Quote", ""),  # (note) may actually be Key Quote, not full chunk text
             "reranker_score": row.get("Relevance Score"),
             "_search_type": search_type,
+
+            # Debug-only fields (safe to ignore elsewhere)
+            "_raw_text_id": raw_id,
+            "_parsed_text_id": parsed_id,
+            "_remapped": bool(remap_reason and remapped_id != parsed_id),
+            "_remap_reason": remap_reason or "",
+            "_row_source": row_source,
+            "_parsed_id_in_corpus": bool(corpus and parsed_id is not None and parsed_id in corpus),
+            "_remapped_id_in_corpus": bool(corpus and remapped_id is not None and remapped_id in corpus),
         })
     return records
 
@@ -1163,6 +1302,21 @@ def run_pipeline_for_query(
     except Exception:
         pass
 
+    # DEBUG: corpus file fingerprint (proves which corpus we verified against)
+    try:
+        _p = Path(corpus_file)
+        _stat = _p.stat() if _p.exists() else None
+        st.session_state[f"_debug_corpus_fingerprint_{qid}"] = {
+            "corpus_file": str(corpus_file),
+            "resolved_path": str(_p.resolve()) if _p.exists() else str(corpus_file),
+            "exists": bool(_p.exists()),
+            "size_bytes": int(_stat.st_size) if _stat else None,
+            "mtime_iso": datetime.fromtimestamp(_stat.st_mtime).isoformat() if _stat else None,
+        }
+    except Exception:
+        pass
+
+
     # ── 3. HAY METRICS ────────────────────────────────────────────────────────
     status("📊 Computing Hay metrics...")
     result["hay_output"] = hay_output
@@ -1181,6 +1335,31 @@ def run_pipeline_for_query(
     result["retrieved_doc_ids"] = [r["text_id_num"] for r in reranked]
     result["retrieval_search_types"] = [r.get("_search_type") or "Unknown" for r in reranked]
     result["reranker_scores"] = [r.get("reranker_score") for r in reranked]
+
+    # DEBUG: ID audit — shows raw IDs, parsed IDs, remaps, and corpus membership
+    try:
+        _audit_rows = []
+        for r in reranked:
+            _audit_rows.append({
+                "rank": r.get("rank"),
+                "raw_text_id": r.get("_raw_text_id"),
+                "parsed_text_id": r.get("_parsed_text_id"),
+                "final_text_id": r.get("text_id_num"),
+                "search_type": r.get("_search_type"),
+                "row_source": r.get("_row_source"),
+                "remapped": r.get("_remapped"),
+                "remap_reason": r.get("_remap_reason"),
+                "parsed_in_corpus": r.get("_parsed_id_in_corpus"),
+                "final_in_corpus": r.get("_remapped_id_in_corpus"),
+            })
+        st.session_state[f"_debug_id_audit_{qid}"] = _audit_rows
+
+        _retrieved_ids = [r.get("text_id_num") for r in reranked if r.get("text_id_num") is not None]
+        _missing_retrieved = sorted([tid for tid in _retrieved_ids if tid not in corpus_for_verify])
+        st.session_state[f"_debug_missing_retrieved_{qid}"] = _missing_retrieved
+    except Exception:
+        pass
+
 
     metrics = compute_retrieval_metrics(reranked, qdef["ideal_docs_new"], qdef.get("ideal_docs_original"))
     result.update(metrics)
@@ -1214,6 +1393,24 @@ def run_pipeline_for_query(
     # ── 6. QUOTE VERIFICATION ─────────────────────────────────────────────────
     # corpus_for_verify was built at step 2b above (new 772-chunk corpus).
     status("✅ Verifying quotes...")
+
+    
+    # DEBUG: Nicolay citation IDs vs corpus keys (catches ID drift instantly)
+    try:
+        _cited_ids = _extract_cited_ids(nicolay_output)
+        _missing_cited = sorted([tid for tid in _cited_ids if tid not in corpus_for_verify])
+        st.session_state[f"_debug_cited_ids_{qid}"] = _cited_ids
+        st.session_state[f"_debug_missing_cited_{qid}"] = _missing_cited
+
+        # Spot-check what the corpus thinks a few key IDs are (retrieved + cited)
+        _retrieved_ids = [r.get("text_id_num") for r in reranked if r.get("text_id_num") is not None]
+        _spot_ids = []
+        for tid in (_retrieved_ids[:5] + _cited_ids[:5]):
+            if tid is not None and tid not in _spot_ids:
+                _spot_ids.append(tid)
+        st.session_state[f"_debug_corpus_spotcheck_{qid}"] = [_chunk_signature(corpus_for_verify, tid) for tid in _spot_ids]
+    except Exception:
+        pass
 
     qv = verify_all_quotes(nicolay_output, reranked, corpus_for_verify)
     result["quote_verification"] = qv
@@ -1575,6 +1772,35 @@ def main():
                 else:
                     st.write(last_sheets_err)
 
+                st.markdown("**H. Corpus file fingerprint**")
+                fp = st.session_state.get(f"_debug_corpus_fingerprint_{selected_query_id}", None)
+                if fp:
+                    st.json(fp)
+                else:
+                    st.write("not captured yet")
+
+                st.markdown("**I. Missing IDs (retrieved vs corpus)**")
+                st.write("Missing retrieved IDs:", st.session_state.get(f"_debug_missing_retrieved_{selected_query_id}", []))
+
+                st.markdown("**J. Nicolay cited IDs (and missing vs corpus)**")
+                st.write("Cited IDs:", st.session_state.get(f"_debug_cited_ids_{selected_query_id}", []))
+                st.write("Missing cited IDs:", st.session_state.get(f"_debug_missing_cited_{selected_query_id}", []))
+
+                st.markdown("**K. Corpus spot-check (retrieved + cited IDs)**")
+                spot = st.session_state.get(f"_debug_corpus_spotcheck_{selected_query_id}", [])
+                if spot:
+                    st.dataframe(pd.DataFrame(spot), use_container_width=True)
+                else:
+                    st.write("not captured yet")
+
+                st.markdown("**L. ID remap audit (raw → parsed → final)**")
+                audit = st.session_state.get(f"_debug_id_audit_{selected_query_id}", [])
+                if audit:
+                    st.dataframe(pd.DataFrame(audit), use_container_width=True)
+                else:
+                    st.write("not captured yet")
+
+
             # Nicolay output
             with st.expander("✍️ Nicolay Output", expanded=True):
                 final_text = get_final_answer_text(qr.get("nicolay_output", {}))
@@ -1588,9 +1814,19 @@ def main():
                     icon = {"verified": "✅", "displacement": "⚠️", "fabrication": "🚨", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
                     st.markdown(f"{icon} **{qv_item.get('match', '')}** ({qv_item.get('text_id', '')}) — *{qv_item.get('outcome', '')}*")
                     if qv_item.get("cited_passage"):
-                        st.caption(f'"{qv_item["cited_passage"][:150]}..."')
+                        st.caption(f"\"{str(qv_item['cited_passage'])[:150]}...\"")
+                    # Debug line: did we even find the cited chunk in the verifier corpus?
+                    st.caption(
+                        f"cited_num={qv_item.get('cited_num')} | cited_chunk_present={qv_item.get('cited_chunk_present')} | "
+                        f"cited_source={qv_item.get('cited_chunk_source','')[:80]}"
+                    )
+                    if qv_item.get("cited_chunk_preview"):
+                        st.caption(f"cited_chunk_preview: {qv_item.get('cited_chunk_preview')}")
+                    if qv_item.get("match_chunk_num") is not None:
+                        st.caption(f"found_at_chunk={qv_item.get('match_chunk_num')} | found_source={qv_item.get('match_chunk_source','')[:80]}")
                     if qv_item.get("note"):
                         st.caption(qv_item["note"])
+
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 2: METRICS

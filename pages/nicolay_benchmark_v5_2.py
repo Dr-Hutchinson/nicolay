@@ -1245,6 +1245,9 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
         "ModelConfigTag": str(qresult.get("model_config_tag", "")),
         "HayModel": str(HAY_MODEL),
         "NicolayModel": str(NICOLAY_MODEL),
+        # Pipeline reliability
+        "PipelineAttempts": int(qresult.get("pipeline_attempts", 1) or 1),
+        "PipelineRetryLog": str(qresult.get("pipeline_retry_log", "") or ""),
         # Hay layer
         "HayTypeExpected": str(qresult.get("expected_hay_type", "")),
         "HayTypeGot": str(qresult.get("hay_task_type_raw", "") or ""),
@@ -1336,6 +1339,7 @@ def init_benchmark_sheet_headers(gc_client):
         return
     headers = [
         "Timestamp", "QueryID", "Query", "Category", "ModelConfigTag",
+        "PipelineAttempts", "PipelineRetryLog",
         "HayModel", "NicolayModel",
         "HayTypeExpected", "HayTypeGot", "HayTypeCorrect", "HayKeywordCount",
         "HaySpuriousFields", "HayTrainingBleed", "InitialAnswer", "QueryAssessment",
@@ -1413,6 +1417,8 @@ def export_csv(results: dict, csv_file: str = CSV_FILE) -> bytes:
             "id": qid,
             "category": qdata.get("category", ""),
             "model_config_tag": qdata.get("model_config_tag", ""),
+            "pipeline_attempts": qdata.get("pipeline_attempts", ""),
+            "pipeline_retry_log": qdata.get("pipeline_retry_log", ""),
             "expected_hay_type": qdata.get("expected_hay_type", ""),
             "hay_type_raw": qdata.get("hay_task_type_raw", ""),
             "hay_type_correct": qdata.get("hay_task_type_correct", ""),
@@ -1589,24 +1595,68 @@ def run_pipeline_for_query(
         "model_config_tag": f"hay={HAY_MODEL}|nicolay={NICOLAY_MODEL}|reranker={COHERE_RERANK_MODEL}|k={RERANK_K}|colbert=disabled",
     }
 
-    # ── 1. RUN FULL PIPELINE ──────────────────────────────────────────────────
-    status("🔍 Running pipeline (Hay → retrieval → rerank → Nicolay)...")
-    try:
-        pipeline_out = run_rag_pipeline(
-            user_query=query,
-            perform_keyword_search=True,
-            perform_semantic_search=True,
-            perform_colbert_search=False,   # ColBERT skipped — no Astra in benchmark
-            perform_reranking=True,
-            colbert_searcher=_NoOpColBERT(),  # Stub prevents Astra init in rag_pipeline.py
-            openai_api_key=openai_api_key,
-            cohere_api_key=cohere_api_key,
-            top_n_results=10,               # Retrieve more candidates before reranking to k=5
+    # ── 1. RUN FULL PIPELINE (with retry) ────────────────────────────────────
+    # Nicolay v3 occasionally emits malformed JSON (unescaped characters or
+    # structural errors in the response string). This is stochastic — temperature=0
+    # does not guarantee identical outputs on every call. The retry wrapper catches
+    # these transient parse failures and re-runs the full pipeline up to MAX_RETRIES
+    # times before giving up. Each attempt is logged for article transparency.
+    MAX_RETRIES = 3
+    RETRY_DELAY_SECONDS = 2
+
+    import time
+
+    pipeline_out = None
+    pipeline_attempts = []   # list of {attempt, error, error_type} for logging
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            if attempt > 1:
+                status(f"🔄 Retry {attempt}/{MAX_RETRIES} for {qid} (prev: {pipeline_attempts[-1]['error_type']})...")
+                time.sleep(RETRY_DELAY_SECONDS)
+            else:
+                status("🔍 Running pipeline (Hay → retrieval → rerank → Nicolay)...")
+
+            pipeline_out = run_rag_pipeline(
+                user_query=query,
+                perform_keyword_search=True,
+                perform_semantic_search=True,
+                perform_colbert_search=False,
+                perform_reranking=True,
+                colbert_searcher=_NoOpColBERT(),
+                openai_api_key=openai_api_key,
+                cohere_api_key=cohere_api_key,
+                top_n_results=10,
+            )
+            # Success — log the attempt count and break
+            pipeline_attempts.append({"attempt": attempt, "error": None, "error_type": None})
+            break
+
+        except Exception as e:
+            err_type = type(e).__name__
+            err_msg = str(e)
+            pipeline_attempts.append({"attempt": attempt, "error": err_msg, "error_type": err_type})
+            status(f"⚠️ Pipeline attempt {attempt} failed ({err_type}): {err_msg[:120]}")
+
+            if attempt == MAX_RETRIES:
+                # All retries exhausted — record full attempt log and bail
+                result["pipeline_error"] = err_msg
+                result["pipeline_error_type"] = err_type
+                result["pipeline_attempts"] = attempt
+                result["pipeline_retry_log"] = json.dumps(pipeline_attempts)
+                status(f"❌ Pipeline failed after {MAX_RETRIES} attempts for {qid}.")
+                return result
+
+    # Record retry metadata on result (useful even on first-attempt success)
+    result["pipeline_attempts"] = len(pipeline_attempts)
+    result["pipeline_retry_log"] = json.dumps(pipeline_attempts)
+    # Surface retry events in Streamlit UI for immediate visibility
+    if len(pipeline_attempts) > 1:
+        st.warning(
+            f"⚠️ **{qid} required {len(pipeline_attempts)} attempts** — "
+            f"{len(pipeline_attempts)-1} JSON parse failure(s) before success. "
+            f"See retry log in debug expander."
         )
-    except Exception as e:
-        result["pipeline_error"] = str(e)
-        status(f"❌ Pipeline error: {e}")
-        return result
 
     # ── 2. UNPACK PIPELINE OUTPUT ─────────────────────────────────────────────
     hay_output      = pipeline_out.get("hay_output", {})
@@ -2187,6 +2237,19 @@ def main():
                     st.dataframe(pd.DataFrame(audit), use_container_width=True)
                 else:
                     st.write("not captured yet")
+
+                st.markdown("**M. Pipeline retry log**")
+                attempts = qr.get("pipeline_attempts", 1)
+                retry_log = qr.get("pipeline_retry_log", "")
+                if attempts and int(attempts) > 1:
+                    st.warning(f"⚠️ {attempts} attempt(s) required for this query.")
+                else:
+                    st.write(f"Attempts: {attempts or 1} (no retries needed)")
+                if retry_log:
+                    try:
+                        st.json(json.loads(retry_log))
+                    except Exception:
+                        st.code(retry_log)
 
 
             # Nicolay output

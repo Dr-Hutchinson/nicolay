@@ -1217,7 +1217,7 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
     PrecisionAt5, RecallAt5, CeilingAdjustedPrecision,
     IdealDocsHit, IdealDocsMissed,
     NicolayTypeExpected, NicolayTypeGot, NicolayTypeCorrect,
-    SchemaComplete, FinalAnswerWordCount,
+    SchemaComplete, FinalAnswerWordCount, FinalAnswerText,
     QuotesVerified, QuotesDisplaced, QuotesFabricated,
     BleuMaxRetrieved, BleuAvgRetrieved,
     Rouge1MaxRetrieved, Rouge1AvgRetrieved,
@@ -1287,6 +1287,8 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
         "NicolaySynthesisAssessmentRaw": str(qresult.get("nicolay_synthesis_assessment_raw", "")),
         "SchemaComplete": str(qresult.get("nicolay_schema_complete", "")),
         "FinalAnswerWordCount": int(qresult.get("nicolay_final_answer_wordcount", 0) or 0),
+        # HV-6: full FinalAnswer text (added v5.3)
+        "FinalAnswerText": str(qresult.get("nicolay_final_answer_text", "") or ""),
         # Quote verification
         "QuotesVerified": int(qresult.get("quotes_verified_count", 0) or 0),
         "QuotesApprox": int(qresult.get("quotes_approx_count", 0) or 0),
@@ -1350,7 +1352,7 @@ def init_benchmark_sheet_headers(gc_client):
         "IdealDocsHit", "IdealDocsMissed",
         "NicolayTypeExpected", "NicolayTypeGot", "NicolayTypeCorrect",
         "NicolaySynthesisAssessmentRaw",
-        "SchemaComplete", "FinalAnswerWordCount",
+        "SchemaComplete", "FinalAnswerWordCount", "FinalAnswerText",
         "QuotesVerified", "QuotesApprox", "QuotesDisplaced", "QuotesApproxDisplaced", "QuotesFabricated",
         "BleuMaxRetrieved", "BleuAvgRetrieved",
         "Rouge1MaxRetrieved", "Rouge1AvgRetrieved",
@@ -1805,6 +1807,7 @@ def run_pipeline_for_query(
     result["nicolay_schema_fields"] = schema_check["fields"]
 
     final_answer_text = get_final_answer_text(nicolay_output)
+    result["nicolay_final_answer_text"] = final_answer_text  # HV-6: full FinalAnswer text
     result["nicolay_final_answer_wordcount"] = len(final_answer_text.split()) if final_answer_text else 0
 
     match_analysis = nicolay_output.get("Match Analysis", {})

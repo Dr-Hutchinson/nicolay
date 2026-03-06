@@ -467,9 +467,29 @@ def call_hay(query: str, client: openai.OpenAI, system_prompt: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def extract_hay_type(query_assessment: str) -> Optional[str]:
-    """Extract Type A/B/C/D/E from Hay's query_assessment prose."""
-    m = re.search(r'Type\s+([ABCDE])', query_assessment, re.IGNORECASE)
-    return m.group(1).upper() if m else None
+    """Extract Type A/B/C/D/E from Hay's query_assessment prose.
+
+    Hay v3 writes full labels ('Inferential Retrieval') rather than letter
+    designations ('Type B'), so we match both formats.
+    """
+    # First try the letter format: "Type A", "Type B" etc.
+    m = re.search(r'Type\s+([ABCDE])\b', query_assessment, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    # Fallback: match Hay v3's prose label format
+    label_map = {
+        "direct retrieval": "A",
+        "inferential retrieval": "B",
+        "absence recognition": "C",
+        "multi-passage synthesis": "D",
+        "contrastive": "E",
+        "historiographical": "E",
+    }
+    qa_lower = query_assessment.lower()
+    for label, letter in label_map.items():
+        if label in qa_lower:
+            return letter
+    return None
 
 
 def extract_nicolay_type(synthesis_assessment: str) -> Optional[str]:

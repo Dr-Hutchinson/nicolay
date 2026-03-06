@@ -310,7 +310,7 @@ def run_rag_pipeline(
                     model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
                     messages=nicolay_messages,
                     temperature=0,
-                    max_tokens=3000  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers
+                    max_tokens=4000  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers
                 )
 
                 raw_nicolay = second_model_response.choices[0].message.content

@@ -459,30 +459,61 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
         reranker_score = score_map.get(text_id, None)
 
         verified, method = verify_quote(key_quote, text_id, lincoln_dict)
-        badge_html  = quote_badge_html(verified, method)
-        rel_badge   = relevance_badge_html(relevance)
-        q_display   = f'"{key_quote[:320]}{"…" if len(key_quote) > 320 else ""}"'
+        badge_html = quote_badge_html(verified, method)
+        rel_badge  = relevance_badge_html(relevance)
 
-        score_line = (f'<div class="meta-line" style="color:#6c757d;font-size:0.88em;">'
-                      f'Reranker score: {reranker_score:.3f}</div>'
-                      if reranker_score is not None else "")
+        # ── Card chrome: only safe metadata values go into HTML ──────────────
+        # Corpus text (quote, summary) is NEVER injected into the HTML f-string
+        # because angle brackets and special chars in Lincoln's text break rendering.
+        def _esc(t):
+            return (t.replace("&","&amp;").replace("<","&lt;")
+                     .replace(">","&gt;").replace('"',"&quot;"))
 
-        card_html = f"""
+        score_line = (
+            f'<div class="meta-line" style="color:#6c757d;font-size:0.88em;">'
+            f'Reranker score: {reranker_score:.3f}</div>'
+            if reranker_score is not None else ""
+        )
+
+        card_chrome = f"""
         <div class="match-card">
             <div class="card-header">
                 <span class="card-title">{match_key}</span>
                 {rel_badge}
             </div>
-            <div class="meta-line"><strong>ID:</strong> {text_id}</div>
-            <div class="meta-line"><strong>Source:</strong> {source}</div>
+            <div class="meta-line"><strong>ID:</strong> {_esc(text_id)}</div>
+            <div class="meta-line"><strong>Source:</strong> {_esc(source)}</div>
             {score_line}
-            <blockquote>{q_display}</blockquote>
-            <div class="summary-text">{summary[:220]}{"…" if len(summary) > 220 else ""}</div>
-            <div class="verify-line">{badge_html}</div>
         </div>
         """
         with cols[i % 2]:
-            st.markdown(card_html, unsafe_allow_html=True)
+            # 1. Card chrome (HTML — no corpus text inside)
+            st.markdown(card_chrome, unsafe_allow_html=True)
+
+            # 2. Quote — styled via inline HTML but corpus text is HTML-escaped
+            if key_quote:
+                q_text = key_quote[:320] + ("…" if len(key_quote) > 320 else "")
+                st.markdown(
+                    f'<div style="border-left:3px solid #6c757d;margin:2px 0 8px 0;' 
+                    f'padding:6px 14px;background:#f8f9fa;border-radius:0 6px 6px 0;' 
+                    f'font-style:italic;font-size:1em;line-height:1.65;color:#343a40;">' 
+                    f'&ldquo;{_esc(q_text)}&rdquo;</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # 3. Summary — plain text via st.caption, never touches HTML
+            if summary:
+                st.caption(summary[:240] + ("…" if len(summary) > 240 else ""))
+
+            # 4. Verification badge (already safe HTML — no corpus text)
+            st.markdown(
+                f'<div style="margin-top:4px;padding-top:6px;' 
+                f'border-top:1px solid #ececec;">{badge_html}</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("")  # breathing room before expander
+
             with st.expander(f"Full text & highlight — {match_key}", expanded=False):
                 if hist_ctx:
                     st.markdown(f"**Historical Context:** {hist_ctx}")
@@ -499,6 +530,7 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
                                 unsafe_allow_html=True)
                 else:
                     st.info("Full text not found in corpus for this text ID.")
+
 
 
 # ── U6: Retrieval diagnostics panel ──────────────────────────────────────────

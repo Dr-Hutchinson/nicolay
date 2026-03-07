@@ -11,12 +11,33 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
-import re
+import yaml
 
-# version 0.3 - Experiment for making sequential API calls for semantic search.
+# ── version 1.0 ──────────────────────────────────────────────────────────────
+# Fixes applied vs. legacy 0.3 build:
+#   [F1] Data loading: replaced fragile CSV/JSON loaders with data_utils.py
+#        functions (load_lincoln_speech_corpus, load_lincoln_index_embedded).
+#        Parquet-backed embeddings are pre-computed — no per-row API calls.
+#   [F2] Triple-keyed lincoln_dict: mirrors rag_pipeline.py so lookups by
+#        "Text #: N", integer N, or bare string "N" all succeed.
+#   [F3] Keyword search: removed inline redefinition of
+#        search_with_dynamic_weights_expanded; now calls the canonical
+#        keyword_search.py version with correct (corpus_terms, data) args.
+#   [F4] Semantic search: uses pre-loaded parquet embeddings; removed the
+#        per-row get_embedding() .apply() that caused lockups.
+#   [F5] Log functions: updated to use 'text_id' column (not 'Unnamed: 0').
+#   [F6] lincoln_dict lookup in reranking block: uses triple-keyed dict so
+#        integer text_ids resolve correctly after str.extract().
+# Enhancements:
+#   [E1] Quote verification: verify_quote() checks whether Nicolay's quoted
+#        passage appears verbatim (or fuzzy-matches) in the corpus chunk.
+#        Each Match Analysis card shows a ✅ / ⚠️ badge.
+#   [E2] Match Analysis card-grid UI: replaces flat expander list with a
+#        styled card grid (relevance badge, source, blockquote, summary).
+# ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 0.2)",
+    page_title="Nicolay: Exploring the Speeches of Abraham Lincoln with AI (version 1.0)",
     layout='wide',
     page_icon='🔍'
 )
@@ -24,17 +45,27 @@ st.set_page_config(
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()
 
-os.environ["CO_API_KEY"]= st.secrets["cohere_api_key"]
+os.environ["CO_API_KEY"] = st.secrets["cohere_api_key"]
 co = cohere.Client()
 
 scope = ['https://spreadsheets.google.com/feeds',
-             'https://www.googleapis.com/auth/drive']
+         'https://www.googleapis.com/auth/drive']
 credentials = service_account.Credentials.from_service_account_info(
-                    st.secrets["gcp_service_account"], scopes = scope)
-
+    st.secrets["gcp_service_account"], scopes=scope)
 gc = pygsheets.authorize(custom_credentials=credentials)
 
 
+# ── Data loading (F1) ────────────────────────────────────────────────────────
+# Import from data_utils so loading is cached and consistent with benchmark.
+from modules.data_utils import (
+    load_lincoln_speech_corpus,
+    load_voyant_word_counts,
+    load_lincoln_index_embedded,
+)
+from modules.keyword_search import search_with_dynamic_weights_expanded
+
+
+# ── DataLogger ───────────────────────────────────────────────────────────────
 class DataLogger:
     def __init__(self, gc, sheet_name):
         self.gc = gc
@@ -42,106 +73,92 @@ class DataLogger:
 
     def record_api_outputs(self, data_dict):
         now = dt.now()
-        data_dict['Timestamp'] = now  # Add timestamp to the data
-
-        # Convert the data dictionary to a DataFrame
+        data_dict['Timestamp'] = now
         df = pd.DataFrame([data_dict])
-
-        # Find the next empty row in the sheet to avoid overwriting existing data
         end_row = len(self.sheet.get_all_records()) + 2
-
-        # Append the new data row to the sheet
         self.sheet.set_dataframe(df, (end_row, 1), copy_head=False, extend=True)
 
-# Usage
-hays_data_logger = DataLogger(gc, 'hays_data')
-keyword_results_logger = DataLogger(gc, 'keyword_search_results')
+
+hays_data_logger        = DataLogger(gc, 'hays_data')
+keyword_results_logger  = DataLogger(gc, 'keyword_search_results')
 semantic_results_logger = DataLogger(gc, 'semantic_search_results')
 reranking_results_logger = DataLogger(gc, 'reranking_results')
-nicolay_data_logger = DataLogger(gc, 'nicolay_data')
+nicolay_data_logger     = DataLogger(gc, 'nicolay_data')
 
-def log_keyword_search_results(keyword_results_logger, search_results, user_query):
-    now = dt.now()  # Current timestamp
 
-    for idx, result in search_results.iterrows():
-        # Create a record for each search result
+# ── Logging helpers ───────────────────────────────────────────────────────────
+def log_keyword_search_results(keyword_results_logger, search_results_df, user_query,
+                                initial_answer, model_weighted_keywords,
+                                model_year_keywords, model_text_keywords):
+    """Log keyword search results. [F5] Uses 'key_quote' column (post-rename)."""
+    now = dt.now()
+    for _, result in search_results_df.iterrows():
         record = {
-            #'SessionID': session_id,
             'Timestamp': now,
             'UserQuery': user_query,
-            #'Source': result['source'],
-            "initial_Answer": initial_answer,
-            'Weighted_Keywoords': model_weighted_keywords,
-            'Year_Keywords': model_year_keywords,
-            'text_keywords': model_text_keywords,
-            'TextID': result['text_id'],
-            #'Summary': result['summary'],
-            'KeyQuote': result['quote'],
-            'WeightedScore': result['weighted_score'],
-            'KeywordCounts': json.dumps(result['keyword_counts'])  # Convert dict to JSON string
+            'initial_Answer': initial_answer,
+            'Weighted_Keywords': str(model_weighted_keywords),
+            'Year_Keywords': str(model_year_keywords),
+            'text_keywords': str(model_text_keywords),
+            'TextID': result.get('text_id', ''),
+            'KeyQuote': result.get('key_quote', result.get('quote', '')),
+            'WeightedScore': result.get('weighted_score', ''),
+            'KeywordCounts': json.dumps(result.get('keyword_counts', {}))
         }
-
-        # Log the record
         keyword_results_logger.record_api_outputs(record)
 
-def log_semantic_search_results(semantic_results_logger, semantic_matches):
-    now = dt.now()  # Current timestamp
 
-    for idx, row in semantic_matches.iterrows():
+def log_semantic_search_results(semantic_results_logger, semantic_matches, initial_answer):
+    """Log semantic search results. [F5] Uses 'text_id' (not 'Unnamed: 0')."""
+    now = dt.now()
+    for _, row in semantic_matches.iterrows():
         record = {
             'Timestamp': now,
-            'UserQuery': row['UserQuery'],
+            'UserQuery': row.get('UserQuery', ''),
             'HyDE_Query': initial_answer,
-            'TextID': row['Unnamed: 0'],  # Assuming 'Unnamed: 0' is the text ID
-            'SimilarityScore': row['similarities'],
-            'TopSegment': row['TopSegment']
-            }
-
-        # Log the record
+            'TextID': row.get('text_id', ''),
+            'SimilarityScore': row.get('similarities', ''),
+            'TopSegment': row.get('TopSegment', '')
+        }
         semantic_results_logger.record_api_outputs(record)
 
-def log_reranking_results(reranking_results_logger, reranked_df):
-    now = dt.now()  # Current timestamp
 
-    for idx, row in reranked_df.iterrows():
+def log_reranking_results(reranking_results_logger, reranked_df, user_query):
+    now = dt.now()
+    for _, row in reranked_df.iterrows():
         record = {
             'Timestamp': now,
             'UserQuery': user_query,
-            'Rank': row['Rank'],
-            'SearchType': row['Search Type'],
-            'TextID': row['Text ID'],
-            'KeyQuote': row['Key Quote'],
-            'Relevance_Score': row['Relevance Score']
-            }
-
-        # Log the record
+            'Rank': row.get('Rank', ''),
+            'SearchType': row.get('Search Type', ''),
+            'TextID': row.get('Text ID', ''),
+            'KeyQuote': row.get('Key Quote', ''),
+            'Relevance_Score': row.get('Relevance Score', '')
+        }
         reranking_results_logger.record_api_outputs(record)
 
-def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict):
-    # Extract key information from model output
+
+def log_nicolay_model_output(nicolay_data_logger, model_output, user_query,
+                              highlight_success_dict, initial_answer):
     final_answer_text = model_output.get("FinalAnswer", {}).get("Text", "No response available")
     references_raw = model_output.get("FinalAnswer", {}).get("References", [])
     references = ", ".join(references_raw) if isinstance(references_raw, list) else str(references_raw)
 
-    # User query analysis (v3 adds synthesis_assessment)
     query_analysis = model_output.get("User Query Analysis", {})
-    synthesis_assessment = query_analysis.get("synthesis_assessment", "")  # New in Nicolay v3
+    synthesis_assessment = query_analysis.get("synthesis_assessment", "")
     query_intent = query_analysis.get("Query Intent", "")
     historical_context = query_analysis.get("Historical Context", "")
 
-    # Initial answer review
     answer_evaluation = model_output.get("Initial Answer Review", {}).get("Answer Evaluation", "")
     quote_integration = model_output.get("Initial Answer Review", {}).get("Quote Integration Points", "")
 
-    # Model Feedback (v3: Retrieval Quality Notes, Critical Missing Evidence Flag, Suggested Improvements)
     model_feedback = model_output.get("Model Feedback", {})
     retrieval_quality = model_feedback.get("Retrieval Quality Notes",
-                           model_feedback.get("Response Effectiveness", ""))  # v2 fallback
+                            model_feedback.get("Response Effectiveness", ""))
     missing_evidence = model_feedback.get("Critical Missing Evidence Flag", "")
     suggested_improvements = model_feedback.get("Suggested Improvements",
-                                model_feedback.get("Suggestions for Improvement", ""))  # v2 fallback
+                                model_feedback.get("Suggestions for Improvement", ""))
 
-    # Match analysis — generic loop handles both v2 (3 matches) and v3 (5 matches, RerankedMatch1-5)
     match_analysis = model_output.get("Match Analysis", {})
     match_fields = ['Text ID', 'Source', 'Summary', 'Key Quote', 'Historical Context', 'Relevance Assessment']
     match_data = {}
@@ -149,18 +166,16 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         match_info = [f"{field}: {match_details.get(field, '')}" for field in match_fields]
         match_data[match_key] = "; ".join(match_info)
 
-    # Meta analysis
     meta_strategy = model_output.get("Meta Analysis", {}).get("Strategy for Response Composition", {})
     meta_synthesis = model_output.get("Meta Analysis", {}).get("Synthesis", "")
 
-    # Construct record
     record = {
         'Timestamp': dt.now(),
         'UserQuery': user_query,
         'initial_Answer': initial_answer,
         'FinalAnswer': final_answer_text,
         'References': references,
-        'SynthesisAssessment': synthesis_assessment,  # New in Nicolay v3
+        'SynthesisAssessment': synthesis_assessment,
         'QueryIntent': query_intent,
         'HistoricalContext': historical_context,
         'AnswerEvaluation': answer_evaluation,
@@ -172,19 +187,18 @@ def log_nicolay_model_output(nicolay_data_logger, model_output, user_query, high
         'CriticalMissingEvidence': missing_evidence,
         'SuggestedImprovements': suggested_improvements
     }
-
     for match_key, success in highlight_success_dict.items():
         record[f'{match_key}_HighlightSuccess'] = success
 
     nicolay_data_logger.record_api_outputs(record)
 
-# System prompt
+
+# ── Prompt loading ────────────────────────────────────────────────────────────
 def load_prompt(file_name):
-    """Load prompt from a file."""
     with open(file_name, 'r') as file:
         return file.read()
 
-# Function to ensure prompts are loaded into session state
+
 def load_prompts():
     if 'keyword_model_system_prompt' not in st.session_state:
         st.session_state['keyword_model_system_prompt'] = load_prompt('prompts/keyword_model_system_prompt.txt')
@@ -201,23 +215,307 @@ def load_prompts():
     if 'nicolay_model_explainer' not in st.session_state:
         st.session_state['nicolay_model_explainer'] = load_prompt('prompts/nicolay_model_explainer.txt')
 
-# Ensure prompts are loaded
+
 load_prompts()
 
-# Now you can use the prompts from session state
-keyword_prompt = st.session_state['keyword_model_system_prompt']
-response_prompt = st.session_state['response_model_system_prompt']
-app_intro = st.session_state['app_intro']
+keyword_prompt           = st.session_state['keyword_model_system_prompt']
+response_prompt          = st.session_state['response_model_system_prompt']
+app_intro                = st.session_state['app_intro']
 keyword_search_explainer = st.session_state['keyword_search_explainer']
 semantic_search_explainer = st.session_state['semantic_search_explainer']
 relevance_ranking_explainer = st.session_state['relevance_ranking_explainer']
-nicolay_model_explainer = st.session_state['nicolay_model_explainer']
+nicolay_model_explainer  = st.session_state['nicolay_model_explainer']
 
-# Streamlit interface
+
+# ── Utility functions ─────────────────────────────────────────────────────────
+def segment_text(text, segment_size=500, overlap=100):
+    words = text.split()
+    segments = []
+    for i in range(0, len(words), segment_size - overlap):
+        segments.append(' '.join(words[i:i + segment_size]))
+    return segments
+
+
+def get_embedding(text, model="text-embedding-ada-002"):
+    text = text.replace("\n", " ")
+    response = client.embeddings.create(input=[text], model=model)
+    return np.array(response.data[0].embedding)
+
+
+def cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    return dot_product / (norm1 * norm2)
+
+
+def search_text_local(df, user_query, n=5):
+    """Semantic search over pre-loaded parquet embeddings. [F4]"""
+    user_query_embedding = get_embedding(user_query)
+    df = df.copy()
+    df["similarities"] = df['embedding'].apply(
+        lambda x: cosine_similarity(np.array(x), user_query_embedding)
+        if isinstance(x, (list, np.ndarray)) else 0.0
+    )
+    top_n = df.sort_values("similarities", ascending=False).head(n)
+    top_n = top_n.copy()
+    top_n["UserQuery"] = user_query
+    return top_n, user_query_embedding
+
+
+def compare_segments_with_query_parallel(segments, query_embedding):
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(get_embedding, seg) for seg in segments]
+        seg_embeddings = [f.result() for f in futures]
+    return [(segments[i], cosine_similarity(seg_embeddings[i], query_embedding))
+            for i in range(len(segments))]
+
+
+def highlight_key_quote(text, key_quote):
+    parts = key_quote.split("...")
+    if len(parts) >= 2:
+        pattern = re.escape(parts[0]) + r"\s*.*?\s*" + re.escape(parts[-1]) + r"[.;,]?"
+    else:
+        pattern = re.escape(key_quote) + r"\s*[.;,]?"
+    regex = re.compile(pattern, re.IGNORECASE | re.DOTALL)
+    for match in regex.findall(text):
+        text = text.replace(match, f"<mark>{match}</mark>")
+    return text
+
+
+def format_reranked_results_for_model_input(reranked_results, lincoln_dict):
+    """Format top-5 reranked results for Nicolay model input. [F6]"""
+    formatted = []
+    for idx, result in enumerate(reranked_results[:5], 1):
+        text_id = str(result.get('Text ID', 'Unknown')).strip()
+
+        # Triple-key lookup: try "Text #: N", integer N, bare string N
+        full_text = None
+        m = re.search(r"(\d+)", text_id)
+        num = int(m.group(1)) if m else None
+        for key in (f"Text #: {text_id}", text_id,
+                    f"Text #: {num}" if num is not None else None,
+                    num, str(num) if num is not None else None):
+            if key is None:
+                continue
+            entry = lincoln_dict.get(key)
+            if isinstance(entry, dict):
+                full_text = entry.get('full_text')
+                if full_text:
+                    break
+
+        text_field_value = full_text if full_text else result.get('Key Quote', 'No quote')
+
+        formatted.append(
+            f"Match {idx}: "
+            f"Search Type - {result.get('Search Type', 'Unknown')}, "
+            f"Text ID - {text_id}, "
+            f"Summary (curatorial description only — not quotable corpus text) - {result.get('Summary', 'No summary')}, "
+            f"Full Text (select the most relevant passage to quote directly) - {text_field_value}, "
+            f"Relevance Score - {result.get('Relevance Score', 0.0):.2f}"
+        )
+    return "\n\n".join(formatted) if formatted else "No results to format"
+
+
+# ── E1: Quote verification ────────────────────────────────────────────────────
+def verify_quote(key_quote: str, text_id: str, lincoln_dict: dict) -> tuple[bool, str]:
+    """
+    Check whether key_quote appears in the corpus chunk for text_id.
+    Returns (verified: bool, method: str) where method is one of:
+      'exact', 'fuzzy', 'not_found', 'chunk_missing'.
+    """
+    if not key_quote or not key_quote.strip():
+        return False, "no_quote"
+
+    # Resolve corpus entry
+    chunk_text = None
+    m = re.search(r"(\d+)", str(text_id))
+    num = int(m.group(1)) if m else None
+    for key in (text_id, f"Text #: {text_id}",
+                f"Text #: {num}" if num is not None else None,
+                num, str(num) if num is not None else None):
+        if key is None:
+            continue
+        entry = lincoln_dict.get(key)
+        if isinstance(entry, dict):
+            chunk_text = entry.get('full_text', '')
+            break
+
+    if not chunk_text:
+        return False, "chunk_missing"
+
+    # Exact match
+    if key_quote.strip() in chunk_text:
+        return True, "exact"
+
+    # Fuzzy: handle ellipsis-truncated quotes
+    parts = [p.strip() for p in key_quote.split("...") if p.strip()]
+    if len(parts) >= 2:
+        if parts[0] in chunk_text and parts[-1] in chunk_text:
+            return True, "fuzzy"
+
+    # Fuzzy: first 60 chars as anchor
+    anchor = key_quote.strip()[:60]
+    if len(anchor) > 20 and anchor in chunk_text:
+        return True, "fuzzy"
+
+    return False, "not_found"
+
+
+def quote_verification_badge(verified: bool, method: str) -> str:
+    """Return an HTML badge string for inline display."""
+    if method == "chunk_missing":
+        return '<span style="color:#888;font-size:0.8em;">⬜ chunk not found</span>'
+    if method == "no_quote":
+        return '<span style="color:#888;font-size:0.8em;">⬜ no quote</span>'
+    if verified:
+        label = "exact match" if method == "exact" else "fuzzy match"
+        return f'<span style="color:#2d7a2d;font-size:0.8em;">✅ {label}</span>'
+    return '<span style="color:#b85c00;font-size:0.8em;">⚠️ not verified</span>'
+
+
+# ── E2: Match Analysis card-grid ──────────────────────────────────────────────
+def relevance_badge_html(relevance_text: str) -> str:
+    """Colour-coded relevance pill from Nicolay's Relevance Assessment field."""
+    t = (relevance_text or "").lower()
+    if "high" in t:
+        bg, fg = "#d4edda", "#155724"
+    elif "medium" in t or "moderate" in t:
+        bg, fg = "#fff3cd", "#856404"
+    elif "low" in t:
+        bg, fg = "#f8d7da", "#721c24"
+    else:
+        bg, fg = "#e2e3e5", "#383d41"
+    # Show only the first word/phrase before em-dash or comma
+    label = re.split(r"[—,]", relevance_text or "N/A")[0].strip()[:30]
+    return (
+        f'<span style="background:{bg};color:{fg};padding:2px 8px;'
+        f'border-radius:12px;font-size:0.75em;font-weight:600;">{label}</span>'
+    )
+
+
+def render_match_analysis_cards(match_analysis: dict, lincoln_dict: dict):
+    """
+    Render Match Analysis as a responsive card grid. [E2]
+    Each card shows: match key + relevance badge, Text ID, Source,
+    key quote in a styled blockquote, summary, and quote verification badge.
+    """
+    st.markdown("### Match Analysis")
+
+    card_css = """
+    <style>
+    .match-card {
+        background: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin-bottom: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .match-card .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .match-card .card-title {
+        font-weight: 700;
+        font-size: 0.95em;
+        color: #212529;
+    }
+    .match-card .meta-line {
+        font-size: 0.8em;
+        color: #6c757d;
+        margin-bottom: 2px;
+    }
+    .match-card blockquote {
+        border-left: 3px solid #adb5bd;
+        margin: 8px 0;
+        padding: 4px 10px;
+        color: #495057;
+        font-style: italic;
+        font-size: 0.85em;
+        line-height: 1.5;
+    }
+    .match-card .summary-text {
+        font-size: 0.8em;
+        color: #6c757d;
+        margin-top: 6px;
+    }
+    </style>
+    """
+    st.markdown(card_css, unsafe_allow_html=True)
+
+    items = list(match_analysis.items())
+    # Two-column grid
+    cols = st.columns(2)
+    for i, (match_key, match_info) in enumerate(items):
+        text_id   = str(match_info.get("Text ID", ""))
+        source    = match_info.get("Source", "")
+        key_quote = match_info.get("Key Quote", "")
+        summary   = match_info.get("Summary", "")
+        relevance = match_info.get("Relevance Assessment", "")
+        hist_ctx  = match_info.get("Historical Context", "")
+
+        verified, method = verify_quote(key_quote, text_id, lincoln_dict)
+        badge_html   = quote_verification_badge(verified, method)
+        rel_badge    = relevance_badge_html(relevance)
+        quote_display = f'"{key_quote[:300]}{"…" if len(key_quote) > 300 else ""}"'
+
+        card_html = f"""
+        <div class="match-card">
+            <div class="card-header">
+                <span class="card-title">{match_key}</span>
+                {rel_badge}
+            </div>
+            <div class="meta-line"><strong>ID:</strong> {text_id}</div>
+            <div class="meta-line"><strong>Source:</strong> {source}</div>
+            <blockquote>{quote_display}</blockquote>
+            <div class="summary-text">{summary[:200]}{"…" if len(summary) > 200 else ""}</div>
+            <div style="margin-top:6px;">{badge_html}</div>
+        </div>
+        """
+        with cols[i % 2]:
+            st.markdown(card_html, unsafe_allow_html=True)
+
+            # Expandable full-text with highlighting (preserves original behaviour)
+            with st.expander(f"Full text & highlight — {match_key}", expanded=False):
+                if hist_ctx:
+                    st.markdown(f"**Historical Context:** {hist_ctx}")
+                if text_id:
+                    # Build formatted text_id for dict lookup
+                    lookup_key = f"Text #: {text_id}" if not text_id.startswith("Text") else text_id
+                    speech = lincoln_dict.get(lookup_key)
+                    # Also try numeric fallback
+                    if speech is None:
+                        m_num = re.search(r"(\d+)", text_id)
+                        if m_num:
+                            speech = lincoln_dict.get(int(m_num.group(1)))
+                    if speech:
+                        full_text = speech.get('full_text', '')
+                        formatted_full_text = full_text.replace("\\n", "<br>")
+                        if key_quote and key_quote in full_text:
+                            formatted_full_text = formatted_full_text.replace(
+                                key_quote, f"<mark>{key_quote}</mark>"
+                            )
+                        elif key_quote:
+                            formatted_full_text = highlight_key_quote(full_text, key_quote)
+                            formatted_full_text = formatted_full_text.replace("\\n", "<br>")
+                        st.markdown("**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div style="font-size:0.85em;line-height:1.6;">{formatted_full_text}</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.info("Full text not found in corpus for this text ID.")
+
+
+# ── Streamlit UI ──────────────────────────────────────────────────────────────
 st.title("Exploring RAG with Nicolay and Hay")
 
 image_url = 'http://danielhutchinson.org/wp-content/uploads/2024/01/nicolay_hay.png'
-#st.markdown(f'<img src="{image_url}" width="700">', unsafe_allow_html=True)
 st.image(image_url, width=600)
 
 st.subheader("**Navigating this App:**")
@@ -226,10 +524,8 @@ st.write("Expand the **How It Works?** box below for a walkthrough of the app. C
 with st.expander("**How It Works - Exploring RAG with Hay and Nicolay**"):
     st.write(app_intro)
 
-# Query input
-
+# ── Search form ───────────────────────────────────────────────────────────────
 with st.form("Search Interface"):
-
     st.markdown("Enter your query below:")
     user_query = st.text_input("Query")
 
@@ -237,18 +533,15 @@ with st.form("Search Interface"):
     st.write("Note that at least one search method must be selected to perform Response and Analysis.")
     perform_keyword_search = st.toggle("Weighted Keyword Search", value=True)
     perform_semantic_search = st.toggle("Semantic Search", value=True)
-    # Always display the reranking toggle
     perform_reranking = st.toggle("Response and Analysis", value=True, key="reranking")
 
-    # Display a warning message if reranking is selected without any search methods
     if perform_reranking and not (perform_keyword_search or perform_semantic_search):
         st.warning("Response & Analysis requires at least one of the search methods (keyword or semantic).")
 
     with st.expander("Additional Search Options (In Development)"):
-
         st.markdown("The Hay model will suggest keywords based on your query, but you can select your own criteria for more focused keyword search using the interface below.")
         st.markdown("Weighted Keywords")
-        default_values = [1.0, 1.0, 1.0, 1.0, 1.0]  # Default weights as floats
+        default_values = [1.0, 1.0, 1.0, 1.0, 1.0]
         user_weighted_keywords = {}
 
         for i in range(1, 6):
@@ -256,876 +549,505 @@ with st.form("Search Interface"):
             with col1:
                 keyword = st.text_input(f"Keyword {i}", key=f"keyword_{i}")
             with col2:
-                weight = st.number_input(f"Weight for Keyword {i}", min_value=0.0, value=default_values[i-1], step=0.1, key=f"weight_{i}")
+                weight = st.number_input(f"Weight for Keyword {i}", min_value=0.0,
+                                         value=default_values[i-1], step=0.1, key=f"weight_{i}")
             if keyword:
                 user_weighted_keywords[keyword] = weight
-        # User input for year and text keywords
 
         st.header("Year and Text Filters")
         user_year_keywords = st.text_input("Year Keywords (comma-separated - example: 1861, 1862, 1863)")
-        #user_text_keywords = st.text_input("Text Keywords")
-        user_text_keywords = st.multiselect("Text Selection:", ['At Peoria, Illinois', 'A House Divided', 'Eulogy on Henry Clay', 'Farewell Address', 'Cooper Union Address', 'First Inaugural Address', 'Second Inaugural Address', 'July 4th Message to Congress', 'First Annual Message', 'Second Annual Message', 'Third Annual Message', 'Fourth Annual Message', 'Emancipation Proclamation', 'Public Letter to James Conkling', 'Gettysburg Address'])
+        user_text_keywords = st.multiselect("Text Selection:", [
+            'At Peoria, Illinois', 'A House Divided', 'Eulogy on Henry Clay',
+            'Farewell Address', 'Cooper Union Address', 'First Inaugural Address',
+            'Second Inaugural Address', 'July 4th Message to Congress',
+            'First Annual Message', 'Second Annual Message', 'Third Annual Message',
+            'Fourth Annual Message', 'Emancipation Proclamation',
+            'Public Letter to James Conkling', 'Gettysburg Address'
+        ])
 
     submitted = st.form_submit_button("Submit")
 
-    if submitted:
-        valid_search_condition = perform_keyword_search or perform_semantic_search
+# ── Pipeline execution ────────────────────────────────────────────────────────
+if submitted:
+    valid_search_condition = perform_keyword_search or perform_semantic_search
 
-        if valid_search_condition:
+    if not valid_search_condition:
+        st.error("Search halted: Invalid search condition. Please ensure at least one search method is selected.")
+        st.stop()
 
-            st.subheader("Starting RAG Process: (takes about 30-60 seconds in total)")
-            # Load data
-            #lincoln_speeches_file_path = 'C:\\Users\\danie\\Desktop\\Consulting Work\\Gibson - UTSA\\lincolnbot\\script development\\nicolay_assistant\\lincoln-speeches_final_formatted.json'
-            lincoln_speeches_file_path = 'data/lincoln_speech_corpus_repaired_1.json'
-            keyword_frequency_file_path = 'data/voyant_word_counts.json'
-            lincoln_speeches_embedded = "data/lincoln_index_embedded_repaired.csv"
+    st.subheader("Starting RAG Process: (takes about 30–60 seconds in total)")
 
-            # define functions
-            def load_json(file_path):
-                with open(file_path, 'r') as file:
-                    data = json.load(file)
-                return data
+    # ── [F1] Load data via data_utils (cached, parquet-backed) ───────────────
+    with st.spinner("Loading Lincoln corpus and embeddings…"):
+        lincoln_data_df  = load_lincoln_speech_corpus()
+        voyant_data_df   = load_voyant_word_counts()
+        lincoln_index_df = load_lincoln_index_embedded()
 
-            lincoln_data = load_json(lincoln_speeches_file_path)
-            keyword_data = load_json(keyword_frequency_file_path)
+    lincoln_data = lincoln_data_df.to_dict("records")
 
-            # Convert JSON data to a dictionary with 'text_id' as the key for easy access
-            lincoln_dict = {item['text_id']: item for item in lincoln_data}
+    # ── [F2] Triple-keyed lincoln_dict ────────────────────────────────────────
+    lincoln_dict = {}
+    for item in lincoln_data:
+        tid = item.get("text_id", "")
+        lincoln_dict[tid] = item                          # "Text #: N"
+        m_num = re.search(r"(\d+)", str(tid))
+        if m_num:
+            num = int(m_num.group(1))
+            lincoln_dict[num] = item                      # integer N
+            lincoln_dict[str(num)] = item                 # bare string "N"
 
-            # function for loading JSON 'text_id' for comparsion for semantic search results
-            def get_source_and_summary(text_id):
-                # Convert numerical text_id to string format used in JSON
-                text_id_str = f"Text #: {text_id}"
-                return lincoln_dict.get(text_id_str, {}).get('source'), lincoln_dict.get(text_id_str, {}).get('summary')
+    # Corpus terms for keyword search
+    if not voyant_data_df.empty and "corpusTerms" in voyant_data_df.columns:
+        corpus_terms_raw = voyant_data_df.at[0, "corpusTerms"]
+        corpus_terms_obj = (json.loads(corpus_terms_raw)
+                            if isinstance(corpus_terms_raw, str)
+                            else corpus_terms_raw)
+        corpus_terms = corpus_terms_obj.get("terms", [])
+    else:
+        corpus_terms = []
+        st.warning("Voyant corpus terms not found — keyword search will be limited.")
 
-            # keyword text segment - 0.0
+    # Prepare embeddings from parquet (already stored, no API calls) [F4]
+    def _parse_embedding(x):
+        if isinstance(x, (list, np.ndarray)):
+            return np.array(x, dtype=float)
+        if isinstance(x, str):
+            try:
+                return np.array(list(map(float, x.strip("[]").split(","))), dtype=float)
+            except Exception:
+                return np.zeros(1536)
+        return np.zeros(1536)
 
-            #def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5):
-            #    instances = []
-            #    # original processing for text_keywords formatted as strings - however, inconsistencies in the finetuning dataset cause issues here. For now code below is used.
-            #    #text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')] if text_keywords else []
-            #    if text_keywords:
-            #        if isinstance(text_keywords, list):
-            #            text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
-            #        else:
-            #            text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
-            #    else:
-            #        text_keywords_list = []
-            #    for entry in data:
-            #        if 'full_text' in entry and 'source' in entry:
-            #            entry_text_lower = entry['full_text'].lower()
-            #            source_lower = entry['source'].lower()
-            #            summary_lower = entry.get('summary', '').lower()
-            #            keywords_lower = ' '.join(entry.get('keywords', [])).lower()
-            #            match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-            #            match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
-            #            if match_source_year and match_source_text:
-            #                total_dynamic_weighted_score = 0
-            #                keyword_counts = {}
-            #                keyword_positions = {}
-            #                combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
-            #                for keyword in original_weights.keys():
-            #                    keyword_lower = keyword.lower()
-            #                    for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-            #                        count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-            #                        dynamic_weight = dynamic_weights.get(keyword, 0)
-            #                        if count > 0:
-            #                            keyword_counts[keyword] = count
-            #                            total_dynamic_weighted_score += count * dynamic_weight
-            #                            keyword_index = match.start()
-            #                            original_weight = original_weights[keyword]
-            #                            keyword_positions[keyword_index] = (keyword, original_weight)
-            #                if keyword_positions:
-            #                    highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-            #                    context_length = 300
-            #                    start_quote = max(0, highest_original_weighted_position - context_length)
-            #                    end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_length)
-            #                    snippet = entry['full_text'][start_quote:end_quote]
-            #                    instances.append({
-            #                        "text_id": entry['text_id'],
-            #                        "source": entry['source'],
-            #                        "summary": entry.get('summary', ''),
-            #                        "quote": snippet.replace('\n', ' '),
-            #                        "weighted_score": total_dynamic_weighted_score,
-            #                        "keyword_counts": keyword_counts
-            #                    })
-            #    instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-            #    return instances[:top_n]
+    lincoln_index_df = lincoln_index_df.copy()
+    lincoln_index_df["embedding"] = lincoln_index_df["embedding"].apply(_parse_embedding)
 
-            # keyword text segment - 0.1
-            def find_instances_expanded_search(dynamic_weights, original_weights, data, year_keywords=None, text_keywords=None, top_n=5, context_size=1000):
-                instances = []
-                if text_keywords:
-                    if isinstance(text_keywords, list):
-                        text_keywords_list = [keyword.strip().lower() for keyword in text_keywords]
-                    else:
-                        text_keywords_list = [keyword.strip().lower() for keyword in text_keywords.split(',')]
-                else:
-                    text_keywords_list = []
+    # Enrich index df with source/summary from corpus
+    def get_source_and_summary(text_id_val):
+        entry = lincoln_dict.get(text_id_val, {})
+        if not entry:
+            m_num = re.search(r"(\d+)", str(text_id_val))
+            if m_num:
+                entry = lincoln_dict.get(int(m_num.group(1)), {})
+        return entry.get("source", ""), entry.get("summary", "")
 
-                for entry in data:
-                    if 'full_text' in entry and 'source' in entry:
-                        entry_text_lower = entry['full_text'].lower()
-                        source_lower = entry['source'].lower()
-                        summary_lower = entry.get('summary', '').lower()
-                        keywords_lower = ' '.join(entry.get('keywords', [])).lower()
+    lincoln_index_df["source"], lincoln_index_df["summary"] = zip(
+        *lincoln_index_df["text_id"].apply(get_source_and_summary)
+    )
 
-                        match_source_year = not year_keywords or any(str(year) in source_lower for year in year_keywords)
-                        match_source_text = not text_keywords or any(re.search(r'\b' + re.escape(keyword.lower()) + r'\b', source_lower) for keyword in text_keywords_list)
+    if not user_query:
+        st.warning("Please enter a query.")
+        st.stop()
 
-                        if match_source_year and match_source_text:
-                            total_dynamic_weighted_score = 0
-                            keyword_counts = {}
-                            keyword_positions = {}
-                            combined_text = entry_text_lower + ' ' + summary_lower + ' ' + keywords_lower
+    # ── Hay model call ────────────────────────────────────────────────────────
+    messages_for_model = [
+        {"role": "system", "content": keyword_prompt},
+        {"role": "user", "content": user_query}
+    ]
+    with st.spinner("Calling Hay model…"):
+        response = client.chat.completions.create(
+            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            messages=messages_for_model,
+            temperature=0,
+            max_tokens=800,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+    msg = response.choices[0].message.content
+    api_response_data    = json.loads(msg)
+    initial_answer       = api_response_data.get('initial_answer', '')
+    model_weighted_keywords = api_response_data.get('weighted_keywords', {})
+    model_year_keywords  = api_response_data.get('year_keywords', []) or []
+    model_text_keywords  = api_response_data.get('text_keywords', []) or []
+    model_query_assessment = api_response_data.get('query_assessment', '')
 
-                            for keyword in original_weights.keys():
-                                keyword_lower = keyword.lower()
-                                for match in re.finditer(r'\b' + re.escape(keyword_lower) + r'\b', combined_text):
-                                    count = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', combined_text))
-                                    dynamic_weight = dynamic_weights.get(keyword, 0)
-                                    if count > 0:
-                                        keyword_counts[keyword] = count
-                                        total_dynamic_weighted_score += count * dynamic_weight
-                                        keyword_index = match.start()
-                                        original_weight = original_weights[keyword]
-                                        keyword_positions[keyword_index] = (keyword, original_weight)
+    hays_data_logger.record_api_outputs({
+        'query': user_query,
+        'initial_answer': initial_answer,
+        'weighted_keywords': str(model_weighted_keywords),
+        'year_keywords': str(model_year_keywords),
+        'text_keywords': str(model_text_keywords),
+        'query_assessment': model_query_assessment,
+        'full_output': msg
+    })
 
-                            if keyword_positions:
-                                highest_original_weighted_position = max(keyword_positions.items(), key=lambda x: x[1][1])[0]
-                                start_quote = max(0, highest_original_weighted_position - context_size // 3)
-                                end_quote = min(len(entry_text_lower), highest_original_weighted_position + context_size // 3)
-                                snippet = entry['full_text'][start_quote:end_quote]
-                                instances.append({
-                                    "text_id": entry['text_id'],
-                                    "source": entry['source'],
-                                    "summary": entry.get('summary', ''),
-                                    "quote": snippet.replace('\n', ' '),
-                                    "weighted_score": total_dynamic_weighted_score,
-                                    "keyword_counts": keyword_counts
-                                })
+    # Keyword override from UI
+    if user_weighted_keywords:
+        weighted_keywords = user_weighted_keywords
+        year_keywords = user_year_keywords.split(',') if user_year_keywords else []
+        text_keywords = user_text_keywords if user_text_keywords else []
+    else:
+        weighted_keywords = model_weighted_keywords
+        year_keywords = model_year_keywords
+        text_keywords = model_text_keywords
 
-                instances.sort(key=lambda x: x['weighted_score'], reverse=True)
-                return instances[:top_n]
+    with st.expander("**Hay's Response**", expanded=True):
+        st.markdown(initial_answer)
+        st.write("**How Does This Work?**")
+        st.write("The Initial Response based on the user query is given by Hay, a fine-tuned large language model. This response helps Hay steer the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare Hay's Response with Nicolay's Response and Analysis at the end of the RAG process to see how AI techniques can be used for historical sources.")
 
+    col1, col2 = st.columns(2)
 
+    # ── [F3] Keyword Search ───────────────────────────────────────────────────
+    search_results_df = pd.DataFrame()
+    with col1:
+        if perform_keyword_search:
+            results_list = search_with_dynamic_weights_expanded(
+                user_keywords=weighted_keywords,
+                corpus_terms={"terms": corpus_terms},
+                data=lincoln_data,
+                year_keywords=year_keywords,
+                text_keywords=text_keywords,
+                top_n_results=5
+            )
+            # Normalise column name: keyword_search returns 'quote', pipeline expects 'key_quote'
+            if results_list:
+                search_results_df = pd.DataFrame(results_list)
+                if "quote" in search_results_df.columns and "key_quote" not in search_results_df.columns:
+                    search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
 
+            st.markdown("### Keyword Search Results")
+            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                st.write(keyword_search_explainer)
 
+            if search_results_df.empty:
+                st.info("No keyword search results found. Try modifying your query or use the Additional Search Options.")
+            else:
+                for idx, result in search_results_df.iterrows():
+                    expander_label = f"**Keyword Match {idx+1}**: *{result.get('source','')}* `{result.get('text_id','')}`"
+                    with st.expander(expander_label):
+                        st.markdown(f"**Source:** {result.get('source','')}")
+                        st.markdown(f"**Text ID:** {result.get('text_id','')}")
+                        st.markdown(f"**Summary:**\n{result.get('summary','')}")
+                        st.markdown(f"**Key Quote:**\n{result.get('key_quote', result.get('quote',''))}")
+                        st.markdown(f"**Weighted Score:** {result.get('weighted_score','')}")
+                        st.markdown("**Keyword Counts:**")
+                        st.json(result.get('keyword_counts', {}))
 
+            with st.expander("**Keyword Search Metadata**"):
+                st.write("**User Query:**")
+                st.write(user_query)
+                st.write("**Model Response:**")
+                st.write(initial_answer)
+                st.write("**Weighted Keywords:**")
+                st.json(weighted_keywords)
+                st.write("**Year Keywords:**")
+                st.json(year_keywords)
+                st.write("**Text Keywords:**")
+                st.json(text_keywords)
+                st.write("**Query Assessment (Hay v3):**")
+                st.write(model_query_assessment)
+                st.write("**Raw Search Results:**")
+                st.dataframe(search_results_df)
+                st.write("**Full Hay Output:**")
+                st.write(msg)
 
-            # Updated main search function to use expanded search
-            def search_with_dynamic_weights_expanded(user_keywords, json_data, year_keywords=None, text_keywords=None, top_n_results=5):
-                total_words = sum(term['rawFreq'] for term in json_data['corpusTerms']['terms'])
-                relative_frequencies = {term['term'].lower(): term['rawFreq'] / total_words for term in json_data['corpusTerms']['terms']}
-                inverse_weights = {keyword: 1 / relative_frequencies.get(keyword.lower(), 1) for keyword in user_keywords}
-                max_weight = max(inverse_weights.values())
-                normalized_weights = {keyword: (weight / max_weight) * 10 for keyword, weight in inverse_weights.items()}
-                return find_instances_expanded_search(
-                    dynamic_weights=normalized_weights,
-                    original_weights=user_keywords,  # Using user-provided keywords as original weights for snippet centering
-                    data=lincoln_data,
-                    year_keywords=year_keywords,
-                    text_keywords=text_keywords,
-                    top_n=top_n_results
+            if not search_results_df.empty:
+                log_keyword_search_results(
+                    keyword_results_logger, search_results_df, user_query,
+                    initial_answer, model_weighted_keywords,
+                    model_year_keywords, model_text_keywords
                 )
 
-            def get_embedding(text, model="text-embedding-ada-002"):
-                text = text.replace("\n", " ")
-                response = client.embeddings.create(input=[text], model=model)
-                return np.array(response.data[0].embedding)
+    # ── [F4] Semantic Search ──────────────────────────────────────────────────
+    semantic_matches_df = pd.DataFrame()
+    user_query_embedding = None
+    with col2:
+        if perform_semantic_search:
+            st.markdown("### Semantic Search Results")
+            with st.expander("**How Does This Work?: Semantic Search with HyDE**"):
+                st.write(semantic_search_explainer)
 
-            def cosine_similarity(vec1, vec2):
-                dot_product = np.dot(vec1, vec2)
-                norm_vec1 = np.linalg.norm(vec1)
-                norm_vec2 = np.linalg.norm(vec2)
-                return dot_product / (norm_vec1 * norm_vec2)
+            progress_text = "Semantic search in progress."
+            my_bar = st.progress(0, text=progress_text)
 
-            def search_text(df, user_query, n=5):
-                user_query_embedding = get_embedding(user_query)
-                df["similarities"] = df['embedding'].apply(lambda x: cosine_similarity(x, user_query_embedding))
-                top_n = df.sort_values("similarities", ascending=False).head(n)
-                top_n["UserQuery"] = user_query  # Add 'UserQuery' column to the DataFrame
-                return top_n, user_query_embedding
+            # Single embedding call for the HyDE query — no per-row calls
+            hyde_query = user_query + " " + initial_answer
+            semantic_matches_df, user_query_embedding = search_text_local(
+                lincoln_index_df, hyde_query, n=5
+            )
+            my_bar.progress(50, text=progress_text)
 
-            #def segment_text(text, segment_size=100):
-            #    words = text.split()
-            #    return [' '.join(words[i:i+segment_size]) for i in range(0, len(words), segment_siz
+            top_segments = []
+            match_counter = 1
+            for idx, row in semantic_matches_df.iterrows():
+                progress_update = min(50 + (match_counter / len(semantic_matches_df)) * 45, 99)
+                my_bar.progress(int(progress_update), text=progress_text)
 
-            # text splitting - 0.1
-            def segment_text(text, segment_size=500, overlap=100):
-                words = text.split()
-                segments = []
-                for i in range(0, len(words), segment_size - overlap):
-                    segment = words[i:i + segment_size]
-                    segments.append(' '.join(segment))
-                return segments
+                text_id_val = row.get('text_id', row.name)
+                source_val  = row.get('source', '')
+                full_text_val = row.get('full_text', '')
 
+                semantic_expander_label = f"**Semantic Match {match_counter}**: *{source_val}* `{text_id_val}`"
+                with st.expander(semantic_expander_label, expanded=False):
+                    st.markdown(f"**Source:** {source_val}")
+                    st.markdown(f"**Text ID:** {text_id_val}")
+                    st.markdown(f"**Summary:**\n{row.get('summary','')}")
 
-            def compare_segments_with_query_parallel(segments, query_embedding):
-                with ThreadPoolExecutor(max_workers=5) as executor:
-                    futures = [executor.submit(get_embedding, segment) for segment in segments]
-                    segment_embeddings = [future.result() for future in futures]
-                    return [(segments[i], cosine_similarity(segment_embeddings[i], query_embedding)) for i in range(len(segments))]
-
-            def extract_full_text(record):
-                marker = "Full Text:\n"
-                # Check if the record is a string
-                if isinstance(record, str):
-                    # Finding the position where the 'Full Text' starts
-                    marker_index = record.find(marker)
-                    if marker_index != -1:
-                        # Extracting text starting from the position after the marker
-                        return record[marker_index + len(marker):].strip()
+                    segments = segment_text(full_text_val)
+                    if segments and user_query_embedding is not None:
+                        segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
+                        top_segment = max(segment_scores, key=lambda x: x[1]) if segment_scores else ("", 0)
                     else:
-                        return ""
+                        top_segment = ("", 0)
+                    top_segments.append(top_segment[0])
+                    st.markdown(f"**Key Quote:** {top_segment[0]}")
+                    st.markdown(f"**Similarity Score:** {top_segment[1]:.2f}")
+
+                match_counter += 1
+
+            semantic_matches_df = semantic_matches_df.copy()
+            semantic_matches_df["TopSegment"] = top_segments
+            my_bar.progress(100, text="Semantic search completed.")
+            time.sleep(1)
+            my_bar.empty()
+
+            with st.expander("**Semantic Search Metadata**"):
+                st.write("**Semantic Search Metadata**")
+                st.dataframe(semantic_matches_df.drop(columns=["embedding"], errors="ignore"))
+
+            log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
+
+    # ── Reranking & Nicolay ───────────────────────────────────────────────────
+    if perform_reranking:
+        # Normalise search_results text_ids for merging [F6]
+        if not search_results_df.empty:
+            # Extract numeric id for dedup — store as int
+            search_results_df = search_results_df.copy()
+            search_results_df['_num_id'] = (
+                search_results_df['text_id'].astype(str)
+                .str.extract(r'(\d+)')[0]
+                .astype(float).astype('Int64')
+            )
+        else:
+            search_results_df = pd.DataFrame(columns=['_num_id'])
+
+        if not semantic_matches_df.empty:
+            semantic_matches_df = semantic_matches_df.copy()
+            semantic_matches_df['_num_id'] = (
+                semantic_matches_df['text_id'].astype(str)
+                .str.extract(r'(\d+)')[0]
+                .astype(float).astype('Int64')
+            )
+        else:
+            semantic_matches_df = pd.DataFrame(columns=['_num_id'])
+
+        # Combine and deduplicate on numeric id
+        _frames = [df for df in [search_results_df, semantic_matches_df] if not df.empty and '_num_id' in df.columns]
+        if _frames:
+            combined_df = pd.concat(_frames, ignore_index=True).drop_duplicates(subset=['_num_id'])
+        else:
+            combined_df = pd.DataFrame()
+
+        all_combined_data = []
+        if not combined_df.empty:
+            kw_ids  = set(search_results_df['_num_id'].dropna()) if not search_results_df.empty else set()
+            sem_ids = set(semantic_matches_df['_num_id'].dropna()) if not semantic_matches_df.empty else set()
+
+            for _, result in combined_df.iterrows():
+                num_id = result.get('_num_id')
+                if num_id in kw_ids and perform_keyword_search:
+                    search_type = "Keyword"
+                elif num_id in sem_ids and perform_semantic_search:
+                    search_type = "Semantic"
                 else:
-                    # Handle cases where the record is NaN or None
-                    return ""
+                    continue
 
-            def remove_duplicates(search_results, semantic_matches):
-                combined_results = pd.concat([search_results, semantic_matches])
-                #st.write("Before Deduplication:", combined_results.shape)
-                deduplicated_results = combined_results.drop_duplicates(subset='text_id')
-                #st.write("After Deduplication:", deduplicated_results.shape)
-                return deduplicated_results
+                text_id = str(result.get('text_id', str(num_id))).strip()
+                summary = str(result.get('summary', ''))
 
-            def format_reranked_results_for_model_input(reranked_results):
-                formatted_results = []
-                # v3 uses k=5 matches
-                for idx, result in enumerate(reranked_results[:5], 1):
-                    text_id = result['Text ID']
+                # Full chunk text lookup [F6] — triple-key
+                full_text = None
+                for key in (text_id, f"Text #: {text_id}",
+                            f"Text #: {num_id}" if num_id is not None else None,
+                            num_id, str(int(num_id)) if num_id is not None else None):
+                    if key is None:
+                        continue
+                    entry = lincoln_dict.get(key)
+                    if isinstance(entry, dict):
+                        full_text = entry.get('full_text')
+                        if full_text:
+                            break
 
-                    # Dev log #50: look up full chunk text from lincoln_dict.
-                    # lincoln_dict is keyed as "Text #: {text_id}" and contains 'full_text'.
-                    # Falls back to key quote window if lookup fails.
-                    lookup_key = f"Text #: {text_id}"
-                    corpus_entry = lincoln_dict.get(lookup_key, {})
-                    full_text = corpus_entry.get('full_text', None)
-                    text_field_value = full_text if full_text else result['Key Quote']
+                if not full_text:
+                    if search_type == "Keyword":
+                        full_text = str(result.get('key_quote', result.get('quote', '')))
+                    else:
+                        ft = str(result.get('full_text', ''))
+                        if ft and user_query_embedding is not None:
+                            segs = segment_text(ft)
+                            if segs:
+                                scores = compare_segments_with_query_parallel(segs, user_query_embedding)
+                                full_text = max(scores, key=lambda x: x[1])[0] if scores else ft[:500]
+                        else:
+                            full_text = ft[:500] if ft else ""
 
-                    formatted_entry = f"Match {idx}: " \
-                                      f"Search Type - {result['Search Type']}, " \
-                                      f"Text ID - {text_id}, " \
-                                      f"Source - {result['Source']}, " \
-                                      f"Summary (curatorial description only — not quotable corpus text) - {result['Summary']}, " \
-                                      f"Full Text (select the most relevant passage to quote directly) - {text_field_value}, " \
-                                      f"Relevance Score - {result['Relevance Score']:.2f}"
-                    formatted_results.append(formatted_entry)
-                return "\n\n".join(formatted_results)
-            # Function to get the full text from the Lincoln data based on text_id for final display of matching results
+                doc_dict = {
+                    "search_type": search_type,
+                    "text_id": text_id,
+                    "summary": summary,
+                    "full_text": full_text,
+                }
+                all_combined_data.append(
+                    yaml.dump(doc_dict, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                )
 
-            def get_full_text_by_id(text_id, data):
-                return next((item['full_text'] for item in data if item['text_id'] == text_id), None)
-            # Function to highlight truncated quotes for Nicolay model outputs
+        full_reranked_results = []
+        if all_combined_data:
+            st.markdown("### Ranked Search Results")
+            try:
+                reranked_response = co.rerank(
+                    model='rerank-v4.0-pro',
+                    query=user_query,
+                    documents=all_combined_data,
+                    top_n=10
+                )
+                with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
+                    st.write(relevance_ranking_explainer)
 
-            def highlight_key_quote(text, key_quote):
-                # Example based on your quotes
-                # Split the key_quote into beginning and ending parts
-                parts = key_quote.split("...")
-                if len(parts) >= 2:
-                    # Construct a regex pattern with the stable beginning and end, allowing for optional punctuation and spaces
-                    pattern = re.escape(parts[0]) + r"\s*.*?\s*" + re.escape(parts[-1]) + r"[.;,]?"
-                else:
-                    # If there's no '...', use the entire quote with optional punctuation and spaces at the end
-                    pattern = re.escape(key_quote) + r"\s*[.;,]?"
-                # Compile the regex pattern for efficiency
-                regex = re.compile(pattern, re.IGNORECASE)
-                # Find all matches
-                matches = regex.findall(text)
-                # Replace matches with highlighted version
-                for match in matches:
-                    text = text.replace(match, f"<mark>{match}</mark>")
-                return text
+                for idx, result in enumerate(reranked_response.results):
+                    combined_data = result.document
+                    doc_text = combined_data['text'] if isinstance(combined_data, dict) else str(combined_data)
+                    try:
+                        doc_parsed = yaml.safe_load(doc_text) or {}
+                    except yaml.YAMLError:
+                        doc_parsed = {}
 
-            def record_api_outputs():
-                now = dt.now()
-                d1 = {'msg':[msg], 'date':[now]}
-                df1 = pd.DataFrame(data=d1, index=None)
-                sh1 = gc.open('api_outputs')
-                wks1 = sh1[0]
-                cells1 = wks1.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
-                end_row1 = len(cells1)
-                api_outputs = api_sheet.sheet1
-                wks1.set_dataframe(df1,(end_row1+1,1), copy_head=False, extend=True)
+                    r_search_type = str(doc_parsed.get("search_type", "Unknown")).strip()
+                    r_text_id     = str(doc_parsed.get("text_id", "Unknown")).strip()
+                    r_summary     = str(doc_parsed.get("summary", "")).strip()
+                    r_full_text   = str(doc_parsed.get("full_text", "")).strip()
 
-            if user_query:
+                    lookup_key = f"Text #: {r_text_id}" if not r_text_id.startswith("Text") else r_text_id
+                    r_source = lincoln_dict.get(lookup_key, {})
+                    if not r_source:
+                        m_num = re.search(r"(\d+)", r_text_id)
+                        if m_num:
+                            r_source = lincoln_dict.get(int(m_num.group(1)), {})
+                    r_source_str = (r_source.get('source', 'Source information not available')
+                                    if isinstance(r_source, dict) else 'Source information not available')
 
-                # Construct the messages for the model
-                messages_for_model = [
-                    {"role": "system", "content": keyword_prompt},
-                    {"role": "user", "content": user_query}
-                ]
+                    full_reranked_results.append({
+                        'Rank': idx + 1,
+                        'Search Type': r_search_type,
+                        'Text ID': r_text_id,
+                        'Source': r_source_str,
+                        'Summary': r_summary,
+                        'Key Quote': r_full_text,
+                        'Relevance Score': result.relevance_score
+                    })
 
-             # Send the messages to the fine-tuned model
-                response = client.chat.completions.create(
-                    #model="ft:gpt-3.5-turbo-1106:personal::8XtdXKGK",  # Hays v1, GPT-3.5
-                    #model="ft:gpt-4o-mini-2024-07-18:personal:hays-gpt4o:9tFqrYwI",  # Hays v2
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",  # Hays v3
-                    messages=messages_for_model,
+                    if idx < 3:
+                        expander_label = f"**Reranked Match {idx+1} ({r_search_type} Search)**: `Text ID: {r_text_id}`"
+                        with st.expander(expander_label):
+                            st.markdown(f"**Text ID:** {r_text_id}")
+                            st.markdown(f"**Source:** {r_source_str}")
+                            st.markdown(f"**Summary:** {r_summary}")
+                            st.markdown(f"**Full Text (excerpt):**\n{r_full_text[:500]}{'...' if len(r_full_text) > 500 else ''}")
+                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
+
+            except Exception as e:
+                st.error(f"Error in reranking: {str(e)}")
+                st.exception(e)
+
+        # Format for Nicolay
+        formatted_input_for_model = format_reranked_results_for_model_input(
+            full_reranked_results, lincoln_dict
+        )
+
+        with st.expander("**Result Reranking Metadata**"):
+            reranked_df = pd.DataFrame(full_reranked_results)
+            st.dataframe(reranked_df)
+            st.write("**Formatted Results:**")
+            st.write(formatted_input_for_model)
+
+        if full_reranked_results:
+            log_reranking_results(reranking_results_logger, pd.DataFrame(full_reranked_results), user_query)
+
+        # ── Nicolay model call ────────────────────────────────────────────────
+        if formatted_input_for_model:
+            messages_for_second_model = [
+                {"role": "system", "content": response_prompt},
+                {"role": "user", "content": (
+                    f"User Query: {user_query}\n\n"
+                    f"Initial Answer: {initial_answer}\n\n"
+                    f"{formatted_input_for_model}"
+                )}
+            ]
+            with st.spinner("Calling Nicolay model…"):
+                second_model_response = client.chat.completions.create(
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+                    messages=messages_for_second_model,
                     temperature=0,
-                    max_tokens=800,  # Increased for v3 query_assessment field
+                    max_tokens=4000,
                     top_p=1,
                     frequency_penalty=0,
                     presence_penalty=0
                 )
 
-                msg = response.choices[0].message.content
-                #record_api_outputs()
-
-                # Parse the response to extract generated keywords
-                api_response_data = json.loads(msg)
-                initial_answer = api_response_data.get('initial_answer', '')
-                model_weighted_keywords = api_response_data.get('weighted_keywords', {})
-                model_year_keywords = api_response_data.get('year_keywords', []) or []
-                model_text_keywords = api_response_data.get('text_keywords', []) or []
-                model_query_assessment = api_response_data.get('query_assessment', '')  # New in Hay v3 — plain string
-
-                hays_data = {
-                    'query': user_query,
-                    'initial_answer': initial_answer,
-                    'weighted_keywords': model_weighted_keywords,
-                    'year_keywords': model_year_keywords,
-                    'text_keywords': model_text_keywords,
-                    'query_assessment': model_query_assessment,  # String — no json.dumps needed
-                    'full_output': msg
-                }
-
-                hays_data_logger.record_api_outputs(hays_data)
-
-                # Check if user provided any custom weighted keywords
-                if user_weighted_keywords:
-                    # Use user-provided keywords
-                    weighted_keywords = user_weighted_keywords
-                    year_keywords = user_year_keywords.split(',') if user_year_keywords else []
-                    text_keywords = user_text_keywords if user_text_keywords else []
-                else:
-                    # Use model-generated keywords
-                    weighted_keywords = model_weighted_keywords
-                    year_keywords = model_year_keywords
-                    text_keywords = model_text_keywords
-
-                with st.expander("**Hay's Response**", expanded=True):
-                    st.markdown(initial_answer)
-                    st.write("**How Does This Work?**")
-                    st.write("The Initial Response based on the user query is given by Hay, a finetuned large language model. This response helps Hay steer in the search process by guiding the selection of weighted keywords and informing the semantic search over the Lincoln speech corpus. Compare the Hay's Response Answer with Nicolay's Response and Analysis and the end of the RAG process to see how AI techniques can be used for historical sources.")
-
-                # Use st.columns to create two columns
-                col1, col2 = st.columns(2)
-
-                # Display keyword search results in the first column
-                with col1:
-
-                    # Perform the dynamically weighted search
-                    if perform_keyword_search:
-                        search_results = search_with_dynamic_weights_expanded(
-                            user_keywords=weighted_keywords,
-                            json_data=keyword_data,
-                            year_keywords=year_keywords,
-                            text_keywords=text_keywords,
-                            top_n_results=5  # You can adjust the number of results
-                            )
-
-                        # Check if keyword search results are empty
-                        if not search_results:
-
-                            st.markdown("### Keyword Search Results")
-
-                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                                st.write(keyword_search_explainer)
-
-                            search_results = pd.DataFrame()  # Create an empty DataFrame for consistency
-
-                            # Display message for no results found
-                            #st.markdown("### Keyword Search Results")
-                            with st.expander("**No keyword search results found.**"):
-                                st.write("No keyword search results found based on your query and Hays's outputs. Try again or modify your query. You can also use the Additional Search Options box above to search for specific terms, speeches, and years.")
-                        else:
-                            st.markdown("### Keyword Search Results")
-                            # (Existing code for displaying keyword search results)
-
-                            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                                st.write(keyword_search_explainer)
-
-                            # text segment - 0.0
-
-                            #for idx, result in enumerate(search_results, start=1):
-                            #    expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                            #    with st.expander(expander_label):
-                            #        st.markdown(f"{result['source']}")
-                            #        st.markdown(f"{result['text_id']}")
-                            #        st.markdown(f"{result['summary']}")
-                            #        st.markdown(f"**Key Quote:**\n{result['quote']}")
-                            #        st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                            #        st.markdown("**Keyword Counts:**")
-                            #        st.json(result['keyword_counts'])
-
-                            # text segment - 0.1
-
-                            for idx, result in enumerate(search_results, start=1):
-                                expander_label = f"**Keyword Match {idx}**: *{result['source']}* `{result['text_id']}`"
-                                with st.expander(expander_label):
-                                    st.markdown(f"**Source:** {result['source']}")
-                                    st.markdown(f"**Text ID:** {result['text_id']}")
-                                    st.markdown(f"**Summary:**\n{result['summary']}")
-                                    st.markdown(f"**Key Quote:**\n{result['quote']}")  # Display the full expanded quote
-                                    st.markdown(f"**Weighted Score:** {result['weighted_score']}")
-                                    st.markdown("**Keyword Counts:**")
-                                    st.json(result['keyword_counts'])
-
-                        # Display "Keyword Search Metadata" expander
-                        with st.expander("**Keyword Search Metadata**"):
-                            st.write("**Keyword Search Metadata**")
-                            st.write("**User Query:**")
-                            st.write(user_query)
-                            st.write("**Model Response:**")
-                            st.write(initial_answer)
-                            st.write("**Weighted Keywords:**")
-                            st.json(weighted_keywords)  # Display the weighted keywords
-                            st.write("**Year Keywords:**")
-                            st.json(year_keywords)
-                            st.write("**Text Keywords:**")
-                            st.json(text_keywords)
-                            st.write("**Query Assessment (Hay v3):**")
-                            st.write(model_query_assessment)
-                            st.write("**Raw Search Results**")
-                            st.dataframe(search_results)
-                            st.write("**Full Model Output**")
-                            st.write(msg)
-
-                            search_results_df = pd.DataFrame(search_results)
-                            log_keyword_search_results(keyword_results_logger, search_results_df, user_query)
-
-                # Display semantic search results in the second column
-                with col2:
-                    if perform_semantic_search:
-                        embedding_size = 1536
-                        st.markdown("### Semantic Search Results")
-
-                        with st.expander("**How Does This Work?: Semantic Search with HyDE**"):
-                            st.write(semantic_search_explainer)
-
-                        # Before starting the semantic search
-                        progress_text = "Semantic search in progress."
-                        my_bar = st.progress(0, text=progress_text)
-
-                        # Initialize the match counter
-                        match_counter = 1
-
-                        df = pd.read_csv(lincoln_speeches_embedded)
-                        df['full_text'] = df['combined'].apply(extract_full_text)
-                        df['embedding'] = df['full_text'].apply(lambda x: get_embedding(x) if x else np.zeros(embedding_size))
-                        #st.write("Sample text_id from DataFrame:", df['Unnamed: 0'].iloc[0])
-
-                        # After calculating embeddings for the dataset
-                        my_bar.progress(20, text=progress_text)  # Update to 20% after embeddings
-
-                        df['source'], df['summary'] = zip(*df['Unnamed: 0'].apply(get_source_and_summary))
-
-                        #st.write("Sample source and summary from DataFrame:", df[['source', 'summary']].iloc[0])
-                        # Perform initial semantic search, using HyDE approach
-                        #semantic_matches, user_query_embedding = search_text(df, user_query, n=5)
-
-                        semantic_matches, user_query_embedding = search_text(df, user_query + initial_answer, n=5)
-
-                        # After performing the initial semantic search
-                        my_bar.progress(50, text=progress_text)  # Update to 50% after initial search
-
-                        top_segments = []  # List to store top segments for each match
-
-                        # Loop for top semantic matches
-                        for idx, row in semantic_matches.iterrows():
-                            # Update progress bar based on the index
-                            progress_update = 50 + ((idx + 1) / len(semantic_matches)) * 40
-                            progress_update = min(progress_update, 100)  # Ensure it doesn't exceed 100
-                            my_bar.progress(progress_update / 100, text=progress_text)  # Divide by 100 if using float scale
-                            if match_counter > 5:
-                                break
-
-                            # Updated label to include 'text_id', 'source'
-                            semantic_expander_label = f"**Semantic Match {match_counter}**: *{row['source']}* `Text #: {row['Unnamed: 0']}`"
-                            with st.expander(semantic_expander_label, expanded=False):
-                                # Display 'source', 'text_id', 'summary'
-                                st.markdown(f"**Source:** {row['source']}")
-                                st.markdown(f"**Text ID:** {row['Unnamed: 0']}")
-                                st.markdown(f"**Summary:**\n{row['summary']}")
-
-                                # Process for finding key quotes remains the same
-                                segments = segment_text(row['full_text'])  # Use 'full_text' for segmenting
-
-                                #segment_scores = compare_segments_with_query(segments, user_query_embedding)
-                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                                top_segment = max(segment_scores, key=lambda x: x[1])
-                                top_segments.append(top_segment[0])  # Store top segment for logging
-                                st.markdown(f"**Key Quote:** {top_segment[0]}")
-                                st.markdown(f"**Similarity Score:** {top_segment[1]:.2f}")
-
-                            # Increment the match counter
-                            match_counter += 1
-
-                        semantic_matches["TopSegment"] = top_segments  # Add TopSegment column to semantic_matches DataFrame
-
-                        my_bar.progress(100, text="Semantic search completed.")
-                        time.sleep(1)
-                        my_bar.empty()  # Remove the progress bar
-
-                        with st.expander("**Semantic Search Metadata**"):
-                            st.write("**Semantic Search Metadata**")
-                            st.dataframe(semantic_matches)
-
-                        log_semantic_search_results(semantic_results_logger, semantic_matches)
-
-                # Reranking results with Cohere's Reranker API Endpoint
-                #if perform_reranking:
-
-                #    if isinstance(search_results, list):
-                #        search_results = pd.DataFrame(search_results)
-
-                    # Convert 'text_id' in search_results to numeric format
-                #    search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
-                    # Rename the identifier column in semantic_matches to align with search_results
-
-                #    semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
-                #    semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
-                #    deduplicated_results = remove_duplicates(search_results, semantic_matches)
-                #    all_combined_data = []
-
-                    # Format deduplicated results for reranking
-                #    for index, result in deduplicated_results.iterrows():
-                        # Check if the result is from keyword search or semantic search
-                #        if result.text_id in search_results.text_id.values and perform_keyword_search:
-                            # Format as keyword search result
-                #            combined_data = f"Keyword|Text ID: {result.text_id}|{result.summary}|{result.quote}"
-                #            all_combined_data.append(combined_data)
-                #        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                            # Format as semantic search result
-                #            segments = segment_text(result.full_text)
-                #            segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                #            top_segment = max(segment_scores, key=lambda x: x[1])
-                #            combined_data = f"Semantic|Text ID: {result.text_id}|{result.summary}|{top_segment[0]}"
-                #            all_combined_data.append(combined_data)
-
-                    # Use all_combined_data for reranking
-                #    if all_combined_data:
-                #        st.markdown("### Ranked Search Results")
-                #        try:
-                #            reranked_response = co.rerank(
-                #                model='rerank-english-v2.0',
-                #                query=user_query,
-                #                documents=all_combined_data,
-                #                top_n=10
-                #            )
-                #            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
-                #                st.write(relevance_ranking_explainer)
-                            # DataFrame for storing all reranked results
-                #            full_reranked_results = []
-                #            for idx, result in enumerate(reranked_response):
-                #                combined_data = result.document['text']
-                #                data_parts = combined_data.split("|")
-                #                if len(data_parts) >= 4:
-                #                    search_type, text_id_part, summary, quote = data_parts
-                #                    text_id = str(text_id_part.split(":")[-1].strip())
-                #                    summary = summary.strip()
-                #                    quote = quote.strip()
-                                    # Retrieve source information
-                #                    text_id_str = f"Text #: {text_id}"
-                #                    source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-                                    # Store each result in the DataFrame
-                #                    full_reranked_results.append({
-                #                        'Rank': idx + 1,
-                #                        'Search Type': search_type,
-                #                        'Text ID': text_id,
-                #                        'Source': source,
-                #                        'Summary': summary,
-                #                        'Key Quote': quote,
-                #                        'Relevance Score': result.relevance_score
-                #                    })
-                                    # Display only the top 3 results
-                #                    if idx < 3:
-                #                        expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
-                #                        with st.expander(expander_label):
-                #                            st.markdown(f"Text ID: {text_id}")
-                #                            st.markdown(f"{source}")
-                #                            st.markdown(f"{summary}")
-                #                            st.markdown(f"Key Quote:\n{quote}")
-                #                            st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
-                #        except Exception as e:
-                #            st.error("Error in reranking: " + str(e))
-
-                # Reranking results with Cohere's Reranker API Endpoint
-                # Reranking results with Cohere's Reranker API Endpoint
-                if perform_reranking:
-
-                    if isinstance(search_results, list):
-                        search_results = pd.DataFrame(search_results)
-
-                    # Convert 'text_id' in search_results to numeric format if it's not empty
-                    if not search_results.empty:
-                        search_results['text_id'] = search_results['text_id'].str.extract('(\d+)').astype(int)
-                    else:
-                        search_results = pd.DataFrame(columns=['text_id'])  # Create a DataFrame with the necessary column for consistency
-
-                    # Rename the identifier column in semantic_matches to align with search_results
-                    semantic_matches.rename(columns={'Unnamed: 0': 'text_id'}, inplace=True)
-                    semantic_matches['text_id'] = semantic_matches['text_id'].astype(int)
-
-                    # Handle the case where search_results is empty
-                    if search_results.empty:
-                        deduplicated_results = semantic_matches
-                    else:
-                        deduplicated_results = remove_duplicates(search_results, semantic_matches)
-
-                    all_combined_data = []
-
-                    # Format deduplicated results for reranking — YAML format with full chunk text.
-                    # Replaces the previous pipe-delimited key-quote-window approach.
-                    # lincoln_dict is keyed as "Text #: {text_id}" and contains 'full_text'.
-                    for index, result in deduplicated_results.iterrows():
-                        if result.text_id in search_results.text_id.values and perform_keyword_search:
-                            search_type = "Keyword"
-                        elif result.text_id in semantic_matches.text_id.values and perform_semantic_search:
-                            search_type = "Semantic"
-                        else:
-                            continue
-
-                        text_id = str(result.text_id)
-                        summary = str(result.summary) if hasattr(result, 'summary') else ""
-
-                        # Full chunk text from corpus (mirrors Cohere reranking upgrade)
-                        lookup_key = f"Text #: {text_id}"
-                        corpus_entry = lincoln_dict.get(lookup_key, {})
-                        full_text = corpus_entry.get('full_text', "")
-
-                        # Fallback: use key quote or top segment if full_text lookup fails
-                        if not full_text:
-                            if search_type == "Keyword" and hasattr(result, 'quote'):
-                                full_text = str(result.quote)
-                            elif search_type == "Semantic":
-                                segments = segment_text(result.full_text)
-                                segment_scores = compare_segments_with_query_parallel(segments, user_query_embedding)
-                                top_segment = max(segment_scores, key=lambda x: x[1])
-                                full_text = top_segment[0]
-
-                        import yaml as _yaml
-                        doc_dict = {
-                            "search_type": search_type,
-                            "text_id": text_id,
-                            "summary": summary,
-                            "full_text": full_text,
-                        }
-                        all_combined_data.append(_yaml.dump(doc_dict, allow_unicode=True, default_flow_style=False, sort_keys=False))
-
-                    # Use all_combined_data for reranking
-                    if all_combined_data:
-                        st.markdown("### Ranked Search Results")
-                        try:
-                            reranked_response = co.rerank(
-                                model='rerank-v4.0-pro',
-                                query=user_query,
-                                documents=all_combined_data,
-                                top_n=10
-                            )
-                            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
-                                st.write(relevance_ranking_explainer)
-
-                            # DataFrame for storing all reranked results
-                            import yaml as _yaml
-                            full_reranked_results = []
-                            for idx, result in enumerate(reranked_response.results):
-                                combined_data = result.document
-                                doc_text = combined_data['text'] if isinstance(combined_data, dict) else str(combined_data)
-                                try:
-                                    doc_parsed = _yaml.safe_load(doc_text) or {}
-                                except _yaml.YAMLError:
-                                    doc_parsed = {}
-
-                                search_type = str(doc_parsed.get("search_type", "Unknown")).strip()
-                                text_id = str(doc_parsed.get("text_id", "Unknown")).strip()
-                                summary = str(doc_parsed.get("summary", "")).strip()
-                                full_text = str(doc_parsed.get("full_text", "")).strip()
-
-                                text_id_str = f"Text #: {text_id}"
-                                source = lincoln_dict.get(text_id_str, {}).get('source', 'Source information not available')
-
-                                full_reranked_results.append({
-                                    'Rank': idx + 1,
-                                    'Search Type': search_type,
-                                    'Text ID': text_id,
-                                    'Source': source,
-                                    'Summary': summary,
-                                    'Key Quote': full_text,   # Column name retained for downstream compatibility
-                                    'Relevance Score': result.relevance_score
-                                })
-                                # Display only the top 3 results
-                                if idx < 3:
-                                    expander_label = f"**Reranked Match {idx + 1} ({search_type} Search)**: `Text ID: {text_id}`"
-                                    with st.expander(expander_label):
-                                        st.markdown(f"Text ID: {text_id}")
-                                        st.markdown(f"{source}")
-                                        st.markdown(f"{summary}")
-                                        st.markdown(f"Full Text (excerpt):\n{full_text[:500]}{'...' if len(full_text) > 500 else ''}")
-                                        st.markdown(f"**Relevance Score:** {result.relevance_score:.2f}")
-                        except Exception as e:
-                            st.error("Error in reranking: " + str(e))
-
-
-                    #
-
-                    # Format reranked results for model input
-                    formatted_input_for_model = format_reranked_results_for_model_input(full_reranked_results)
-
-                    # Display full reranked results in an expander
-                    with st.expander("**Result Reranking Metadata**"):
-                        reranked_df = pd.DataFrame(full_reranked_results)
-                        st.dataframe(reranked_df)
-                        st.write("**Formatted Results:**")
-                        st.write(formatted_input_for_model)
-
-                    log_reranking_results(reranking_results_logger, reranked_df)
-
-                    # API Call to the second GPT-3.5 model
-                    if formatted_input_for_model:
-                        # Construct the message for the model
-                        messages_for_second_model = [
-                            {"role": "system", "content": response_prompt},
-                            {"role": "user", "content": f"User Query: {user_query}\n\n"
-                                                        f"Initial Answer: {initial_answer}\n\n"
-                                                        f"{formatted_input_for_model}"}
-                        ]
-
-                        # Send the messages to the finetuned model
-                        second_model_response = client.chat.completions.create(
-                            #model="ft:gpt-3.5-turbo-1106:personal::8clf6yi4",  # Nicolay v1, GPT-3.5
-                            #model="ft:gpt-4o-mini-2024-07-18:personal:nicolay-gpt4o:9tG7Cypl",  # Nicolay v2
-                            model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",  # Nicolay v3
-                            messages=messages_for_second_model,
-                            temperature=0,
-                            max_tokens=3000,  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers
-                            top_p=1,
-                            frequency_penalty=0,
-                            presence_penalty=0
-                        )
-
-                        # Process and display the model's response
-                        response_content = second_model_response.choices[0].message.content
-
-                        if response_content:  # Assuming 'response_content' is the output from the second model
-                            model_output = json.loads(response_content)
-
-                            # Displaying the Final Answer
-                            st.header("Nicolay's Response & Analysis:")
-
-                            #with st.expander("Output Debugging:"):
-                            #    st.write(response_content)
-
-                            with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
-                                st.write(nicolay_model_explainer)
-                            with st.expander("**Nicolay's Response**", expanded=True):
-                                final_answer = model_output.get("FinalAnswer", {})
-                                st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
-                                if final_answer.get("References"):
-                                    st.markdown("**References:**")
-                                    for reference in final_answer["References"]:
-                                        st.markdown(f"{reference}")
-
-                            doc_match_counter = 0
-                            highlight_success_dict = {}
-
-                            highlight_style = """
-                            <style>
-                            mark {
-                                background-color: #90ee90;
-                                color: black;
-                            }
-                            </style>
-                            """
-
-                            if "Match Analysis" in model_output:
-                                st.markdown(highlight_style, unsafe_allow_html=True)
-                                for match_key, match_info in model_output["Match Analysis"].items():
-                                    text_id = match_info.get("Text ID")
-                                    formatted_text_id = f"Text #: {text_id}"
-                                    key_quote = match_info.get("Key Quote", "")
-
-                                    speech = next((item for item in lincoln_data if item['text_id'] == formatted_text_id), None)
-
-                                    # Increment the counter for each match
-                                    doc_match_counter += 1
-
-                                    # Initialize highlight_success for each iteration
-                                    highlight_success = False  # Flag to track highlighting success
-
-                                    if speech:
-                                        # Use the doc_match_counter in the expander label
-                                        expander_label = f"**Match {doc_match_counter}**: *{speech['source']}* `{speech['text_id']}`"
-                                        with st.expander(expander_label, expanded=False):
-                                            st.markdown(f"**Source:** {speech['source']}")
-                                            st.markdown(f"**Text ID:** {speech['text_id']}")
-                                            st.markdown(f"**Summary:**\n{speech['summary']}")
-
-                                            # Replace line breaks for HTML display
-                                            formatted_full_text = speech['full_text'].replace("\\n", "<br>")
-
-                                            # Attempt direct highlighting
-                                            if key_quote in speech['full_text']:
-                                                formatted_full_text = formatted_full_text.replace(key_quote, f"<mark>{key_quote}</mark>")
-                                                highlight_success = True
-                                            else:
-                                                # If direct highlighting fails, use regex-based approach
-                                                formatted_full_text = highlight_key_quote(speech['full_text'], key_quote)
-                                                formatted_full_text = formatted_full_text.replace("\\n", "<br>")
-                                                # Check if highlighting was successful with regex approach
-                                                highlight_success = key_quote in formatted_full_text
-
-                                            st.markdown(f"**Key Quote:**\n{key_quote}")
-                                            st.markdown(f"**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                                            st.markdown(formatted_full_text, unsafe_allow_html=True)
-
-                                            # Update highlight_success_dict for the current match
-                                            highlight_success_dict[match_key] = highlight_success
-                                    else:
-                                        with st.expander(f"**Match {doc_match_counter}**: Not Found", expanded=False):
-                                            st.markdown("Full text not found.")
-                                            highlight_success_dict[match_key] = False  # Indicate failure as text not found
-
-                            # Displaying the Analysis Metadata
-                            with st.expander("**Analysis Metadata**"):
-                                # Displaying User Query Analysis
-                                if "User Query Analysis" in model_output:
-                                    st.markdown("**User Query Analysis:**")
-                                    for key, value in model_output["User Query Analysis"].items():
-                                        st.markdown(f"- **{key}:** {value}")
-
-                                # Displaying Initial Answer Review
-                                if "Initial Answer Review" in model_output:
-                                    st.markdown("**Initial Answer Review:**")
-                                    for key, value in model_output["Initial Answer Review"].items():
-                                        st.markdown(f"- **{key}:** {value}")
-
-                                # Displaying Match Analysis
-                                if "Match Analysis" in model_output:
-                                    st.markdown("**Match Analysis:**")
-                                    for match_key, match_info in model_output["Match Analysis"].items():
-                                        st.markdown(f"- **{match_key}:**")
-                                        for key, value in match_info.items():
-                                            st.markdown(f"  - {key}: {value}")
-
-                                # Displaying Meta Analysis
-                                if "Meta Analysis" in model_output:
-                                    st.markdown("**Meta Analysis:**")
-                                    for key, value in model_output["Meta Analysis"].items():
-                                        st.markdown(f"- **{key}:** {value}")
-
-                                # Displaying Model Feedback
-                                if "Model Feedback" in model_output:
-                                    st.markdown("**Model Feedback:**")
-                                    for key, value in model_output["Model Feedback"].items():
-                                        st.markdown(f"- **{key}:** {value}")
-
-                                st.write("**Full Model Output:**")
-                                st.write(response_content)
-
-                            # Ensure the function call includes the initialized variable
-                            log_nicolay_model_output(nicolay_data_logger, model_output, user_query, highlight_success_dict)
-
-        else:
-            st.error("Search halted: Invalid search condition. Please ensure at least one search method is selected.")
+            response_content = second_model_response.choices[0].message.content
+
+            if response_content:
+                model_output = json.loads(response_content)
+
+                st.header("Nicolay's Response & Analysis:")
+
+                with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
+                    st.write(nicolay_model_explainer)
+
+                # Final Answer
+                with st.expander("**Nicolay's Response**", expanded=True):
+                    final_answer = model_output.get("FinalAnswer", {})
+                    st.markdown(f"**Response:**\n{final_answer.get('Text', 'No response available')}")
+                    if final_answer.get("References"):
+                        st.markdown("**References:**")
+                        for reference in final_answer["References"]:
+                            st.markdown(f"- {reference}")
+
+                # ── [E2] Match Analysis card-grid with [E1] quote verification
+                highlight_success_dict = {}
+                if "Match Analysis" in model_output:
+                    render_match_analysis_cards(model_output["Match Analysis"], lincoln_dict)
+                    # Populate highlight_success_dict for logging
+                    for match_key, match_info in model_output["Match Analysis"].items():
+                        kq = match_info.get("Key Quote", "")
+                        tid = str(match_info.get("Text ID", ""))
+                        verified, _ = verify_quote(kq, tid, lincoln_dict)
+                        highlight_success_dict[match_key] = verified
+
+                # Analysis Metadata
+                with st.expander("**Analysis Metadata**"):
+                    if "User Query Analysis" in model_output:
+                        st.markdown("**User Query Analysis:**")
+                        for key, value in model_output["User Query Analysis"].items():
+                            st.markdown(f"- **{key}:** {value}")
+
+                    if "Initial Answer Review" in model_output:
+                        st.markdown("**Initial Answer Review:**")
+                        for key, value in model_output["Initial Answer Review"].items():
+                            st.markdown(f"- **{key}:** {value}")
+
+                    if "Match Analysis" in model_output:
+                        st.markdown("**Match Analysis (raw):**")
+                        for match_key, match_info in model_output["Match Analysis"].items():
+                            st.markdown(f"- **{match_key}:**")
+                            for key, value in match_info.items():
+                                st.markdown(f"  - {key}: {value}")
+
+                    if "Meta Analysis" in model_output:
+                        st.markdown("**Meta Analysis:**")
+                        for key, value in model_output["Meta Analysis"].items():
+                            st.markdown(f"- **{key}:** {value}")
+
+                    if "Model Feedback" in model_output:
+                        st.markdown("**Model Feedback:**")
+                        for key, value in model_output["Model Feedback"].items():
+                            st.markdown(f"- **{key}:** {value}")
+
+                    st.write("**Full Model Output:**")
+                    st.write(response_content)
+
+                log_nicolay_model_output(
+                    nicolay_data_logger, model_output, user_query,
+                    highlight_success_dict, initial_answer
+                )

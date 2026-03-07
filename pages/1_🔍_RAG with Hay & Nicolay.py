@@ -761,12 +761,71 @@ if submitted:
             frequency_penalty=0, presence_penalty=0
         )
     hay_raw = hay_resp.choices[0].message.content
-    hay_data = json.loads(hay_raw)
-    initial_answer         = hay_data.get('initial_answer', '')
+
+    def _parse_model_json(raw: str, label: str) -> dict:
+        """
+        Robustly parse JSON from a model response.
+        Handles: markdown fences, BOM, stray trailing text, and common
+        single-character escaping issues that cause column-offset errors.
+        Shows a clear st.error with the raw output on failure so the problem
+        is diagnosable without Streamlit log access.
+        """
+        if not raw:
+            st.error(f"{label}: model returned an empty response.")
+            return {}
+
+        s = raw.strip()
+
+        # Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s*```$", "", s)
+        s = s.strip()
+
+        # Remove UTF-8 BOM if present
+        s = s.lstrip("\ufeff")
+
+        # Attempt 1: direct parse
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+
+        # Attempt 2: extract the first {...} block (handles trailing text / preamble)
+        m = re.search(r"\{.*\}", s, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # Attempt 3: truncate at last valid closing brace
+        last_brace = s.rfind("}")
+        if last_brace != -1:
+            try:
+                return json.loads(s[:last_brace + 1])
+            except json.JSONDecodeError:
+                pass
+
+        # All attempts failed — surface raw output for diagnosis
+        st.error(
+            f"**{label}: could not parse model JSON output.**\n\n"
+            f"This usually means the model produced malformed JSON "
+            f"(e.g. a truncated field at max_tokens, or an unescaped character). "
+            f"Raw output is shown below for diagnosis."
+        )
+        with st.expander(f"Raw {label} output (for diagnosis)", expanded=True):
+            st.code(raw, language="text")
+        return {}
+
+    hay_data = _parse_model_json(hay_raw, "Hay v3")
+    if not hay_data:
+        st.stop()
+
+    initial_answer          = hay_data.get('initial_answer', '')
     model_weighted_keywords = hay_data.get('weighted_keywords', {})
-    model_year_keywords    = hay_data.get('year_keywords', []) or []
-    model_text_keywords    = hay_data.get('text_keywords', []) or []
-    model_query_assessment = hay_data.get('query_assessment', '')
+    model_year_keywords     = hay_data.get('year_keywords', []) or []
+    model_text_keywords     = hay_data.get('text_keywords', []) or []
+    model_query_assessment  = hay_data.get('query_assessment', '')
 
     hays_data_logger.record_api_outputs({
         'query': user_query, 'initial_answer': initial_answer,
@@ -1031,7 +1090,9 @@ if submitted:
                 st.error("Nicolay returned an empty response.")
                 st.stop()
 
-            model_output = json.loads(nic_raw)
+            model_output = _parse_model_json(nic_raw, "Nicolay v3")
+            if not model_output:
+                st.stop()
             match_analysis = model_output.get("Match Analysis", {})
 
             st.header("Nicolay's Response & Analysis:")

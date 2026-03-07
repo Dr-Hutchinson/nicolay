@@ -1,12 +1,20 @@
 """
 Nicolay Formal Benchmark — Streamlit App
 =========================================
-Runs the 13-query (+3 replacement) formal benchmark against the Nicolay RAG pipeline.
+Runs the 25-query formal benchmark against the Nicolay RAG pipeline.
 Captures all defined metrics: Hay-layer, retrieval-layer, Nicolay-layer, quote verification,
 BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 
 System state: Hay v3 + Nicolay v3 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_repaired_1.json (772 chunks)
+
+v5.4 changes:
+  - Benchmark expanded from 16 to 25 runnable questions (corpus-validated, 2026-03-07)
+  - Q5 revised: Dred Scott nationalization argument (replaces diffuse broad framing)
+  - Q11 revised: Constitutional obligation / Fugitive Slave Law (replaces abstract liberty/law)
+  - New questions: FR-2, AN-5, CA-5, CA-6, S-4, S-5, RC-3, RC-4, RC-5
+  - RC-2 included but flagged blocked (Last Public Address absent from corpus)
+  - Groups: core (retained), revised (Q5-rev, Q11-rev), new (FR-2 through RC-5)
 """
 
 import streamlit as st
@@ -232,7 +240,7 @@ RERANK_K = 5
 # ─────────────────────────────────────────────────────────────────────────────
 
 BENCHMARK_QUERIES = [
-    # ── Core 13 ──────────────────────────────────────────────────────────────
+    # ── Factual Retrieval (5) ─────────────────────────────────────────────────
     {
         "id": "Q1", "group": "core",
         "query": "Lincoln noted how many voters from Kansas and Nevada participated in the 1864 election",
@@ -261,22 +269,49 @@ BENCHMARK_QUERIES = [
         "watchlist": [],
     },
     {
+        "id": "R3", "group": "core",
+        "query": "How did Lincoln report on the financial condition of the Post Office Department during the war?",
+        "category": "factual_retrieval",
+        "expected_hay_type": "D", "expected_nicolay_type": "T2",
+        "ideal_docs_new": [311, 312, 364, 365, 401], "ideal_docs_original": [55, 56, 64, 65, 71], "ideal_docs_count": 5,
+        "critical_missing_evidence": None,
+        "watchlist": ["Numerical progression: $8.3M → near-self-sustaining → $12.4M"],
+    },
+    {
+        "id": "FR-2", "group": "new",
+        "query": "How did Lincoln characterize the relationship between wartime taxation, public debt, and the financial obligations of citizens in his Annual Messages to Congress?",
+        "category": "factual_retrieval",
+        "expected_hay_type": "D", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [249, 309, 310, 393, 395], "ideal_docs_original": None, "ideal_docs_count": 5,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Tests fiscal-civic argument synthesis vs. raw number retrieval",
+            "Docs 357/392 (raw fiscal tables) may retrieve but are not ideal targets — watch for T1 overshoot",
+            "Doc 395: 'citizens cannot be much oppressed by a debt which they owe to themselves'",
+        ],
+    },
+    # ── Analysis (5) ─────────────────────────────────────────────────────────
+    {
         "id": "Q4", "group": "core",
         "query": "How did Lincoln incorporate allusions in his Second Inaugural Address?",
         "category": "analysis",
         "expected_hay_type": "A", "expected_nicolay_type": "T2",
         "ideal_docs_new": [419, 420, 421, 422], "ideal_docs_original": [77, 78], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
-        "watchlist": ["Biblical allusion depth in chunks 421-422"],
+        "watchlist": ["Biblical allusion depth in chunks 421-422", "Fabrication risk at 562-word response edge"],
     },
     {
-        "id": "Q5", "group": "core",
-        "query": "How did Lincoln characterize the implications of major Supreme Court decisions before the Civil War?",
+        "id": "Q5", "group": "revised",
+        "query": "How did Lincoln argue in the 1858 debates that the Dred Scott decision was part of a larger design to nationalize slavery throughout the United States?",
         "category": "analysis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [88, 95, 101], "ideal_docs_original": [15, 16, 17], "ideal_docs_count": 3,
+        "expected_hay_type": "D", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [89, 96, 97, 487, 619, 726], "ideal_docs_original": [15, 16, 17], "ideal_docs_count": 6,
         "critical_missing_evidence": None,
-        "watchlist": [],
+        "watchlist": [
+            "Revised from broad Dred Scott framing (Run 0: reranker mean=0.949, ROUGE-1 ratio=1.231)",
+            "Nationalization argument: docs 487 (Freeport), 619 (Galesburg), 726 (Quincy)",
+            "House Divided conspiracy framing: docs 89, 96, 97",
+        ],
     },
     {
         "id": "Q6", "group": "core",
@@ -285,78 +320,10 @@ BENCHMARK_QUERIES = [
         "expected_hay_type": "A", "expected_nicolay_type": "T1",
         "ideal_docs_new": [185, 191, 197, 202], "ideal_docs_original": [33, 34, 35, 36], "ideal_docs_count": 4,
         "critical_missing_evidence": None,
-        "watchlist": [],
+        "watchlist": ["Run 0 calibration decoupling case: P@5=0 yet rubric 3.25 — retain for article evidence"],
     },
     {
-        "id": "Q7", "group": "core",
-        "query": "How did Lincoln's discussion of slavery evolve between his House Divided speech and his Second Inaugural Address?",
-        "category": "comparative_analysis",
-        "expected_hay_type": "E", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [88, 95, 101, 419, 420, 421, 422], "ideal_docs_original": [15, 16, 17, 77, 78], "ideal_docs_count": 7,
-        "critical_missing_evidence": None,
-        "watchlist": ["Lincoln-Douglas Debate chunk retrieval", "Hay Contrastive over-classification"],
-    },
-    {
-        "id": "Q8", "group": "core",
-        "query": "How did Lincoln's justification for the Civil War evolve between his First Inaugural and Second Inaugural?",
-        "category": "comparative_analysis",
-        "expected_hay_type": "E", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [185, 191, 197, 202, 419, 420, 421, 422], "ideal_docs_original": [33, 34, 35, 36, 77, 78], "ideal_docs_count": 8,
-        "critical_missing_evidence": None,
-        "watchlist": ["Hay Contrastive over-classification"],
-    },
-    {
-        "id": "Q9", "group": "core",
-        "query": "How did Lincoln's views of African American soldiers change or remain the same over time?",
-        "category": "comparative_analysis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        "ideal_docs_new": [288, 295, 367, 374], "ideal_docs_original": [51, 52, 65, 66], "ideal_docs_count": 4,
-        "critical_missing_evidence": None,
-        "watchlist": ["295 soldiers passage", "374 100,000 in service"],
-    },
-    {
-        "id": "Q10", "group": "core",
-        "query": "How did Lincoln develop the theme of divine providence throughout his wartime speeches?",
-        "category": "synthesis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [298, 418, 419, 420, 421, 422], "ideal_docs_original": [53, 76, 77, 78], "ideal_docs_count": 6,
-        "critical_missing_evidence": None,
-        "watchlist": ["Chunk 298 Second Annual opening providence language"],
-    },
-    {
-        "id": "Q11", "group": "core",
-        "query": "How did Lincoln consistently frame the relationship between liberty and law?",
-        "category": "synthesis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [153, 159, 185, 191, 418, 419], "ideal_docs_original": [27, 28, 33, 34, 76, 77], "ideal_docs_count": 6,
-        "critical_missing_evidence": None,
-        "watchlist": [],
-    },
-    {
-        "id": "Q12", "group": "core",
-        "query": "What themes did Lincoln consistently employ when discussing the Constitution's relationship to slavery?",
-        "category": "synthesis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T4",
-        "ideal_docs_new": [153, 159, 185, 191], "ideal_docs_original": [27, 28, 33, 34], "ideal_docs_count": 4,
-        "critical_missing_evidence": None,
-        "watchlist": ["Lincoln-Douglas Debate chunk retrieval", "Cooper Union additional chunks"],
-    },
-    {
-        "id": "Q13", "group": "core",
-        "query": "How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
-        "category": "race_citizenship",
-        "expected_hay_type": "E", "expected_nicolay_type": "T5",
-        "ideal_docs_new": [288, 295, 367, 374, 413, 414, 419], "ideal_docs_original": [51, 52, 65, 66, 77, 78], "ideal_docs_count": 7,
-        "critical_missing_evidence": "Last Public Address (Apr 11, 1865) — conditional suffrage statement NOT IN CORPUS",
-        "watchlist": [
-            "Jonesboro chunks 517-518 retrieval (racial hierarchy statement)",
-            "Charleston debate chunks 572-614 retrieval",
-            "Historiographical nuance: does Nicolay handle limiting statements appropriately?",
-        ],
-    },
-    # ── Replacements ──────────────────────────────────────────────────────────
-    {
-        "id": "R1", "group": "replacement",
+        "id": "R1", "group": "core",
         "query": "How did Lincoln justify the naval blockade of Confederate ports?",
         "category": "analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
@@ -365,22 +332,212 @@ BENCHMARK_QUERIES = [
         "watchlist": ["Trent Affair gap recognition by Nicolay"],
     },
     {
-        "id": "R2", "group": "replacement",
+        "id": "AN-5", "group": "new",
+        "query": "How did Lincoln argue in his First Annual Message that the relationship between labor and capital in a free society differed fundamentally from the assumptions underlying the slave-labor system?",
+        "category": "analysis",
+        "expected_hay_type": "A", "expected_nicolay_type": "T2",
+        "ideal_docs_new": [279, 280, 281], "ideal_docs_original": None, "ideal_docs_count": 3,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Tight ideal doc set: 3 consecutive First Annual Message chunks only",
+            "Doc 280: 'Labor is prior to, and independent of, capital' — key anchor phrase",
+            "Peoria has moral anti-slavery argument but NOT the capital-labor economic framing — watch for diffuse retrieval",
+        ],
+    },
+    # ── Comparative Analysis (6) ──────────────────────────────────────────────
+    {
+        "id": "Q7", "group": "core",
+        "query": "How did Lincoln's discussion of slavery evolve between his House Divided speech and his Second Inaugural Address?",
+        "category": "comparative_analysis",
+        "expected_hay_type": "E", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [88, 95, 101, 419, 420, 421, 422], "ideal_docs_original": [15, 16, 17, 77, 78], "ideal_docs_count": 7,
+        "critical_missing_evidence": None,
+        "watchlist": ["Fabrication confirmed Run 0 (QuotesFabricated=1)", "T4→T2 floor — key failure case", "Hay Contrastive over-classification"],
+    },
+    {
+        "id": "Q8", "group": "core",
+        "query": "How did Lincoln's justification for the Civil War evolve between his First Inaugural and Second Inaugural?",
+        "category": "comparative_analysis",
+        "expected_hay_type": "E", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [185, 191, 197, 202, 419, 420, 421, 422], "ideal_docs_original": [33, 34, 35, 36, 77, 78], "ideal_docs_count": 8,
+        "critical_missing_evidence": None,
+        "watchlist": ["T4→T2 floor pattern from Run 0", "Hay Contrastive over-classification"],
+    },
+    {
+        "id": "Q9", "group": "core",
+        "query": "How did Lincoln's views of African American soldiers change or remain the same over time?",
+        "category": "comparative_analysis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [288, 295, 367, 374], "ideal_docs_original": [51, 52, 65, 66], "ideal_docs_count": 4,
+        "critical_missing_evidence": None,
+        "watchlist": ["T3→T2 floor from Run 0", "Docs 288/367 systematically missed in Run 0"],
+    },
+    {
+        "id": "R2", "group": "core",
         "query": "How did Lincoln describe U.S. relations with Great Britain during the Civil War?",
         "category": "comparative_analysis",
         "expected_hay_type": "D", "expected_nicolay_type": "T3",
         "ideal_docs_new": [242, 243, 247, 300, 301, 345, 346, 388], "ideal_docs_original": [43, 44, 53, 54, 61, 62, 69], "ideal_docs_count": 8,
         "critical_missing_evidence": "Trent Affair absent (most diplomatically significant U.S.-British episode of the war)",
-        "watchlist": ["Trent Affair gap recognition by Nicolay"],
+        "watchlist": ["Trent Affair gap recognition by Nicolay", "T3→T2 floor from Run 0"],
     },
     {
-        "id": "R3", "group": "replacement",
-        "query": "How did Lincoln report on the financial condition of the Post Office Department during the war?",
-        "category": "factual_retrieval",
-        "expected_hay_type": "D", "expected_nicolay_type": "T2",
-        "ideal_docs_new": [311, 312, 364, 365, 401], "ideal_docs_original": [55, 56, 64, 65, 71], "ideal_docs_count": 5,
+        "id": "CA-5", "group": "new",
+        "query": "How did Lincoln's characterization of the South and the causes of the conflict differ between his First Inaugural Address and his Second Inaugural Address?",
+        "category": "comparative_analysis",
+        "expected_hay_type": "E", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [193, 195, 420, 421, 422], "ideal_docs_original": None, "ideal_docs_count": 5,
         "critical_missing_evidence": None,
-        "watchlist": ["Numerical progression: $8.3M → near-self-sustaining → $12.4M"],
+        "watchlist": [
+            "Doc 185 (First Inaugural opening procedural chunk) excluded from ideal set — no argumentative content",
+            "Docs 193/195 carry conciliatory framing; docs 420-422 carry Second Inaugural causal argument",
+            "Both ends reliably retrieved in Run 0 — cleaner T3 test than Q7/Q8",
+        ],
+    },
+    {
+        "id": "CA-6", "group": "new",
+        "query": "How did Lincoln constitutionally justify his suspension of habeas corpus and exercise of war powers in his 1861 message to Congress, and how did he reaffirm this authority in later wartime addresses?",
+        "category": "comparative_analysis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [214, 219, 221, 380], "ideal_docs_original": None, "ideal_docs_count": 4,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Strong 1861 anchor: docs 219 (suspension announcement), 221 (constitutional justification), 214 (war power)",
+            "Doc 380 (3rd Annual Message): 1863 reaffirmation — 'war power is still our main reliance'",
+            "1864 evolution claim: corpus thin — well-calibrated response should hedge; calibration test",
+        ],
+    },
+    # ── Synthesis (5) ────────────────────────────────────────────────────────
+    {
+        "id": "Q10", "group": "core",
+        "query": "How did Lincoln develop the theme of divine providence throughout his wartime speeches?",
+        "category": "synthesis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [298, 418, 419, 420, 421, 422], "ideal_docs_original": [53, 76, 77, 78], "ideal_docs_count": 6,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Lowest Run 0 scorer (2.25/4.0) — doc misattribution confirmed",
+            "'The Almighty has His own purposes' placed in wrong speech — key failure case for article",
+            "T4→T2 floor compounds with factual error",
+        ],
+    },
+    {
+        "id": "Q11", "group": "revised",
+        "query": "How did Lincoln use the concept of constitutional obligation to justify enforcement of laws he personally opposed, such as the Fugitive Slave Law?",
+        "category": "synthesis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [153, 159, 185, 191, 418, 419], "ideal_docs_original": [27, 28, 33, 34, 76, 77], "ideal_docs_count": 6,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Revised from abstract liberty/law framing (Run 0: P@5=0, R@5=0 yet rubric 3.25 — measuring confabulation)",
+            "Concrete argumentative move: right answer exists; harder to confabulate",
+            "Docs 153/159 (Cooper Union) systematically missed — watch retrieval pattern",
+        ],
+    },
+    {
+        "id": "Q12", "group": "core",
+        "query": "What themes did Lincoln consistently employ when discussing the Constitution's relationship to slavery?",
+        "category": "synthesis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [153, 159, 185, 191], "ideal_docs_original": [27, 28, 33, 34], "ideal_docs_count": 4,
+        "critical_missing_evidence": None,
+        "watchlist": ["High reranker/low P@5 calibration decoupling case from Run 0", "Lincoln-Douglas Debate chunk retrieval", "Cooper Union additional chunks"],
+    },
+    {
+        "id": "S-4", "group": "new",
+        "query": "How did Lincoln's use of the Declaration of Independence as a founding argument shift from his pre-war debates with Douglas to his wartime addresses, and what did this shift accomplish rhetorically?",
+        "category": "synthesis",
+        "expected_hay_type": "E", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [44, 45, 418, 624, 626, 628], "ideal_docs_original": None, "ideal_docs_count": 6,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Peoria Declaration passages: docs 44/45 (pre-war anchor)",
+            "Galesburg 5th Debate (docs 624-632): richest for Lincoln's extended Declaration defense vs. Douglas",
+            "Doc 418 (Gettysburg): wartime reinterpretation capstone — single chunk",
+            "HD discriminator: Garry Wills / Declaration-as-reinterpretation thesis standard in literature",
+        ],
+    },
+    {
+        "id": "S-5", "group": "new",
+        "query": "How did Lincoln argue that the Civil War was fundamentally a test of whether democratic self-government could survive, and where did he make this case most explicitly?",
+        "category": "synthesis",
+        "expected_hay_type": "D", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [46, 47, 48, 239, 418], "ideal_docs_original": None, "ideal_docs_count": 5,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Pre-war anchor strong: Peoria docs 43-50 (self-government experiment framing)",
+            "Wartime anchor thinner: doc 239 (July 4th Message 1861) is the strongest wartime articulation",
+            "Partial retrieval likely — calibration interest: does system hedge appropriately?",
+        ],
+    },
+    # ── Race and Citizenship (4 runnable + 1 blocked) ────────────────────────
+    {
+        "id": "Q13", "group": "core",
+        "query": "How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
+        "category": "race_citizenship",
+        "expected_hay_type": "E", "expected_nicolay_type": "T5",
+        "ideal_docs_new": [288, 295, 367, 374, 413, 414, 419], "ideal_docs_original": [51, 52, 65, 66, 77, 78], "ideal_docs_count": 7,
+        "critical_missing_evidence": "Last Public Address (Apr 11, 1865) — conditional suffrage statement NOT IN CORPUS",
+        "watchlist": [
+            "Complete retrieval collapse in Run 0 (P@5=0, R@5=0, rubric 3.25) — corpus stress-test / confabulation resistance case",
+            "Retain as explicitly untestable until Last Public Address added",
+            "Jonesboro chunks 517-518 retrieval (racial hierarchy statement)",
+            "Historiographical nuance: does Nicolay handle limiting statements appropriately?",
+        ],
+    },
+    {
+        "id": "RC-3", "group": "new",
+        "query": "How did Lincoln simultaneously affirm African Americans' natural rights under the Declaration of Independence while arguing against full political equality in the 1858 debates?",
+        "category": "race_citizenship",
+        "expected_hay_type": "E", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [41, 481, 550, 624, 679], "ideal_docs_original": None, "ideal_docs_count": 5,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Doc 481 (Freeport): 'no reason in the world why the negro is not entitled to all the natural rights enumerated in the Declaration' — key anchor",
+            "Doc 41 (Peoria): 'the poor negro has some natural right to himself' — 1854 formulation",
+            "Docs 481/550/679: liberty/equality tension — 'physical difference... forever forbid living on the footing of perfect equality'",
+            "HD discriminator: Foner/Oakes liberty-equality distinction — does Nicolay navigate or collapse?",
+        ],
+    },
+    {
+        "id": "RC-4", "group": "new",
+        "query": "How did Lincoln justify the emancipation of enslaved people and the use of Black soldiers as military policy, and what did he suggest this service implied for their future status?",
+        "category": "race_citizenship",
+        "expected_hay_type": "D", "expected_nicolay_type": "T3",
+        "ideal_docs_new": [293, 295, 372, 374], "ideal_docs_original": None, "ideal_docs_count": 4,
+        "critical_missing_evidence": None,
+        "watchlist": [
+            "Doc 295 (Conkling Letter): 'Some of them seem willing to fight for you' — military service pivot",
+            "Doc 374 (3rd Annual Message): 'full one hundred thousand are now in the United States military service'",
+            "'Future status' clause is calibration test: response should acknowledge implied rather than explicit citizenship claim",
+        ],
+    },
+    {
+        "id": "RC-5", "group": "new",
+        "query": "How did Lincoln address the future political status of formerly enslaved people in his wartime Annual Messages and public letters, and what did he leave unresolved?",
+        "category": "race_citizenship",
+        "expected_hay_type": "E", "expected_nicolay_type": "T4",
+        "ideal_docs_new": [297, 375, 376, 378, 410, 416], "ideal_docs_original": None, "ideal_docs_count": 6,
+        "critical_missing_evidence": "Last Public Address (Apr 11, 1865) absent — explicit suffrage statement NOT IN CORPUS",
+        "watchlist": [
+            "'What did he leave unresolved' clause is calibration load-bearing — strongest EC discriminator in new set",
+            "Well-scored response acknowledges corpus silence on explicit suffrage; fabricated response invents Lincoln's position",
+            "Doc 297 (Conkling close): implied future status via military service",
+            "Docs 375-376: reconstruction plan; doc 410: 13th Amendment advocacy; doc 416: reconstruction terms",
+        ],
+    },
+    {
+        "id": "RC-2", "group": "new",
+        "query": "What specific conditions did Lincoln attach to his support for limited Black suffrage in his final public address?",
+        "category": "race_citizenship",
+        "expected_hay_type": "A", "expected_nicolay_type": "T1",
+        "ideal_docs_new": [], "ideal_docs_original": None, "ideal_docs_count": 0,
+        "critical_missing_evidence": "BLOCKED — Last Public Address (Apr 11, 1865) NOT IN CORPUS. Do not run until added.",
+        "watchlist": [
+            "BLOCKED QUESTION — corpus gap confirmed programmatically",
+            "Do not run until Last Public Address is added to corpus",
+            "Once unblocked: sharp T1/T2 question; one correct answer; minimal fabrication risk",
+        ],
     },
 ]
 
@@ -2030,8 +2187,8 @@ def main():
                             label_visibility="collapsed")
 
         st.markdown("---")
-        show_group = st.multiselect("Query groups", ["core", "replacement"],
-                                    default=["core", "replacement"])
+        show_group = st.multiselect("Query groups", ["core", "revised", "new"],
+                                    default=["core", "revised", "new"])
         query_options = [q["id"] for q in BENCHMARK_QUERIES if q["group"] in show_group]
         selected_query_id = st.selectbox(
             "Select Query",
@@ -2089,7 +2246,7 @@ def main():
         if run_mode == "Single Query":
             do_run = st.button(f"▶️ Run {selected_query_id}", type="primary")
         elif run_mode == "Full Benchmark":
-            if st.button("▶️ Run All 16 Queries", type="primary"):
+            if st.button("▶️ Run All 25 Queries", type="primary"):
                 do_run = "all"
         elif run_mode == "Resume from Checkpoint":
             pending = [q["id"] for q in BENCHMARK_QUERIES if q["id"] not in results.get("queries", {})]
@@ -2422,7 +2579,7 @@ def main():
     # ═══════════════════════════════════════════════════════════════════════
     with tab_summary:
         completed = results.get("queries", {})
-        st.markdown(f"**{len(completed)} / 16 queries completed**")
+        st.markdown(f"**{len(completed)} / 25 queries completed**")
 
         if completed:
             rows = []

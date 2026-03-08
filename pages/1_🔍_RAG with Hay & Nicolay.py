@@ -389,7 +389,7 @@ def relevance_badge_html(relevance_text):
 # ── Match Analysis card helpers ──────────────────────────────────────────────
 # Layout strategy (informed by Streamlit docs 2025):
 #   - st.container(border=True)  → card boundary, native, no CSS class needed
-#   - st.container(horizontal=True, horizontal_alignment="right") → right-flush badge
+#   - right-flush badge via text-align:right on column div (version-safe)
 #   - st.markdown blockquote (> *text*) → quote, immune to corpus special chars
 #   - st.markdown for all body text; st.caption only for de-emphasised metadata
 #   - unsafe_allow_html ONLY for badge <span>s which contain zero corpus text
@@ -462,8 +462,13 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
                 with h_title:
                     st.markdown(f"**{match_key}**")
                 with h_badge:
-                    badge_box = st.container(horizontal=True, horizontal_alignment="right")
-                    badge_box.markdown(rel_badge, unsafe_allow_html=True)
+                    # Right-align via text-align on the column div.
+                    # st.container(horizontal=True) requires Streamlit >= 1.41;
+                    # inline CSS is version-safe and works on Streamlit Cloud.
+                    st.markdown(
+                        f'<div style="text-align:right;">{rel_badge}</div>',
+                        unsafe_allow_html=True
+                    )
 
                 # ── Metadata line ─────────────────────────────────────────────
                 st.markdown(f"**ID:** {text_id}  ·  **Source:** {source}")

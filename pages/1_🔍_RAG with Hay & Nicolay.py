@@ -387,22 +387,20 @@ def relevance_badge_html(relevance_text):
 
 
 # ── Match Analysis card helpers ──────────────────────────────────────────────
-# Approach: pure native Streamlit layout (container + columns + native calls).
-# NO corpus text ever enters an HTML f-string.
-# Only badge spans (fully controlled by us, no corpus text) use unsafe_allow_html.
+# Layout strategy (informed by Streamlit docs 2025):
+#   - st.container(border=True)  → card boundary, native, no CSS class needed
+#   - st.container(horizontal=True, horizontal_alignment="right") → right-flush badge
+#   - st.markdown blockquote (> *text*) → quote, immune to corpus special chars
+#   - st.markdown for all body text; st.caption only for de-emphasised metadata
+#   - unsafe_allow_html ONLY for badge <span>s which contain zero corpus text
 
-_CONTAINER_BORDER_CSS = """
-<style>
-div[data-testid="stVerticalBlock"] div.match-card-container {
-    border: 1px solid #dee2e6;
-    border-radius: 10px;
-    padding: 14px 16px;
-    margin-bottom: 4px;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-</style>
-"""
+def _clean_source(s: str) -> str:
+    """Strip leading 'Source: ' prefix that some corpus entries include."""
+    s = s.strip()
+    if s.lower().startswith("source:"):
+        s = s[len("source:"):].strip()
+    return s
+
 
 def relevance_badge_html(relevance_text):
     t = (relevance_text or "").lower()
@@ -415,15 +413,21 @@ def relevance_badge_html(relevance_text):
     else:
         bg, fg = "#e2e3e5", "#383d41"
     label = re.split(r"[\u2014,]", relevance_text or "N/A")[0].strip()[:30]
-    return (f'<span style="background:{bg};color:{fg};padding:3px 10px;'
-            f'border-radius:12px;font-size:0.82em;font-weight:700;">{label}</span>')
+    return (f'<span style="background:{bg};color:{fg};padding:4px 12px;'
+            f'border-radius:12px;font-size:0.85em;font-weight:700;'
+            f'display:inline-block;">{label}</span>')
 
 
 def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=None):
     """
-    Match Analysis cards using native Streamlit containers only.
-    Layout: st.container (card) > two-column header row > native text fields.
-    No corpus text ever enters an HTML renderer.
+    Match Analysis cards — native Streamlit layout, no corpus text in HTML.
+
+    Header:  [match_key bold]  [badge right-aligned via horizontal container]
+    Body:    ID · Source (de-duplicated prefix) · reranker score
+             blockquote (markdown > syntax, safe for any text)
+             Nicolay's Analysis: [full relevance assessment text]
+             verification badge
+    Footer:  expander for full-text with highlight
     """
     st.markdown("### Match Analysis")
 
@@ -432,13 +436,12 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
         for r in reranked_results:
             score_map[str(r.get('Text ID', ''))] = r.get('Relevance Score', 0.0)
 
-    items = list(match_analysis.items())
     col_left, col_right = st.columns(2)
     col_map = {0: col_left, 1: col_right}
 
-    for i, (match_key, info) in enumerate(items):
+    for i, (match_key, info) in enumerate(match_analysis.items()):
         text_id   = str(info.get("Text ID", ""))
-        source    = info.get("Source", "")
+        source    = _clean_source(info.get("Source", ""))
         key_quote = info.get("Key Quote", "")
         summary   = info.get("Summary", "")
         relevance = info.get("Relevance Assessment", "")
@@ -451,28 +454,31 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
 
         with col_map[i % 2]:
             with st.container(border=True):
-                # ── Header row: title + relevance badge ───────────────────────
-                h_left, h_right = st.columns([3, 1])
-                with h_left:
-                    st.markdown(f"**{match_key}**")
-                with h_right:
-                    st.markdown(rel_badge, unsafe_allow_html=True)
 
-                # ── Metadata ──────────────────────────────────────────────────
+                # ── Header: title left, badge right ──────────────────────────
+                # Use asymmetric columns. Badge column uses horizontal container
+                # with right alignment — native API, no CSS hack needed.
+                h_title, h_badge = st.columns([5, 1])
+                with h_title:
+                    st.markdown(f"**{match_key}**")
+                with h_badge:
+                    badge_box = st.container(horizontal=True, horizontal_alignment="right")
+                    badge_box.markdown(rel_badge, unsafe_allow_html=True)
+
+                # ── Metadata line ─────────────────────────────────────────────
                 st.markdown(f"**ID:** {text_id}  ·  **Source:** {source}")
                 if reranker_score is not None:
                     st.caption(f"Reranker score: {reranker_score:.3f}")
 
-                # ── Quote — rendered as plain italic markdown, zero HTML risk ─
+                # ── Quote (markdown blockquote — safe for all corpus text) ────
                 if key_quote:
                     q_display = key_quote[:320] + ("\u2026" if len(key_quote) > 320 else "")
-                    st.markdown(
-                        f'> *\u201c{q_display}\u201d*'
-                    )
+                    st.markdown(f'> *\u201c{q_display}\u201d*')
 
-                # ── Summary ───────────────────────────────────────────────────
+                # ── Nicolay's Analysis (body text size, not caption) ──────────
                 if summary:
-                    st.caption(summary[:260] + ("\u2026" if len(summary) > 260 else ""))
+                    analysis_text = summary[:300] + ("\u2026" if len(summary) > 300 else "")
+                    st.markdown(f"**Nicolay's Analysis:** {analysis_text}")
 
                 # ── Verification badge ────────────────────────────────────────
                 st.markdown(badge_html, unsafe_allow_html=True)

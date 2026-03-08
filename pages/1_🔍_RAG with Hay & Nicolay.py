@@ -386,77 +386,46 @@ def relevance_badge_html(relevance_text):
             f'border-radius:12px;font-size:0.8em;font-weight:700;">{label}</span>')
 
 
-_CARD_CSS = """
+# ── Match Analysis card helpers ──────────────────────────────────────────────
+# Approach: pure native Streamlit layout (container + columns + native calls).
+# NO corpus text ever enters an HTML f-string.
+# Only badge spans (fully controlled by us, no corpus text) use unsafe_allow_html.
+
+_CONTAINER_BORDER_CSS = """
 <style>
-.match-card {
-    background: #ffffff;
+div[data-testid="stVerticalBlock"] div.match-card-container {
     border: 1px solid #dee2e6;
     border-radius: 10px;
-    padding: 16px 18px;
-    margin-bottom: 6px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-    font-size: 1rem;
-}
-.match-card .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-.match-card .card-title {
-    font-weight: 700;
-    font-size: 1.05em;
-    color: #212529;
-}
-.match-card .meta-line {
-    font-size: 1em;
-    color: #495057;
-    margin-bottom: 5px;
-    line-height: 1.5;
-}
-.match-card blockquote {
-    border-left: 3px solid #6c757d;
-    margin: 12px 0;
-    padding: 6px 14px;
-    color: #343a40;
-    font-style: italic;
-    font-size: 1em;
-    line-height: 1.65;
-    background: #f8f9fa;
-    border-radius: 0 6px 6px 0;
-}
-.match-card .summary-text {
-    font-size: 0.95em;
-    color: #6c757d;
-    margin-top: 8px;
-    line-height: 1.55;
-}
-.match-card .verify-line {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid #f0f0f0;
+    padding: 14px 16px;
+    margin-bottom: 4px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 </style>
 """
 
-
-def _he(t: str) -> str:
-    """HTML-escape corpus text so angle brackets / quotes don't break card HTML."""
-    return (str(t)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;"))
+def relevance_badge_html(relevance_text):
+    t = (relevance_text or "").lower()
+    if "high" in t:
+        bg, fg = "#d4edda", "#155724"
+    elif "medium" in t or "moderate" in t:
+        bg, fg = "#fff3cd", "#856404"
+    elif "low" in t:
+        bg, fg = "#f8d7da", "#721c24"
+    else:
+        bg, fg = "#e2e3e5", "#383d41"
+    label = re.split(r"[\u2014,]", relevance_text or "N/A")[0].strip()[:30]
+    return (f'<span style="background:{bg};color:{fg};padding:3px 10px;'
+            f'border-radius:12px;font-size:0.82em;font-weight:700;">{label}</span>')
 
 
 def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=None):
     """
-    [E2/U7] Two-column card grid for Match Analysis.
-    All corpus text HTML-escaped via _he() before insertion into card HTML.
-    Single st.markdown call per card for consistent layout.
+    Match Analysis cards using native Streamlit containers only.
+    Layout: st.container (card) > two-column header row > native text fields.
+    No corpus text ever enters an HTML renderer.
     """
     st.markdown("### Match Analysis")
-    st.markdown(_CARD_CSS, unsafe_allow_html=True)
 
     score_map = {}
     if reranked_results:
@@ -464,7 +433,8 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
             score_map[str(r.get('Text ID', ''))] = r.get('Relevance Score', 0.0)
 
     items = list(match_analysis.items())
-    cols  = st.columns(2)
+    col_left, col_right = st.columns(2)
+    col_map = {0: col_left, 1: col_right}
 
     for i, (match_key, info) in enumerate(items):
         text_id   = str(info.get("Text ID", ""))
@@ -476,50 +446,56 @@ def render_match_analysis_cards(match_analysis, lincoln_dict, reranked_results=N
         reranker_score = score_map.get(text_id, None)
 
         verified, method = verify_quote(key_quote, text_id, lincoln_dict)
-        badge_html = quote_badge_html(verified, method)
         rel_badge  = relevance_badge_html(relevance)
+        badge_html = quote_badge_html(verified, method)
 
-        q_safe   = _he(key_quote[:320] + ("\u2026" if len(key_quote) > 320 else ""))
-        sum_safe = _he(summary[:220]   + ("\u2026" if len(summary)   > 220 else ""))
+        with col_map[i % 2]:
+            with st.container(border=True):
+                # ── Header row: title + relevance badge ───────────────────────
+                h_left, h_right = st.columns([3, 1])
+                with h_left:
+                    st.markdown(f"**{match_key}**")
+                with h_right:
+                    st.markdown(rel_badge, unsafe_allow_html=True)
 
-        score_line = (
-            f'<div class="meta-line" style="color:#6c757d;font-size:0.88em;">'
-            f'Reranker score: {reranker_score:.3f}</div>'
-            if reranker_score is not None else ""
-        )
+                # ── Metadata ──────────────────────────────────────────────────
+                st.markdown(f"**ID:** {text_id}  ·  **Source:** {source}")
+                if reranker_score is not None:
+                    st.caption(f"Reranker score: {reranker_score:.3f}")
 
-        card_html = f"""
-        <div class="match-card">
-            <div class="card-header">
-                <span class="card-title">{match_key}</span>
-                {rel_badge}
-            </div>
-            <div class="meta-line"><strong>ID:</strong> {_he(text_id)}</div>
-            <div class="meta-line"><strong>Source:</strong> {_he(source)}</div>
-            {score_line}
-            <blockquote>&ldquo;{q_safe}&rdquo;</blockquote>
-            <div class="summary-text">{sum_safe}</div>
-            <div class="verify-line">{badge_html}</div>
-        </div>
-        """
-        with cols[i % 2]:
-            st.markdown(card_html, unsafe_allow_html=True)
-            with st.expander(f"Full text & highlight \u2014 {match_key}", expanded=False):
-                if hist_ctx:
-                    st.markdown(f"**Historical Context:** {hist_ctx}")
-                entry = triple_lookup(lincoln_dict, text_id)
-                if entry:
-                    ft = entry.get('full_text', '')
-                    html_ft = ft.replace("\\n", "<br>")
-                    if key_quote and key_quote in ft:
-                        html_ft = html_ft.replace(key_quote, f"<mark>{key_quote}</mark>")
-                    elif key_quote:
-                        html_ft = highlight_key_quote(ft, key_quote).replace("\\n", "<br>")
-                    st.markdown("**Full Text with Highlighted Quote:**", unsafe_allow_html=True)
-                    st.markdown(f'<div style="font-size:0.95em;line-height:1.65;">{html_ft}</div>',
-                                unsafe_allow_html=True)
-                else:
-                    st.info("Full text not found in corpus for this text ID.")
+                # ── Quote — rendered as plain italic markdown, zero HTML risk ─
+                if key_quote:
+                    q_display = key_quote[:320] + ("\u2026" if len(key_quote) > 320 else "")
+                    st.markdown(
+                        f'> *\u201c{q_display}\u201d*'
+                    )
+
+                # ── Summary ───────────────────────────────────────────────────
+                if summary:
+                    st.caption(summary[:260] + ("\u2026" if len(summary) > 260 else ""))
+
+                # ── Verification badge ────────────────────────────────────────
+                st.markdown(badge_html, unsafe_allow_html=True)
+
+                # ── Full text expander ────────────────────────────────────────
+                with st.expander(f"Full text & highlight \u2014 {match_key}", expanded=False):
+                    if hist_ctx:
+                        st.markdown(f"**Historical Context:** {hist_ctx}")
+                    entry = triple_lookup(lincoln_dict, text_id)
+                    if entry:
+                        ft = entry.get('full_text', '')
+                        html_ft = ft.replace("\\n", "<br>")
+                        if key_quote and key_quote in ft:
+                            html_ft = html_ft.replace(key_quote, f"<mark>{key_quote}</mark>")
+                        elif key_quote:
+                            html_ft = highlight_key_quote(ft, key_quote).replace("\\n", "<br>")
+                        st.markdown("**Full Text with Highlighted Quote:**")
+                        st.markdown(
+                            f'<div style="font-size:0.95em;line-height:1.65;">{html_ft}</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.info("Full text not found in corpus for this text ID.")
 
 # ── U6: Retrieval diagnostics panel ──────────────────────────────────────────
 def render_retrieval_diagnostics(reranked_results, match_analysis):

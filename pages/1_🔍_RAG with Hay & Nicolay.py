@@ -13,24 +13,30 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import yaml
 
-# ── version 1.4 ──────────────────────────────────────────────────────────────
-# UI Enhancements over v1.3:
-#   [U1] Hay keyword transparency strip (retained)
-#   [U2] Synthesis type badge (retained)
-#   [U3] Calibration decoupling warning → replaced by [U9] multi-signal panel
-#   [U4] Session query history in sidebar (retained; dedup guard added)
-#   [U5] Corpus coverage notice (retained)
-#   [U6] Retrieval diagnostics panel (retained; "Used by Nicolay" ID fix)
-#   [U7] Card text size (retained)
-#   [U8] Quote verification labels (retained)
-#   [U9] Multi-signal diagnostic dashboard: four independent heuristic signals
-#        (calibration gap, low retrieval ceiling, Type 3/4 synthesis,
-#        FinalAnswer brevity) each shown only when triggered.
+# ── version 1.7 ──────────────────────────────────────────────────────────────
+# UI Enhancements over v1.6:
+#   [U1]  Hay keyword transparency strip (retained)
+#   [U2]  Synthesis type badge (retained)
+#   [U3]  Calibration decoupling warning → replaced by [U9] multi-signal panel
+#   [U4]  Session query history in sidebar (retained; dedup guard added)
+#   [U5]  Corpus coverage notice (retained)
+#   [U6]  Retrieval diagnostics panel (retained; "Used by Nicolay" ID fix)
+#   [U7]  Card text size (retained)
+#   [U8]  Quote verification labels (retained)
+#   [U9]  Multi-signal diagnostic dashboard: four independent heuristic signals
+#         (calibration gap, low retrieval ceiling, Type 3/4 synthesis,
+#         FinalAnswer brevity) each shown only when triggered.
 #   [U10] FinalAnswer quote verification: quoted strings in Nicolay's synthesis
 #         are matched against retrieved corpus chunks; unverified quotes flagged
 #         inline. Out-of-corpus source references in References list flagged.
 #   [U11] Three-tab result layout (Answer / Sources / Pipeline) for mobile
 #         friendliness and showcase readability. All existing content preserved.
+#   [U12] Response Confidence Summary panel: five independently computed signals
+#         (quote verification rate, ROUGE-1/2 corpus grounding, reranker score
+#         spread/ceiling, source diversity, complexity-type match heuristic)
+#         aggregated into a scannable epistemological situation report. Displayed
+#         between the synthesis type badge and FinalAnswer text in Tab 1.
+#         Refactors S1 calibration gap detection into analyze_reranker_scores().
 #   [FIX] render_sidebar_history() called only once at top; post-query re-call
 #         removed to prevent duplicate history entries.
 #   [FIX] Hay pill query-type regex extended to cover Absence Recognition,
@@ -644,18 +650,26 @@ def check_out_of_corpus_references(references, reranked_results):
     return out_of_corpus
 
 
-def render_final_answer_with_verification(fa_block, reranked_results, lincoln_dict):
+def render_final_answer_with_verification(fa_block, reranked_results, lincoln_dict,
+                                           precomputed_quotes=None):
     """
     [U10] Render Nicolay's FinalAnswer with inline quote verification.
     Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️.
     Out-of-corpus references flagged in References list.
+
+    precomputed_quotes: optional tuple (verified, displaced, unverified) from
+      verify_final_answer_quotes() — supplied by Tab 1 to avoid running
+      verification twice when the confidence summary panel is also shown.
     """
     fa_text = fa_block.get('Text', 'No response available')
     refs    = fa_block.get('References', [])
 
-    verified_quotes, displaced_quotes, unverified_quotes = verify_final_answer_quotes(
-        fa_text, reranked_results, lincoln_dict
-    )
+    if precomputed_quotes is not None:
+        verified_quotes, displaced_quotes, unverified_quotes = precomputed_quotes
+    else:
+        verified_quotes, displaced_quotes, unverified_quotes = verify_final_answer_quotes(
+            fa_text, reranked_results, lincoln_dict
+        )
     out_of_corpus_refs = check_out_of_corpus_references(refs, reranked_results)
 
     # Annotate the text: insert inline markers after closing quote.
@@ -857,6 +871,320 @@ def render_diagnostic_signals(signals):
             st.warning(f"**{icon} {title}**\n\n{detail}")
         else:
             st.info(f"**{icon} {title}**\n\n{detail}")
+
+
+# ── U12: Response Confidence Summary ─────────────────────────────────────────
+# Five independently computed signals aggregated into a scannable
+# epistemological situation report.  Displayed between the synthesis type
+# badge and FinalAnswer text in Tab 1.
+#
+# Signal inventory:
+#   1. Quote verification rate          — proxies Citation Accuracy (CA)
+#   2. ROUGE-1/2 corpus grounding       — proxies Factual Grounding (FA)
+#   3. Reranker score spread + ceiling  — proxies Retrieval Confidence
+#   4. Source diversity                 — proxies Synthesis Coverage
+#   5. Complexity-type match heuristic  — proxies Historiographical Depth risk
+#
+# LABELLING CONSTRAINT: never say "accuracy" or "factual verification".
+# ROUGE label must always read "Corpus grounding (lexical overlap …)".
+# ─────────────────────────────────────────────────────────────────────────────
+
+def extract_synth_type_num(synthesis_assessment_str):
+    """
+    [U12] Extract integer synthesis type (1-5) from Nicolay's
+    synthesis_assessment field.  Returns 3 (Partial/Absence) as the
+    conservative default when the field is absent or unparseable.
+    """
+    m = re.search(r'Type\s+(\d)', str(synthesis_assessment_str), re.IGNORECASE)
+    return int(m.group(1)) if m else 3
+
+
+# ── Signal 2: ROUGE-1/2 corpus grounding ─────────────────────────────────────
+
+def compute_corpus_grounding(final_answer_text, reranked_results, top_n=3):
+    """
+    [U12] Compute ROUGE-1/2 F-measure between FinalAnswer text and the
+    concatenated full text of the top-N reranked chunks.
+
+    High score  → response tracks retrieved text.
+    Low score   → response diverged (legitimate inference OR hallucination;
+                  always read alongside synthesis type).
+
+    Returns dict {'rouge1': float, 'rouge2': float} or None if inputs missing.
+    """
+    if not final_answer_text or not reranked_results:
+        return None
+    try:
+        from rouge_score import rouge_scorer as _rs
+    except ImportError:
+        return None
+
+    ref_chunks = reranked_results[:top_n]
+    reference_text = " ".join(
+        r.get('full_text', '') or r.get('Full Text', '') or r.get('Key Quote', '')
+        for r in ref_chunks
+    ).strip()
+    if not reference_text:
+        return None
+
+    scorer = _rs.RougeScorer(['rouge1', 'rouge2'], use_stemmer=True)
+    scores = scorer.score(reference_text, final_answer_text)
+    return {
+        'rouge1': round(scores['rouge1'].fmeasure, 2),
+        'rouge2': round(scores['rouge2'].fmeasure, 2),
+    }
+
+
+def interpret_rouge(r1, synth_type_num):
+    """
+    [U12] Context-sensitive interpretation of ROUGE-1 score.
+
+    A Type 3 (Absence) response legitimately has low ROUGE.
+    A Type 1 (Direct Retrieval) response with low ROUGE is a red flag.
+    Types 4/5 (Synthesis/Contrastive) warrant moderate thresholds.
+    """
+    if synth_type_num in (1, 2):
+        if r1 >= 0.45:
+            return "Closely tracks retrieved sources ✅"
+        elif r1 >= 0.25:
+            return "Moderate grounding — some divergence from retrieved text"
+        else:
+            return "Low grounding for direct retrieval type ⚠️"
+    elif synth_type_num == 3:
+        return "Partial grounding expected for absence-bounded response"
+    else:  # Types 4-5
+        if r1 >= 0.30:
+            return "Good synthesis grounding ✅"
+        else:
+            return "Low grounding — verify response independently ⚠️"
+
+
+# ── Signals 3 + 4: Reranker score analysis + source diversity ─────────────────
+
+def analyze_reranker_scores(reranked_results):
+    """
+    [U12] Derive retrieval confidence signals from reranker output.
+
+    Sub-signal A — Score ceiling (max score): already partially used in S2.
+    Sub-signal B — Score spread (max - min): flat spread predicts synthesis
+      difficulty and the type-downgrade pattern documented in Run 1 (68%).
+    Sub-signal C — Calibration decoupling: high ceiling + flat spread is the
+      Q11 failure signature.  Refactors and supersedes the S1 logic in
+      compute_diagnostic_signals(); that function retains its own check so
+      the U9 panel continues to work unchanged.
+
+    Returns dict or None.
+    """
+    if not reranked_results:
+        return None
+
+    scores = [r.get('Relevance Score', r.get('relevance_score', 0))
+              for r in reranked_results[:5]]
+    scores = [s for s in scores if s is not None]
+    if not scores:
+        return None
+
+    sources = [
+        r.get('Source', '') or r.get('source', '')
+        for r in reranked_results[:5]
+    ]
+    n_distinct = len(set(s for s in sources if s))
+
+    max_s  = max(scores)
+    min_s  = min(scores)
+    spread = round(max_s - min_s, 3)
+
+    # High ceiling + flat spread = reranker confident but undiscriminating
+    calibration_warning = (max_s >= 0.70 and spread <= 0.08)
+
+    return {
+        'max_score':          round(max_s, 3),
+        'min_score':          round(min_s, 3),
+        'spread':             spread,
+        'n_distinct_sources': n_distinct,
+        'calibration_warning': calibration_warning,
+    }
+
+
+def interpret_spread(spread):
+    """[U12] Human-readable retrieval differentiation label."""
+    if spread >= 0.20:
+        return "Differentiated retrieval ✅"
+    elif spread >= 0.10:
+        return "Moderate differentiation"
+    elif spread >= 0.05:
+        return "Low differentiation — verify coverage"
+    else:
+        return "Flat distribution ⚠️ — no passage clearly dominant"
+
+
+# ── Signal 5: Complexity-type match heuristic ─────────────────────────────────
+
+_COMPLEXITY_PATTERNS = [
+    # Multi-part / contrastive queries
+    (re.compile(
+        r'\b(compare|contrast|how did .+ change|evolution of|shift|'
+        r'differ|difference|between|versus|vs\.?)\b',
+        re.IGNORECASE
+    ), "high"),
+    # Synthesis / across-time queries
+    (re.compile(
+        r'\b(throughout|across|over time|consistent|inconsistent|'
+        r'develop|develop\w+|arc|trajectory)\b',
+        re.IGNORECASE
+    ), "high"),
+    # Simple single-fact lookups
+    (re.compile(
+        r'\b(what did|when did|who|where|which speech|did lincoln)\b',
+        re.IGNORECASE
+    ), "low"),
+]
+
+
+def estimate_query_complexity(query_text):
+    """
+    [U12] Heuristic complexity estimate for user query.
+    Returns 'high', 'low', or 'moderate'.
+    """
+    if not query_text:
+        return "moderate"
+    for pattern, level in _COMPLEXITY_PATTERNS:
+        if pattern.search(query_text):
+            return level
+    return "moderate"
+
+
+def check_complexity_match(query_text, synth_type_num):
+    """
+    [U12] Compare estimated query complexity against Nicolay's synthesis type.
+
+    High-complexity query + Type 1/2 response → possible under-synthesis.
+    Low-complexity query  + Type 4/5 response → possible over-synthesis.
+    Match → no flag.
+
+    Returns (matched: bool, message: str).
+    """
+    complexity = estimate_query_complexity(query_text)
+    if synth_type_num in (4, 5) and complexity == "high":
+        return True,  "Multi-passage or contrastive synthesis — matches query complexity ✅"
+    elif synth_type_num in (1, 2) and complexity == "high":
+        return False, "⚠️ Query appears complex but response is Type 1/2 — possible under-synthesis (heuristic)"
+    elif synth_type_num in (4, 5) and complexity == "low":
+        return False, "ℹ️ Simple query produced multi-passage synthesis — may reflect retrieval breadth"
+    else:
+        return True,  "Query complexity consistent with synthesis type"
+
+
+# ── Rendering ─────────────────────────────────────────────────────────────────
+
+def render_confidence_summary(
+    final_answer_text,
+    reranked_results,
+    verified_quotes,
+    displaced_quotes,
+    unverified_quotes,
+    synth_type_num,
+    query_text,
+):
+    """
+    [U12] Render the Response Confidence Summary panel.
+
+    Positioned between synthesis type badge and FinalAnswer text in Tab 1.
+    Aggregates all five signals into a scannable epistemological situation
+    report.  This is NOT an accuracy score — it surfaces the conditions
+    under which the response was produced so the researcher can calibrate
+    their trust appropriately.
+
+    Call AFTER verify_final_answer_quotes() so quote lists are ready.
+    """
+    with st.expander("📊 Response Confidence Summary", expanded=True):
+
+        # ── Signal 1: Quote verification rate ────────────────────────────────
+        total_q = len(verified_quotes) + len(displaced_quotes) + len(unverified_quotes)
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.caption("**Quote verification**")
+        with col2:
+            if total_q == 0:
+                st.markdown("⬜ No direct quotes in response")
+            elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0:
+                st.markdown(f"✅ {total_q}/{total_q} quotes verified against corpus")
+            elif len(unverified_quotes) > 0:
+                st.markdown(
+                    f"⚠️ {len(verified_quotes)}/{total_q} verified — "
+                    f"**{len(unverified_quotes)} not found in corpus**"
+                )
+            else:  # displaced only
+                st.markdown(
+                    f"🔀 {len(verified_quotes)}/{total_q} verified — "
+                    f"**{len(displaced_quotes)} displaced** (source correct, chunk reference off)"
+                )
+
+        st.divider()
+
+        # ── Signal 2: ROUGE-1/2 corpus grounding ─────────────────────────────
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.caption("**Corpus grounding**")
+            st.caption("*(lexical overlap with top-3 retrieved chunks)*")
+        with col2:
+            rouge_data = compute_corpus_grounding(final_answer_text, reranked_results)
+            if rouge_data:
+                st.markdown(
+                    f"ROUGE-1: **{rouge_data['rouge1']}** &nbsp;&nbsp; "
+                    f"ROUGE-2: **{rouge_data['rouge2']}**",
+                    unsafe_allow_html=True,
+                )
+                st.caption(interpret_rouge(rouge_data['rouge1'], synth_type_num))
+            else:
+                st.markdown("⬜ Not computed (missing retrieved text)")
+
+        st.divider()
+
+        # ── Signals 3 + 4: Reranker score spread + source diversity ──────────
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.caption("**Retrieval signal**")
+        with col2:
+            reranker_data = analyze_reranker_scores(reranked_results)
+            if reranker_data:
+                st.markdown(
+                    f"Sources retrieved: **{reranker_data['n_distinct_sources']}** distinct document(s)"
+                )
+                spread_interp = interpret_spread(reranker_data['spread'])
+                st.markdown(
+                    f"Score spread: **{reranker_data['spread']}** — {spread_interp}"
+                )
+                st.markdown(f"Max reranker score: **{reranker_data['max_score']}**")
+                if reranker_data['calibration_warning']:
+                    st.warning(
+                        "⚠️ **High score on flat distribution** — the reranker returned "
+                        "high confidence across all results with little discrimination. "
+                        "Retrieved documents may be topically coherent but off-target. "
+                        "Verify this response independently."
+                    )
+            else:
+                st.markdown("⬜ Not computed")
+
+        st.divider()
+
+        # ── Signal 5: Complexity-type match ───────────────────────────────────
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.caption("**Complexity match**")
+            st.caption("*(heuristic)*")
+        with col2:
+            _, complexity_msg = check_complexity_match(query_text, synth_type_num)
+            st.markdown(complexity_msg)
+
+        # ── Footer disclaimer ─────────────────────────────────────────────────
+        st.caption(
+            "ℹ️ These signals indicate the *epistemological conditions* of this response, "
+            "not a verified accuracy score. Corpus grounding measures lexical overlap with "
+            "retrieved sources, not factual correctness. The complexity match is a heuristic "
+            "with known false-positive rate. Human verification is recommended for all "
+            "quoted claims."
+        )
 
 
 # ── Legacy shim — kept so any surviving call sites don't crash ────────────────
@@ -1604,15 +1932,41 @@ if submitted:
             )
             render_diagnostic_signals(signals)
 
-            # ── [U2] Synthesis type badge + [U10] FinalAnswer verification ───
+            # ── [U2] Synthesis type badge + [U12] Confidence Summary + [U10] FinalAnswer ───
             with st.expander("**Nicolay's Response**", expanded=True):
                 if synth_badge:
                     st.markdown(synth_badge, unsafe_allow_html=True)
                     if synth_tooltip:
                         st.caption(synth_tooltip)
                 st.markdown("")
+
+                # Hoist quote verification so both the confidence summary and
+                # the inline-annotated renderer share the same computed lists.
+                fa_text = fa_block.get('Text', '')
+                _verified_q, _displaced_q, _unverified_q = (
+                    verify_final_answer_quotes(
+                        fa_text, full_reranked_results, lincoln_dict
+                    )
+                    if fa_text else ([], [], [])
+                )
+
+                # [U12] Response Confidence Summary panel
+                render_confidence_summary(
+                    final_answer_text   = fa_text,
+                    reranked_results    = full_reranked_results,
+                    verified_quotes     = _verified_q,
+                    displaced_quotes    = _displaced_q,
+                    unverified_quotes   = _unverified_q,
+                    synth_type_num      = extract_synth_type_num(synth_raw),
+                    query_text          = user_query,
+                )
+
+                st.markdown("")
+                # [U10] FinalAnswer with inline quote annotation
+                # Pass pre-computed quote lists to avoid re-running verification.
                 render_final_answer_with_verification(
-                    fa_block, full_reranked_results, lincoln_dict
+                    fa_block, full_reranked_results, lincoln_dict,
+                    precomputed_quotes=(_verified_q, _displaced_q, _unverified_q),
                 )
 
             # ── Match Analysis cards directly below Nicolay response ──────────

@@ -12,6 +12,12 @@ from datetime import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
 import yaml
+try:
+    from rouge_score import rouge_scorer as _rouge_scorer_mod
+    _ROUGE_AVAILABLE = True
+except ImportError:
+    _rouge_scorer_mod = None
+    _ROUGE_AVAILABLE = False
 
 # ── version 1.7 ──────────────────────────────────────────────────────────────
 # UI Enhancements over v1.6:
@@ -914,20 +920,18 @@ def compute_corpus_grounding(final_answer_text, reranked_results, top_n=3):
     """
     if not final_answer_text or not reranked_results:
         return None
-    try:
-        from rouge_score import rouge_scorer as _rs
-    except ImportError:
+    if not _ROUGE_AVAILABLE:
         return None
 
     ref_chunks = reranked_results[:top_n]
     reference_text = " ".join(
-        r.get('full_text', '') or r.get('Full Text', '') or r.get('Key Quote', '')
+        r.get('Key Quote', '') or r.get('full_text', '') or r.get('Full Text', '')
         for r in ref_chunks
     ).strip()
     if not reference_text:
         return None
 
-    scorer = _rs.RougeScorer(['rouge1', 'rouge2'], use_stemmer=True)
+    scorer = _rouge_scorer_mod.RougeScorer(['rouge1', 'rouge2'], use_stemmer=True)
     scores = scorer.score(reference_text, final_answer_text)
     return {
         'rouge1': round(scores['rouge1'].fmeasure, 2),
@@ -1951,15 +1955,18 @@ if submitted:
                 )
 
                 # [U12] Response Confidence Summary panel
-                render_confidence_summary(
-                    final_answer_text   = fa_text,
-                    reranked_results    = full_reranked_results,
-                    verified_quotes     = _verified_q,
-                    displaced_quotes    = _displaced_q,
-                    unverified_quotes   = _unverified_q,
-                    synth_type_num      = extract_synth_type_num(synth_raw),
-                    query_text          = user_query,
-                )
+                try:
+                    render_confidence_summary(
+                        final_answer_text   = fa_text,
+                        reranked_results    = full_reranked_results,
+                        verified_quotes     = _verified_q,
+                        displaced_quotes    = _displaced_q,
+                        unverified_quotes   = _unverified_q,
+                        synth_type_num      = extract_synth_type_num(synth_raw),
+                        query_text          = user_query,
+                    )
+                except Exception as _cs_err:
+                    st.warning(f"⚠️ Confidence summary could not render: {_cs_err}")
 
                 st.markdown("")
                 # [U10] FinalAnswer with inline quote annotation

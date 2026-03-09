@@ -503,19 +503,38 @@ def quote_badge_html(verified, method):
 def extract_quoted_strings(text, min_words=7):
     """
     Extract quoted substrings from FinalAnswer text.
-    Handles both straight ("...") and curly (\u201c...\u201d) quotes.
+
+    Handles four quote styles Nicolay commonly uses:
+      • Curly double  \u201c...\u201d  — unambiguous, matched first
+      • Straight double "..."          — common in JSON output
+      • Curly single  \u2018...\u2019  — unambiguous, safe to match
+      • Straight single '...'          — requires care: apostrophes in words
+                                         like "Lincoln's" or "it's" must not
+                                         be treated as quote delimiters.
+                                         Guard: opening ' must be preceded by
+                                         a non-word character (lookbehind
+                                         (?<!\\w)) and closing ' followed by a
+                                         non-word character (lookahead (?!\\w)),
+                                         so possessives and contractions are
+                                         excluded.  Combined with min_words=7
+                                         this makes false positives negligible.
+
     Only returns quotes of min_words or more to avoid matching short phrases.
+    Deduplicates across patterns (curly variants of the same text won't double-count).
     """
-    # Match curly quotes first, then straight
     patterns = [
-        r'\u201c([^\u201d]{20,})\u201d',   # curly double quotes
-        r'"([^"]{20,})"',                    # straight double quotes
+        r'\u201c([^\u201d]{20,})\u201d',       # curly double quotes (unambiguous)
+        r'"([^"]{20,})"',                        # straight double quotes
+        r'\u2018([^\u2019]{20,})\u2019',        # curly single quotes (unambiguous)
+        r"(?<!\w)'([^']{20,})'(?!\w)",           # straight single quotes (guarded)
     ]
+    seen = set()
     found = []
     for pat in patterns:
         for m in re.finditer(pat, text):
             q = m.group(1).strip()
-            if len(q.split()) >= min_words:
+            if len(q.split()) >= min_words and q not in seen:
+                seen.add(q)
                 found.append(q)
     return found
 
@@ -642,21 +661,28 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
     # Annotate the text: insert inline markers after closing quote.
     # Use literal str.replace — NOT re.escape — which adds backslashes that
     # prevent str.replace from matching the literal text.
+    # Try all four quote-style wrappers in priority order.
+    _QUOTE_PAIRS = [
+        ('\u201c', '\u201d'),   # curly double
+        ('"',      '"'     ),   # straight double
+        ('\u2018', '\u2019'),   # curly single
+        ("'",      "'"     ),   # straight single
+    ]
     annotated = fa_text
     for q, tid, source in verified_quotes:
-        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+        for open_q, close_q in _QUOTE_PAIRS:
             literal = open_q + q + close_q
             if literal in annotated:
                 annotated = annotated.replace(literal, literal + ' ✅', 1)
                 break
     for q in displaced_quotes:
-        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+        for open_q, close_q in _QUOTE_PAIRS:
             literal = open_q + q + close_q
             if literal in annotated:
                 annotated = annotated.replace(literal, literal + ' 🔀', 1)
                 break
     for q in unverified_quotes:
-        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+        for open_q, close_q in _QUOTE_PAIRS:
             literal = open_q + q + close_q
             if literal in annotated:
                 annotated = annotated.replace(literal, literal + ' ⚠️', 1)

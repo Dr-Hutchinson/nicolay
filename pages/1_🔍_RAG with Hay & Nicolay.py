@@ -13,27 +13,28 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import yaml
 
-# ── version 1.1 ──────────────────────────────────────────────────────────────
-# UI Enhancements over v1.0:
-#   [U1] Hay keyword transparency strip: top weighted keywords shown as
-#        styled pills directly under Hay's response — no metadata dive needed.
-#   [U2] Synthesis type badge on Nicolay response header: Type 1–5 label
-#        with colour coding so users know immediately what kind of answer
-#        they're getting before reading it.
-#   [U3] Calibration decoupling warning: if reranker scores are high but
-#        Nicolay rates all matches Low, a banner warns of possible retrieval
-#        failure — surfaces the Q11/RC-5 failure mode honestly.
-#   [U4] Session query history in sidebar: every submitted query is logged
-#        with its synthesis type; click to expand the stored response.
-#   [U5] Corpus coverage notice: a persistent sidebar panel listing known
-#        corpus gaps (Last Public Address, Greeley Letter) so users know
-#        what the system cannot see before querying.
-#   [U6] Retrieval diagnostics panel: after reranking, a compact table shows
-#        which search method surfaced each chunk, its reranker score, and
-#        whether it made it into Nicolay's Match Analysis.
-#   [U7] Card text size increased to match app body text.
-#   [U8] Quote verification labels made fully descriptive and user-facing,
-#        including explicit fabrication/displacement warning on failure.
+# ── version 1.4 ──────────────────────────────────────────────────────────────
+# UI Enhancements over v1.3:
+#   [U1] Hay keyword transparency strip (retained)
+#   [U2] Synthesis type badge (retained)
+#   [U3] Calibration decoupling warning → replaced by [U9] multi-signal panel
+#   [U4] Session query history in sidebar (retained; dedup guard added)
+#   [U5] Corpus coverage notice (retained)
+#   [U6] Retrieval diagnostics panel (retained; "Used by Nicolay" ID fix)
+#   [U7] Card text size (retained)
+#   [U8] Quote verification labels (retained)
+#   [U9] Multi-signal diagnostic dashboard: four independent heuristic signals
+#        (calibration gap, low retrieval ceiling, Type 3/4 synthesis,
+#        FinalAnswer brevity) each shown only when triggered.
+#   [U10] FinalAnswer quote verification: quoted strings in Nicolay's synthesis
+#         are matched against retrieved corpus chunks; unverified quotes flagged
+#         inline. Out-of-corpus source references in References list flagged.
+#   [U11] Three-tab result layout (Answer / Sources / Pipeline) for mobile
+#         friendliness and showcase readability. All existing content preserved.
+#   [FIX] render_sidebar_history() called only once at top; post-query re-call
+#         removed to prevent duplicate history entries.
+#   [FIX] Hay pill query-type regex extended to cover Absence Recognition,
+#         Multi-passage, Temporal.
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -329,6 +330,173 @@ def quote_badge_html(verified, method):
             '⚠️ Quote not found in corpus chunk — possible fabrication or displacement</span>')
 
 
+# ── U10: FinalAnswer quote verification ──────────────────────────────────────
+def extract_quoted_strings(text, min_words=7):
+    """
+    Extract quoted substrings from FinalAnswer text.
+    Handles both straight ("...") and curly (\u201c...\u201d) quotes.
+    Only returns quotes of min_words or more to avoid matching short phrases.
+    """
+    # Match curly quotes first, then straight
+    patterns = [
+        r'\u201c([^\u201d]{20,})\u201d',   # curly double quotes
+        r'"([^"]{20,})"',                    # straight double quotes
+    ]
+    found = []
+    for pat in patterns:
+        for m in re.finditer(pat, text):
+            q = m.group(1).strip()
+            if len(q.split()) >= min_words:
+                found.append(q)
+    return found
+
+
+def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict):
+    """
+    [U10] For each quoted string in FinalAnswer, check whether it appears in
+    any of the reranked result chunks (not just the selected matches).
+
+    Returns:
+        verified_quotes   — list of (quote_str, text_id, source) that verified
+        unverified_quotes — list of quote_str that could not be found
+    """
+    quotes = extract_quoted_strings(final_answer_text)
+    if not quotes:
+        return [], []
+
+    # Build search set: all reranked result text IDs + their full_text
+    corpus_chunks = []
+    for r in reranked_results:
+        tid = str(r.get('Text ID', ''))
+        entry = triple_lookup(lincoln_dict, tid)
+        ft = entry.get('full_text', '') or r.get('Key Quote', '')
+        source = r.get('Source', '')
+        if ft:
+            corpus_chunks.append((tid, source, ft))
+
+    verified, unverified = [], []
+    for quote in quotes:
+        found = False
+        for tid, source, chunk in corpus_chunks:
+            v, method = verify_quote(quote, tid, lincoln_dict)
+            if v:
+                verified.append((quote, tid, source))
+                found = True
+                break
+            # Anchor check against this chunk directly (handles chunks not in lincoln_dict)
+            anchor = quote.strip()[:60]
+            if len(anchor) > 20 and anchor in chunk:
+                verified.append((quote, tid, source))
+                found = True
+                break
+        if not found:
+            unverified.append(quote)
+
+    return verified, unverified
+
+
+def check_out_of_corpus_references(references, reranked_results):
+    """
+    [U10] Check whether sources named in FinalAnswer.References appear in
+    the reranked result set. Returns list of reference strings not found.
+    """
+    if not references or not reranked_results:
+        return []
+    reranked_sources = [r.get('Source', '').lower() for r in reranked_results]
+    out_of_corpus = []
+    for ref in references:
+        ref_lower = ref.lower().strip()
+        # Consider matched if any reranked source contains or is contained by ref
+        matched = any(
+            ref_lower in src or src in ref_lower or
+            # fuzzy: first 30 chars overlap
+            (len(ref_lower) > 15 and ref_lower[:25] in src)
+            for src in reranked_sources
+        )
+        if not matched:
+            out_of_corpus.append(ref)
+    return out_of_corpus
+
+
+def render_final_answer_with_verification(fa_block, reranked_results, lincoln_dict):
+    """
+    [U10] Render Nicolay's FinalAnswer with inline quote verification.
+    Verified quotes annotated ✅; unverified quotes flagged ⚠️.
+    Out-of-corpus references flagged in References list.
+    """
+    fa_text = fa_block.get('Text', 'No response available')
+    refs    = fa_block.get('References', [])
+
+    verified_quotes, unverified_quotes = verify_final_answer_quotes(
+        fa_text, reranked_results, lincoln_dict
+    )
+    out_of_corpus_refs = check_out_of_corpus_references(refs, reranked_results)
+
+    # Annotate the text: insert inline markers after closing quote
+    annotated = fa_text
+    for q, tid, source in verified_quotes:
+        # Try curly-quote wrapping first, then straight
+        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+            pattern = open_q + re.escape(q) + close_q
+            if pattern in annotated:
+                annotated = annotated.replace(
+                    pattern,
+                    open_q + q + close_q + ' ✅',
+                    1
+                )
+                break
+    for q in unverified_quotes:
+        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+            pattern = open_q + re.escape(q) + close_q
+            if pattern in annotated:
+                annotated = annotated.replace(
+                    pattern,
+                    open_q + q + close_q + ' ⚠️',
+                    1
+                )
+                break
+
+    st.markdown(f"**Response:**\n{annotated}")
+
+    # References list with out-of-corpus flags
+    if refs:
+        st.markdown("**References:**")
+        for ref in refs:
+            if ref in out_of_corpus_refs:
+                st.markdown(
+                    f"- {ref} "
+                    f'<span style="background:#fff3cd;color:#664d03;'
+                    f'padding:1px 7px;border-radius:8px;font-size:0.82em;'
+                    f'font-weight:600;" title="This source was not in the '
+                    f'retrieved set — Nicolay may be drawing on parametric '
+                    f'memory rather than corpus text.">🔍 not in retrieved set</span>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(f"- {ref}")
+
+    # Summary legend if any annotations fired
+    has_verified   = bool(verified_quotes)
+    has_unverified = bool(unverified_quotes)
+    has_ooc        = bool(out_of_corpus_refs)
+
+    if has_verified or has_unverified or has_ooc:
+        st.markdown("---")
+        legend_parts = []
+        if has_verified:
+            legend_parts.append("✅ Quote verified against retrieved corpus chunk")
+        if has_unverified:
+            legend_parts.append(
+                "⚠️ Quote not found in retrieved sources — possible fabrication, "
+                "displacement, or paraphrase"
+            )
+        if has_ooc:
+            legend_parts.append(
+                "🔍 Reference not in retrieved set — may draw on model's general knowledge"
+            )
+        st.caption(" · ".join(legend_parts))
+
+
 # ── U2: Synthesis type badge ──────────────────────────────────────────────────
 _SYNTH_META = {
     "1": ("#cfe2ff", "#084298", "Type 1 — Direct Retrieval",
@@ -358,12 +526,105 @@ def synthesis_type_badge(synthesis_assessment_text):
     return badge, tooltip
 
 
-# ── U3: Calibration decoupling detector ──────────────────────────────────────
+# ── U9: Multi-signal diagnostic dashboard ────────────────────────────────────
+def compute_diagnostic_signals(reranked_results, match_analysis,
+                                synth_raw, final_answer_text):
+    """
+    Returns a list of (level, icon, title, detail) tuples for signals that
+    fired. level ∈ {'warning', 'info'}. Empty list = no signals, clean response.
+
+    Signals:
+      S1 — Calibration gap: high reranker score but all Nicolay ratings Low.
+      S2 — Low retrieval ceiling: max reranker score below weak-match threshold.
+      S3 — Type 3/4 synthesis: Nicolay explicitly flagged absence or partiality.
+      S4 — FinalAnswer brevity: synthesis is unusually short.
+
+    Design note: the type-downgrade pattern (68% of Run 1 queries) is NOT
+    surfaced as a signal — too frequent to be meaningful. Only explicit
+    Type 3/4 classification is flagged.
+    """
+    signals = []
+
+    # S1 — Calibration gap (original U3 logic)
+    if reranked_results and match_analysis:
+        top_score = max(r.get('Relevance Score', 0) for r in reranked_results)
+        ratings = [v.get("Relevance Assessment", "").lower()
+                   for v in match_analysis.values()]
+        if top_score >= 0.70 and ratings and all("low" in r for r in ratings if r):
+            signals.append((
+                "warning", "⚠️",
+                "Calibration gap detected",
+                "The reranker returned high-confidence scores, but Nicolay rated "
+                "all retrieved matches as Low relevance. This pattern — seen in "
+                "queries where the corpus lacks the required documents — suggests "
+                "the system may have retrieved plausible but ultimately off-target "
+                "material. Consider rephrasing your query or checking the corpus "
+                "coverage panel."
+            ))
+
+    # S2 — Low retrieval ceiling
+    if reranked_results:
+        top_score = max(r.get('Relevance Score', 0) for r in reranked_results)
+        if top_score < 0.35:
+            signals.append((
+                "warning", "📉",
+                "Weak retrieval signal",
+                f"The highest reranker relevance score was {top_score:.3f} — below "
+                "the threshold where retrieval is considered reliable. The corpus "
+                "may not contain documents closely matching this query. Nicolay's "
+                "synthesis is working with limited evidence."
+            ))
+
+    # S3 — Type 3 or Type 4 synthesis (explicit absence/partiality flag)
+    if synth_raw:
+        m = re.search(r"Type\s*([34])", str(synth_raw), re.IGNORECASE)
+        if m:
+            type_num = m.group(1)
+            label = ("Partial retrieval" if type_num == "3"
+                     else "Multi-passage synthesis — partial coverage")
+            signals.append((
+                "info", "🔍",
+                f"Nicolay classified this as Type {type_num}: {label}",
+                "Nicolay's own chain-of-thought assessment flagged this response "
+                "as partial or absence-bounded. The synthesis reflects the best "
+                "available evidence, but the corpus may not fully address the query."
+            ))
+
+    # S4 — FinalAnswer brevity
+    if final_answer_text:
+        word_count = len(final_answer_text.split())
+        if word_count < 60:
+            signals.append((
+                "info", "📏",
+                "Unusually brief response",
+                f"Nicolay's synthesis is {word_count} words — shorter than typical "
+                "for queries with adequate retrieval. This may indicate retrieval "
+                "failure or an overly narrow query scope."
+            ))
+
+    return signals
+
+
+def render_diagnostic_signals(signals):
+    """[U9] Render each fired signal as its own callout. No-op if list is empty."""
+    if not signals:
+        return
+    st.markdown("#### 🩺 Response Diagnostics")
+    st.caption(
+        "These indicators are heuristic signals, not ground-truth assessments. "
+        "They flag patterns associated with retrieval limitations — treat them "
+        "as prompts for scrutiny, not automatic distrust of the response."
+    )
+    for level, icon, title, detail in signals:
+        if level == "warning":
+            st.warning(f"**{icon} {title}**\n\n{detail}")
+        else:
+            st.info(f"**{icon} {title}**\n\n{detail}")
+
+
+# ── Legacy shim — kept so any surviving call sites don't crash ────────────────
 def calibration_decoupling_warning(reranked_results, match_analysis):
-    """
-    Returns True if the top reranker score is high (≥0.70) but Nicolay
-    rated all Match Analysis entries as Low relevance — the Q11/RC-5 pattern.
-    """
+    """Deprecated in v1.4 — use compute_diagnostic_signals instead."""
     if not reranked_results or not match_analysis:
         return False
     top_score = max(r.get('Relevance Score', 0) for r in reranked_results)
@@ -516,7 +777,14 @@ def render_retrieval_diagnostics(reranked_results, match_analysis):
     """
     if not reranked_results:
         return
-    used_ids = {str(v.get("Text ID", "")) for v in match_analysis.values()}
+
+    def _norm_id(raw):
+        """Extract bare integer string from any text_id format."""
+        m = re.search(r'(\d+)', str(raw))
+        return m.group(1) if m else str(raw)
+
+    # Normalise IDs from Nicolay CoT (bare ints) and reranked results (any format)
+    used_ids = {_norm_id(v.get("Text ID", "")) for v in match_analysis.values()}
     rows = []
     for r in reranked_results:
         tid = str(r.get('Text ID', ''))
@@ -526,7 +794,7 @@ def render_retrieval_diagnostics(reranked_results, match_analysis):
             "Text ID":        tid,
             "Source":         r.get('Source', '')[:55] + ("…" if len(r.get('Source','')) > 55 else ""),
             "Reranker Score": f"{r.get('Relevance Score', 0.0):.3f}",
-            "Used by Nicolay": "✅ Yes" if tid in used_ids else "—",
+            "Used by Nicolay": "✅ Yes" if _norm_id(tid) in used_ids else "—",
         })
     diag_df = pd.DataFrame(rows)
     with st.expander("🔬 Retrieval Diagnostics — pipeline transparency", expanded=False):
@@ -563,8 +831,11 @@ def render_keyword_pills(weighted_keywords, query_assessment):
 
     if query_assessment:
         # Extract query type if present (e.g. "Inferential Retrieval")
-        m = re.search(r"(Direct|Inferential|Absence|Multi.passage|Contrastive|Historiographical)",
-                      query_assessment, re.IGNORECASE)
+        m = re.search(
+            r"(Direct|Inferential|Absence\s*Recognition|Absence|"
+            r"Multi.passage|Multi-passage|Contrastive|Historiographical|Temporal)",
+            query_assessment, re.IGNORECASE
+        )
         qtype = m.group(1) if m else None
         if qtype:
             pills_html += (f'<div style="font-size:0.88em;color:#6c757d;margin-bottom:4px;">'
@@ -848,118 +1119,60 @@ if submitted:
     year_keywords     = user_year_keywords.split(',') if user_year_keywords else model_year_keywords
     text_keywords     = user_text_keywords or model_text_keywords
 
-    # ── Hay response display with keyword pills [U1] ──────────────────────────
-    with st.expander("**Hay's Response**", expanded=True):
-        st.markdown(initial_answer)
-        render_keyword_pills(weighted_keywords, model_query_assessment)
-        st.caption(
-            "Hay is a fine-tuned model that provides an initial answer and steers "
-            "keyword and semantic search. Compare its response with Nicolay's final "
-            "answer below to see how retrieval-augmented generation refines the output."
-        )
+    # ═══════════════════════════════════════════════════════════════════════════
+    # RUN SEARCHES (no UI output here — results fed into tabs below)
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    col1, col2 = st.columns(2)
-
-    # ── Keyword Search ────────────────────────────────────────────────────────
+    # ── Keyword Search (silent, populates search_results_df) ──────────────────
     search_results_df = pd.DataFrame()
-    with col1:
-        if perform_keyword_search:
-            results_list = search_with_dynamic_weights_expanded(
-                user_keywords=weighted_keywords,
-                corpus_terms={"terms": corpus_terms},
-                data=lincoln_data,
-                year_keywords=year_keywords,
-                text_keywords=text_keywords,
-                top_n_results=5
+    if perform_keyword_search:
+        results_list = search_with_dynamic_weights_expanded(
+            user_keywords=weighted_keywords,
+            corpus_terms={"terms": corpus_terms},
+            data=lincoln_data,
+            year_keywords=year_keywords,
+            text_keywords=text_keywords,
+            top_n_results=5
+        )
+        if results_list:
+            search_results_df = pd.DataFrame(results_list)
+            if "quote" in search_results_df.columns and "key_quote" not in search_results_df.columns:
+                search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
+        if not search_results_df.empty:
+            log_keyword_search_results(
+                keyword_results_logger, search_results_df, user_query,
+                initial_answer, model_weighted_keywords,
+                model_year_keywords, model_text_keywords
             )
-            if results_list:
-                search_results_df = pd.DataFrame(results_list)
-                if "quote" in search_results_df.columns and "key_quote" not in search_results_df.columns:
-                    search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
 
-            st.markdown("### Keyword Search Results")
-            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
-                st.write(keyword_search_explainer)
-
-            if search_results_df.empty:
-                st.info("No keyword results found. Try modifying your query or "
-                        "use Additional Search Options.")
-            else:
-                for i, (_, row) in enumerate(search_results_df.iterrows(), 1):
-                    label = f"**Keyword Match {i}**: *{row.get('source','')}* `{row.get('text_id','')}`"
-                    with st.expander(label):
-                        st.markdown(f"**Source:** {row.get('source','')}")
-                        st.markdown(f"**Text ID:** {row.get('text_id','')}")
-                        st.markdown(f"**Summary:**\n{row.get('summary','')}")
-                        st.markdown(f"**Key Quote:**\n{row.get('key_quote', row.get('quote',''))}")
-                        st.markdown(f"**Weighted Score:** {row.get('weighted_score','')}")
-                        st.markdown("**Keyword Counts:**")
-                        st.json(row.get('keyword_counts', {}))
-
-            with st.expander("**Keyword Search Metadata**"):
-                st.write("**User Query:**"); st.write(user_query)
-                st.write("**Hay Initial Answer:**"); st.write(initial_answer)
-                st.write("**Weighted Keywords:**"); st.json(weighted_keywords)
-                st.write("**Year Keywords:**"); st.json(year_keywords)
-                st.write("**Text Keywords:**"); st.json(text_keywords)
-                st.write("**Query Assessment (Hay v3):**"); st.write(model_query_assessment)
-                st.write("**Raw Results:**"); st.dataframe(search_results_df)
-                st.write("**Full Hay Output:**"); st.write(hay_raw)
-
-            if not search_results_df.empty:
-                log_keyword_search_results(
-                    keyword_results_logger, search_results_df, user_query,
-                    initial_answer, model_weighted_keywords,
-                    model_year_keywords, model_text_keywords
-                )
-
-    # ── Semantic Search ───────────────────────────────────────────────────────
+    # ── Semantic Search (silent, populates semantic_matches_df) ───────────────
     semantic_matches_df  = pd.DataFrame()
     user_query_embedding = None
-    with col2:
-        if perform_semantic_search:
-            st.markdown("### Semantic Search Results")
-            with st.expander("**How Does This Work?: Semantic Search with HyDE**"):
-                st.write(semantic_search_explainer)
-
-            bar = st.progress(0, text="Semantic search in progress.")
+    if perform_semantic_search:
+        with st.spinner("Running semantic search…"):
             semantic_matches_df, user_query_embedding = search_text_local(
                 lincoln_index_df, user_query + " " + initial_answer, n=5
             )
-            bar.progress(50, text="Semantic search in progress.")
-
             top_segments = []
-            for ctr, (_, row) in enumerate(semantic_matches_df.iterrows(), 1):
-                bar.progress(min(50 + ctr * 9, 99), text="Semantic search in progress.")
-                tid_v = row.get('text_id', row.name)
-                src_v = row.get('source', '')
-                ft_v  = row.get('full_text', '')
-                label = f"**Semantic Match {ctr}**: *{src_v}* `{tid_v}`"
-                with st.expander(label, expanded=False):
-                    st.markdown(f"**Source:** {src_v}")
-                    st.markdown(f"**Text ID:** {tid_v}")
-                    st.markdown(f"**Summary:**\n{row.get('summary','')}")
-                    segs = segment_text(ft_v)
-                    if segs and user_query_embedding is not None:
-                        scores   = compare_segments_parallel(segs, user_query_embedding)
-                        top_seg  = max(scores, key=lambda x: x[1]) if scores else ("", 0)
-                    else:
-                        top_seg  = ("", 0)
-                    top_segments.append(top_seg[0])
-                    st.markdown(f"**Key Quote:** {top_seg[0]}")
-                    st.markdown(f"**Similarity Score:** {top_seg[1]:.2f}")
-
+            for _, row in semantic_matches_df.iterrows():
+                ft_v = row.get('full_text', '')
+                segs = segment_text(ft_v)
+                if segs and user_query_embedding is not None:
+                    scores  = compare_segments_parallel(segs, user_query_embedding)
+                    top_seg = max(scores, key=lambda x: x[1]) if scores else ("", 0)
+                else:
+                    top_seg = ("", 0)
+                top_segments.append(top_seg[0])
             semantic_matches_df = semantic_matches_df.copy()
             semantic_matches_df["TopSegment"] = top_segments
-            bar.progress(100, text="Semantic search completed.")
-            time.sleep(1); bar.empty()
+        log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
 
-            with st.expander("**Semantic Search Metadata**"):
-                st.dataframe(semantic_matches_df.drop(columns=["embedding"], errors="ignore"))
+    # ── Reranking (silent, populates full_reranked_results) ───────────────────
+    full_reranked_results = []
+    formatted_input       = ""
+    model_output          = {}
+    nic_raw               = ""
 
-            log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
-
-    # ── Reranking & Nicolay ───────────────────────────────────────────────────
     if perform_reranking:
 
         def add_num_id(df):
@@ -969,8 +1182,8 @@ if submitted:
                              .astype(float).astype('Int64'))
             return df
 
-        s_df = add_num_id(search_results_df)   if not search_results_df.empty   else pd.DataFrame(columns=['_num_id'])
-        e_df = add_num_id(semantic_matches_df)  if not semantic_matches_df.empty else pd.DataFrame(columns=['_num_id'])
+        s_df = add_num_id(search_results_df)  if not search_results_df.empty  else pd.DataFrame(columns=['_num_id'])
+        e_df = add_num_id(semantic_matches_df) if not semantic_matches_df.empty else pd.DataFrame(columns=['_num_id'])
 
         frames = [df for df in [s_df, e_df] if not df.empty and '_num_id' in df.columns]
         combined_df = (pd.concat(frames, ignore_index=True)
@@ -1011,66 +1224,39 @@ if submitted:
                               allow_unicode=True, default_flow_style=False, sort_keys=False)
                 )
 
-        full_reranked_results = []
         if all_combined_data:
-            st.markdown("### Ranked Search Results")
-            try:
-                reranked_resp = co.rerank(
-                    model='rerank-v4.0-pro', query=user_query,
-                    documents=all_combined_data, top_n=10
-                )
-                with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
-                    st.write(relevance_ranking_explainer)
+            with st.spinner("Ranking results with Cohere…"):
+                try:
+                    reranked_resp = co.rerank(
+                        model='rerank-v4.0-pro', query=user_query,
+                        documents=all_combined_data, top_n=10
+                    )
+                    for idx, r in enumerate(reranked_resp.results):
+                        doc_text = r.document['text'] if isinstance(r.document, dict) else str(r.document)
+                        try:
+                            parsed = yaml.safe_load(doc_text) or {}
+                        except yaml.YAMLError:
+                            parsed = {}
+                        r_stype = str(parsed.get("search_type", "Unknown")).strip()
+                        r_tid   = str(parsed.get("text_id", "Unknown")).strip()
+                        r_summ  = str(parsed.get("summary", "")).strip()
+                        r_ft    = str(parsed.get("full_text", "")).strip()
+                        src_e   = triple_lookup(lincoln_dict, r_tid)
+                        r_src   = src_e.get('source', 'Source not available')
+                        full_reranked_results.append({
+                            'Rank': idx + 1,
+                            'Search Type': r_stype,
+                            'Text ID': r_tid,
+                            'Source': r_src,
+                            'Summary': r_summ,
+                            'Key Quote': r_ft,
+                            'Relevance Score': r.relevance_score
+                        })
+                except Exception as e:
+                    st.error(f"Reranking error: {e}")
+                    st.exception(e)
 
-                for idx, r in enumerate(reranked_resp.results):
-                    doc_text = r.document['text'] if isinstance(r.document, dict) else str(r.document)
-                    try:
-                        parsed = yaml.safe_load(doc_text) or {}
-                    except yaml.YAMLError:
-                        parsed = {}
-
-                    r_stype = str(parsed.get("search_type", "Unknown")).strip()
-                    r_tid   = str(parsed.get("text_id", "Unknown")).strip()
-                    r_summ  = str(parsed.get("summary", "")).strip()
-                    r_ft    = str(parsed.get("full_text", "")).strip()
-                    src_e   = triple_lookup(lincoln_dict, r_tid)
-                    r_src   = src_e.get('source', 'Source not available')
-
-                    full_reranked_results.append({
-                        'Rank': idx + 1,
-                        'Search Type': r_stype,
-                        'Text ID': r_tid,
-                        'Source': r_src,
-                        'Summary': r_summ,
-                        'Key Quote': r_ft,
-                        'Relevance Score': r.relevance_score
-                    })
-
-                    if idx < 3:
-                        with st.expander(
-                            f"**Reranked Match {idx+1} ({r_stype})**: `{r_tid}` — {r_src[:50]}"
-                        ):
-                            st.markdown(f"**Text ID:** {r_tid}")
-                            st.markdown(f"**Source:** {r_src}")
-                            st.markdown(f"**Summary:** {r_summ}")
-                            st.markdown(
-                                f"**Full Text (excerpt):**\n"
-                                f"{r_ft[:500]}{'…' if len(r_ft)>500 else ''}"
-                            )
-                            st.markdown(f"**Relevance Score:** {r.relevance_score:.3f}")
-
-            except Exception as e:
-                st.error(f"Reranking error: {e}")
-                st.exception(e)
-
-        # Format & metadata
         formatted_input = format_reranked_for_nicolay(full_reranked_results, lincoln_dict)
-
-        with st.expander("**Result Reranking Metadata**"):
-            st.dataframe(pd.DataFrame(full_reranked_results))
-            st.write("**Formatted input to Nicolay:**")
-            st.write(formatted_input)
-
         if full_reranked_results:
             log_reranking_results(reranking_results_logger,
                                   pd.DataFrame(full_reranked_results), user_query)
@@ -1091,71 +1277,212 @@ if submitted:
                     temperature=0, max_tokens=4000, top_p=1,
                     frequency_penalty=0, presence_penalty=0
                 )
-
             nic_raw = nic_resp.choices[0].message.content
             if not nic_raw:
                 st.error("Nicolay returned an empty response.")
                 st.stop()
-
             model_output = _parse_model_json(nic_raw, "Nicolay v3")
             if not model_output:
                 st.stop()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # [U11] THREE-TAB RESULT LAYOUT
+    # Tab 1 — Answer   : Hay initial answer + Nicolay synthesis (primary view)
+    # Tab 2 — Sources  : Match Analysis cards + Retrieval Diagnostics
+    # Tab 3 — Pipeline : Keyword/Semantic search results + reranking metadata
+    #                    + full CoT expander
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    tab_answer, tab_sources, tab_pipeline = st.tabs([
+        "💬 Answer",
+        "📚 Sources & Matches",
+        "🔬 Pipeline",
+    ])
+
+    # ── Tab 1: Answer ──────────────────────────────────────────────────────────
+    with tab_answer:
+
+        # Hay initial response
+        st.subheader("Hay's Initial Analysis")
+        st.caption(
+            "Hay is a fine-tuned model that provides an initial answer and "
+            "steers keyword and semantic search. Compare its response with "
+            "Nicolay's synthesis below to see how retrieval-augmented generation "
+            "refines the output."
+        )
+        with st.expander("**Hay's Response**", expanded=True):
+            st.markdown(initial_answer)
+            render_keyword_pills(weighted_keywords, model_query_assessment)
+
+        if not perform_reranking or not model_output:
+            st.info("Enable 'Response and Analysis' to see Nicolay's synthesis.")
+        else:
             match_analysis = model_output.get("Match Analysis", {})
-
-            st.header("Nicolay's Response & Analysis:")
-
-            with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
-                st.write(nicolay_model_explainer)
-
-            # ── [U3] Calibration decoupling warning ───────────────────────────
-            if calibration_decoupling_warning(full_reranked_results, match_analysis):
-                st.warning(
-                    "⚠️ **Retrieval calibration notice:** The reranker returned high-confidence "
-                    "scores, but Nicolay rated all retrieved matches as Low relevance. "
-                    "This pattern — seen in queries where the corpus lacks the required "
-                    "documents — may indicate that the system has retrieved plausible but "
-                    "ultimately off-target material. Treat this response with additional caution "
-                    "and consider rephrasing your query."
-                )
-
-            # ── [U2] Nicolay response with synthesis type badge ───────────────
             qa_block  = model_output.get("User Query Analysis", {})
             synth_raw = qa_block.get("synthesis_assessment", "")
             synth_badge, synth_tooltip = synthesis_type_badge(synth_raw)
 
-            # Extract type key for history logging
+            # Extract type key for history logging (computed here, used later)
             synth_key_m = re.search(r"Type\s*([1-5])", str(synth_raw), re.IGNORECASE)
             synth_key   = synth_key_m.group(1) if synth_key_m else ""
+            fa_block    = model_output.get("FinalAnswer", {})
 
-            fa_block = model_output.get("FinalAnswer", {})
+            st.divider()
+            st.subheader("Nicolay's Synthesis")
+
+            with st.expander("**How Does This Work?: Nicolay's Response and Analysis**"):
+                st.write(nicolay_model_explainer)
+
+            # ── [U9] Multi-signal diagnostic panel ───────────────────────────
+            fa_text_for_diag = fa_block.get("Text", "")
+            signals = compute_diagnostic_signals(
+                full_reranked_results, match_analysis, synth_raw, fa_text_for_diag
+            )
+            render_diagnostic_signals(signals)
+
+            # ── [U2] Synthesis type badge + [U10] FinalAnswer verification ───
             with st.expander("**Nicolay's Response**", expanded=True):
                 if synth_badge:
                     st.markdown(synth_badge, unsafe_allow_html=True)
                     if synth_tooltip:
                         st.caption(synth_tooltip)
                 st.markdown("")
-                st.markdown(f"**Response:**\n{fa_block.get('Text','No response available')}")
-                refs = fa_block.get("References", [])
-                if refs:
-                    st.markdown("**References:**")
-                    for ref in refs:
-                        st.markdown(f"- {ref}")
+                # [U10] Render FinalAnswer with inline quote verification
+                render_final_answer_with_verification(
+                    fa_block, full_reranked_results, lincoln_dict
+                )
 
-            # ── Match Analysis card grid [E2/U7] + verification [E1/U8] ──────
+            # ── Log & history (done here so synth_key is in scope) ────────────
             highlight_success = {}
+            for mk, info in match_analysis.items():
+                v, _ = verify_quote(info.get("Key Quote", ""),
+                                    str(info.get("Text ID", "")), lincoln_dict)
+                highlight_success[mk] = v
+
+            log_nicolay_model_output(
+                nicolay_data_logger, model_output, user_query,
+                highlight_success, initial_answer
+            )
+            # [FIX] Dedup guard: only append if this query isn't already the
+            # most recent entry (prevents double-logging on Streamlit reruns)
+            existing = st.session_state.get("query_history", [])
+            if not existing or existing[-1].get("query") != user_query:
+                record_history(user_query, model_output, synth_key)
+
+    # ── Tab 2: Sources & Matches ───────────────────────────────────────────────
+    with tab_sources:
+        if not perform_reranking or not model_output:
+            st.info("Enable 'Response and Analysis' to see source match analysis.")
+        else:
+            match_analysis = model_output.get("Match Analysis", {})
+
+            # Match Analysis cards
             if match_analysis:
                 render_match_analysis_cards(
                     match_analysis, lincoln_dict, full_reranked_results
                 )
-                for mk, info in match_analysis.items():
-                    v, _ = verify_quote(info.get("Key Quote",""),
-                                        str(info.get("Text ID","")), lincoln_dict)
-                    highlight_success[mk] = v
+            else:
+                st.info("No match analysis available for this query.")
 
-            # ── [U6] Retrieval diagnostics ────────────────────────────────────
+            st.divider()
+
+            # [U6] Retrieval diagnostics (ID normalisation fix applied above)
             render_retrieval_diagnostics(full_reranked_results, match_analysis)
 
-            # ── Analysis Metadata (full chain-of-thought) ─────────────────────
+    # ── Tab 3: Pipeline ────────────────────────────────────────────────────────
+    with tab_pipeline:
+
+        # Keyword search results
+        if perform_keyword_search:
+            st.markdown("### Keyword Search Results")
+            with st.expander("**How Does This Work?: Dynamically Weighted Keyword Search**"):
+                st.write(keyword_search_explainer)
+
+            if search_results_df.empty:
+                st.info("No keyword results found. Try modifying your query or "
+                        "use Additional Search Options.")
+            else:
+                col_kw1, col_kw2 = st.columns(2)
+                kw_col_map = {0: col_kw1, 1: col_kw2}
+                for i, (_, row) in enumerate(search_results_df.iterrows(), 1):
+                    label = f"**Keyword Match {i}**: *{row.get('source','')}* `{row.get('text_id','')}`"
+                    with kw_col_map[(i - 1) % 2]:
+                        with st.expander(label):
+                            st.markdown(f"**Source:** {row.get('source','')}")
+                            st.markdown(f"**Text ID:** {row.get('text_id','')}")
+                            st.markdown(f"**Summary:**\n{row.get('summary','')}")
+                            st.markdown(f"**Key Quote:**\n{row.get('key_quote', row.get('quote',''))}")
+                            st.markdown(f"**Weighted Score:** {row.get('weighted_score','')}")
+                            st.markdown("**Keyword Counts:**")
+                            st.json(row.get('keyword_counts', {}))
+
+            with st.expander("**Keyword Search Metadata**"):
+                st.write("**User Query:**"); st.write(user_query)
+                st.write("**Hay Initial Answer:**"); st.write(initial_answer)
+                st.write("**Weighted Keywords:**"); st.json(weighted_keywords)
+                st.write("**Year Keywords:**"); st.json(year_keywords)
+                st.write("**Text Keywords:**"); st.json(text_keywords)
+                st.write("**Query Assessment (Hay v3):**"); st.write(model_query_assessment)
+                st.write("**Raw Results:**"); st.dataframe(search_results_df)
+                st.write("**Full Hay Output:**"); st.write(hay_raw)
+
+        st.divider()
+
+        # Semantic search results
+        if perform_semantic_search:
+            st.markdown("### Semantic Search Results")
+            with st.expander("**How Does This Work?: Semantic Search with HyDE**"):
+                st.write(semantic_search_explainer)
+
+            if not semantic_matches_df.empty:
+                col_sem1, col_sem2 = st.columns(2)
+                sem_col_map = {0: col_sem1, 1: col_sem2}
+                for ctr, (_, row) in enumerate(semantic_matches_df.iterrows(), 1):
+                    tid_v = row.get('text_id', row.name)
+                    src_v = row.get('source', '')
+                    label = f"**Semantic Match {ctr}**: *{src_v}* `{tid_v}`"
+                    with sem_col_map[(ctr - 1) % 2]:
+                        with st.expander(label, expanded=False):
+                            st.markdown(f"**Source:** {src_v}")
+                            st.markdown(f"**Text ID:** {tid_v}")
+                            st.markdown(f"**Summary:**\n{row.get('summary','')}")
+                            top_seg_text = row.get('TopSegment', '')
+                            st.markdown(f"**Key Quote:** {top_seg_text}")
+                            st.markdown(f"**Similarity Score:** {row.get('similarities', 0.0):.2f}")
+
+                with st.expander("**Semantic Search Metadata**"):
+                    st.dataframe(semantic_matches_df.drop(columns=["embedding"], errors="ignore"))
+
+        st.divider()
+
+        # Reranking results and Nicolay CoT metadata
+        if perform_reranking and full_reranked_results:
+            st.markdown("### Ranked Search Results")
+            with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
+                st.write(relevance_ranking_explainer)
+
+            for idx, r in enumerate(full_reranked_results[:3]):
+                with st.expander(
+                    f"**Reranked Match {idx+1} ({r.get('Search Type','')})**: "
+                    f"`{r.get('Text ID','')}` — {r.get('Source','')[:50]}"
+                ):
+                    st.markdown(f"**Text ID:** {r.get('Text ID','')}")
+                    st.markdown(f"**Source:** {r.get('Source','')}")
+                    st.markdown(f"**Summary:** {r.get('Summary','')}")
+                    ft_excerpt = r.get('Key Quote', '')
+                    st.markdown(
+                        f"**Full Text (excerpt):**\n"
+                        f"{ft_excerpt[:500]}{'…' if len(ft_excerpt) > 500 else ''}"
+                    )
+                    st.markdown(f"**Relevance Score:** {r.get('Relevance Score', 0.0):.3f}")
+
+            with st.expander("**Result Reranking Metadata**"):
+                st.dataframe(pd.DataFrame(full_reranked_results))
+                st.write("**Formatted input to Nicolay:**")
+                st.write(formatted_input)
+
+        if perform_reranking and model_output:
+            match_analysis_pipe = model_output.get("Match Analysis", {})
             with st.expander("**Analysis Metadata — Full Chain-of-Thought**"):
                 for section, label in [
                     ("User Query Analysis",  "User Query Analysis"),
@@ -1169,21 +1496,12 @@ if submitted:
                         for k, v in block.items():
                             st.markdown(f"- **{k}:** {v}")
 
-                if match_analysis:
+                if match_analysis_pipe:
                     st.markdown("**Match Analysis (raw):**")
-                    for mk, info in match_analysis.items():
+                    for mk, info in match_analysis_pipe.items():
                         st.markdown(f"- **{mk}:**")
                         for k, v in info.items():
                             st.markdown(f"  - {k}: {v}")
 
                 st.write("**Full Model Output (JSON):**")
                 st.write(nic_raw)
-
-            # ── Log & history ─────────────────────────────────────────────────
-            log_nicolay_model_output(
-                nicolay_data_logger, model_output, user_query,
-                highlight_success, initial_answer
-            )
-            record_history(user_query, model_output, synth_key)
-            # Refresh sidebar after adding history entry
-            render_sidebar_history()

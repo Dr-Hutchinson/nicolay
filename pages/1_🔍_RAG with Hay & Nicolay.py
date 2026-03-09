@@ -1101,7 +1101,8 @@ def render_confidence_summary(
 
     Call AFTER verify_final_answer_quotes() so quote lists are ready.
     """
-    with st.expander("📊 Response Confidence Summary", expanded=True):
+    with st.container(border=True):
+        st.markdown("##### 📊 Response Confidence Summary")
 
         # ── Signal 1: Quote verification rate ────────────────────────────────
         total_q = len(verified_quotes) + len(displaced_quotes) + len(unverified_quotes)
@@ -1936,41 +1937,37 @@ if submitted:
             )
             render_diagnostic_signals(signals)
 
-            # ── [U2] Synthesis type badge + [U12] Confidence Summary + [U10] FinalAnswer ───
+            # ── [U12] Response Confidence Summary (plain container, not nested) ──
+            fa_text = fa_block.get('Text', '')
+            _verified_q, _displaced_q, _unverified_q = (
+                verify_final_answer_quotes(
+                    fa_text, full_reranked_results, lincoln_dict
+                )
+                if fa_text else ([], [], [])
+            )
+            try:
+                render_confidence_summary(
+                    final_answer_text   = fa_text,
+                    reranked_results    = full_reranked_results,
+                    verified_quotes     = _verified_q,
+                    displaced_quotes    = _displaced_q,
+                    unverified_quotes   = _unverified_q,
+                    synth_type_num      = extract_synth_type_num(synth_raw),
+                    query_text          = user_query,
+                )
+            except Exception as _cs_err:
+                st.warning(f"⚠️ Confidence summary could not render: {_cs_err}")
+
+            # ── [U2] Synthesis type badge + [U10] FinalAnswer verification ────
             with st.expander("**Nicolay's Response**", expanded=True):
                 if synth_badge:
                     st.markdown(synth_badge, unsafe_allow_html=True)
                     if synth_tooltip:
                         st.caption(synth_tooltip)
                 st.markdown("")
-
-                # Hoist quote verification so both the confidence summary and
-                # the inline-annotated renderer share the same computed lists.
-                fa_text = fa_block.get('Text', '')
-                _verified_q, _displaced_q, _unverified_q = (
-                    verify_final_answer_quotes(
-                        fa_text, full_reranked_results, lincoln_dict
-                    )
-                    if fa_text else ([], [], [])
-                )
-
-                # [U12] Response Confidence Summary panel
-                try:
-                    render_confidence_summary(
-                        final_answer_text   = fa_text,
-                        reranked_results    = full_reranked_results,
-                        verified_quotes     = _verified_q,
-                        displaced_quotes    = _displaced_q,
-                        unverified_quotes   = _unverified_q,
-                        synth_type_num      = extract_synth_type_num(synth_raw),
-                        query_text          = user_query,
-                    )
-                except Exception as _cs_err:
-                    st.warning(f"⚠️ Confidence summary could not render: {_cs_err}")
-
-                st.markdown("")
-                # [U10] FinalAnswer with inline quote annotation
-                # Pass pre-computed quote lists to avoid re-running verification.
+                # [U10] FinalAnswer with inline quote annotation.
+                # Pass pre-computed quote lists (hoisted above) to avoid
+                # running verification a second time.
                 render_final_answer_with_verification(
                     fa_block, full_reranked_results, lincoln_dict,
                     precomputed_quotes=(_verified_q, _displaced_q, _unverified_q),

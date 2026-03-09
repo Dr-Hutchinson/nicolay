@@ -1010,8 +1010,18 @@ def analyze_reranker_scores(reranked_results):
     }
 
 
-def interpret_spread(spread):
-    """[U12] Human-readable retrieval differentiation label."""
+def interpret_spread(spread, synth_type_num=None):
+    """
+    [U12] Human-readable retrieval differentiation label.
+    For Types 4/5 (multi-passage synthesis), distributed retrieval is expected
+    and healthy — flat spread is not a warning in that context.
+    """
+    if synth_type_num in (4, 5):
+        if spread >= 0.20:
+            return "Wide spread — one passage dominates synthesis"
+        else:
+            return "Distributed retrieval — consistent with multi-passage synthesis ✅"
+    # Types 1–3: differentiation matters
     if spread >= 0.20:
         return "Differentiated retrieval ✅"
     elif spread >= 0.10:
@@ -1062,24 +1072,99 @@ def check_complexity_match(query_text, synth_type_num):
     """
     [U12] Compare estimated query complexity against Nicolay's synthesis type.
 
-    High-complexity query + Type 1/2 response → possible under-synthesis.
-    Low-complexity query  + Type 4/5 response → possible over-synthesis.
-    Match → no flag.
+    Types 4/5 are by definition multi-passage responses; the synthesis
+    classification itself is sufficient evidence of appropriate complexity
+    handling, so we treat them as a match regardless of the query heuristic.
+    The heuristic is only applied for Types 1–3.
 
     Returns (matched: bool, message: str).
     """
+    # For synthesis/contrastive responses, trust the model's own classification
+    if synth_type_num in (4, 5):
+        return True, "Multi-passage or contrastive synthesis — type consistent with complex query ✅"
+
     complexity = estimate_query_complexity(query_text)
-    if synth_type_num in (4, 5) and complexity == "high":
-        return True,  "Multi-passage or contrastive synthesis — matches query complexity ✅"
-    elif synth_type_num in (1, 2) and complexity == "high":
+    if synth_type_num in (1, 2) and complexity == "high":
         return False, "⚠️ Query appears complex but response is Type 1/2 — possible under-synthesis (heuristic)"
-    elif synth_type_num in (4, 5) and complexity == "low":
-        return False, "ℹ️ Simple query produced multi-passage synthesis — may reflect retrieval breadth"
     else:
-        return True,  "Query complexity consistent with synthesis type"
+        return True, "Query complexity consistent with synthesis type"
 
 
 # ── Rendering ─────────────────────────────────────────────────────────────────
+
+def _compute_overall_confidence(
+    verified_quotes, displaced_quotes, unverified_quotes,
+    rouge_data, reranker_data, synth_type_num
+):
+    """
+    [U12] Derive an overall confidence rating (high / medium / low) and a
+    plain-language explanation from the five signal values.
+
+    Low  — any unverified quotes, OR calibration warning, OR ROUGE < 0.25
+           for Type 1/2 (direct retrieval with weak grounding).
+    High — no unverified quotes AND no calibration warning AND
+           (ROUGE ≥ 0.45 for Types 1/2, or ROUGE ≥ 0.30 for Types 4/5).
+    Medium — everything else.
+
+    Returns (rating: str, icon: str, color: str, explanation: str).
+    """
+    has_unverified    = len(unverified_quotes) > 0
+    calib_warning     = reranker_data.get('calibration_warning', False) if reranker_data else False
+    r1                = rouge_data.get('rouge1', 0.0) if rouge_data else 0.0
+    direct_type       = synth_type_num in (1, 2)
+    synthesis_type    = synth_type_num in (4, 5)
+
+    # ── Low conditions ────────────────────────────────────────────────────────
+    if has_unverified:
+        return ("low", "🔴", "#f8d7da",
+                "One or more quotes in this response could not be verified "
+                "against the Lincoln corpus. This may indicate fabricated or "
+                "misremembered quotations. Check the sources before relying on "
+                "any quoted text.")
+    if calib_warning:
+        return ("low", "🔴", "#f8d7da",
+                "The retrieval system returned high confidence scores across all "
+                "results with little discrimination between them. This pattern "
+                "often appears when the corpus doesn't contain the right documents "
+                "for the query. The response may sound plausible but rest on "
+                "off-target sources.")
+    if direct_type and r1 < 0.25:
+        return ("low", "🔴", "#f8d7da",
+                "This response is classified as a direct retrieval (Type 1/2) but "
+                "shows weak alignment with the retrieved Lincoln texts. The answer "
+                "may rely more on the model's general knowledge than on corpus "
+                "evidence. Treat quoted material with particular caution.")
+
+    # ── High conditions ───────────────────────────────────────────────────────
+    rouge_threshold = 0.45 if direct_type else 0.30
+    rouge_ok        = r1 >= rouge_threshold
+    if not has_unverified and not calib_warning and rouge_ok:
+        if synthesis_type:
+            return ("high", "✅", "#d1e7dd",
+                    "The response draws on multiple relevant Lincoln passages, "
+                    "all quotes are verified, and the answer closely tracks the "
+                    "retrieved source texts. This is a well-grounded synthesis.")
+        else:
+            return ("high", "✅", "#d1e7dd",
+                    "All quotes verified against the corpus and the response closely "
+                    "tracks the retrieved Lincoln texts. This response is well "
+                    "grounded in the primary sources.")
+
+    # ── Medium (everything else) ──────────────────────────────────────────────
+    parts = []
+    if len(displaced_quotes) > 0:
+        parts.append("one or more quotes appear in the right document but "
+                     "were drawn from a different passage than cited")
+    if direct_type and 0.25 <= r1 < 0.45:
+        parts.append("the response only partially tracks the retrieved text — "
+                     "some content may go beyond what the corpus directly supports")
+    if not parts:
+        parts.append("signals are mixed or inconclusive")
+    explanation = ("Some caution is warranted. Specifically: "
+                   + "; ".join(parts) + ". "
+                   "Review the source passages before relying on specific claims.")
+    return ("medium", "⚠️", "#fff3cd", explanation)
+
 
 def render_confidence_summary(
     final_answer_text,
@@ -1093,47 +1178,70 @@ def render_confidence_summary(
     """
     [U12] Render the Response Confidence Summary panel.
 
-    Positioned between synthesis type badge and FinalAnswer text in Tab 1.
-    Aggregates all five signals into a scannable epistemological situation
-    report.  This is NOT an accuracy score — it surfaces the conditions
-    under which the response was produced so the researcher can calibrate
-    their trust appropriately.
+    Collapsed by default; header shows overall confidence rating so the
+    researcher gets an instant read without opening the panel.  When opened,
+    the top section explains the rating in plain language; the five diagnostic
+    signals follow with accessible explanations of what each value means.
 
-    Call AFTER verify_final_answer_quotes() so quote lists are ready.
+    Call after verify_final_answer_quotes() so quote lists are ready.
     """
-    with st.container(border=True):
-        st.markdown("##### 📊 Response Confidence Summary")
+    # Pre-compute signal data so the overall rating can be derived first
+    rouge_data    = compute_corpus_grounding(final_answer_text, reranked_results)
+    reranker_data = analyze_reranker_scores(reranked_results)
 
-        # ── Signal 1: Quote verification rate ────────────────────────────────
+    rating, icon, _color, explanation = _compute_overall_confidence(
+        verified_quotes, displaced_quotes, unverified_quotes,
+        rouge_data, reranker_data, synth_type_num
+    )
+    rating_label = rating.capitalize()
+
+    with st.expander(f"📊 Response Confidence: {icon} {rating_label}", expanded=False):
+
+        # ── Overall rating banner ─────────────────────────────────────────────
+        st.markdown(f"**Overall confidence: {icon} {rating_label}**")
+        st.markdown(explanation)
+        st.divider()
+
+        # ── Signal 1: Quote verification ──────────────────────────────────────
         total_q = len(verified_quotes) + len(displaced_quotes) + len(unverified_quotes)
         col1, col2 = st.columns([1, 2])
         with col1:
             st.caption("**Quote verification**")
         with col2:
             if total_q == 0:
-                st.markdown("⬜ No direct quotes in response")
+                st.markdown("⬜ No direct quotes in this response")
+                st.caption("Nicolay did not include any directly quoted text.")
             elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0:
-                st.markdown(f"✅ {total_q}/{total_q} quotes verified against corpus")
+                st.markdown(f"✅ {total_q}/{total_q} quotes verified")
+                st.caption("Every quoted passage was confirmed present in the Lincoln corpus.")
             elif len(unverified_quotes) > 0:
                 st.markdown(
-                    f"⚠️ {len(verified_quotes)}/{total_q} verified — "
+                    f"🔴 {len(verified_quotes)}/{total_q} verified — "
                     f"**{len(unverified_quotes)} not found in corpus**"
                 )
-            else:  # displaced only
+                st.caption(
+                    "One or more quoted passages could not be located anywhere "
+                    "in the Lincoln corpus. These may be fabricated, misremembered, "
+                    "or drawn from a source outside the collection."
+                )
+            else:
                 st.markdown(
                     f"🔀 {len(verified_quotes)}/{total_q} verified — "
-                    f"**{len(displaced_quotes)} displaced** (source correct, chunk reference off)"
+                    f"**{len(displaced_quotes)} displaced**"
+                )
+                st.caption(
+                    "The displaced quote appears in the correct Lincoln document "
+                    "but was drawn from a different passage than the one Nicolay "
+                    "cited. The source is right; the specific chunk reference is off."
                 )
 
         st.divider()
 
-        # ── Signal 2: ROUGE-1/2 corpus grounding ─────────────────────────────
+        # ── Signal 2: Corpus grounding ────────────────────────────────────────
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.caption("**Corpus grounding**")
-            st.caption("*(lexical overlap with top-3 retrieved chunks)*")
+            st.caption("**How closely does the response track the sources?**")
         with col2:
-            rouge_data = compute_corpus_grounding(final_answer_text, reranked_results)
             if rouge_data:
                 st.markdown(
                     f"ROUGE-1: **{rouge_data['rouge1']}** &nbsp;&nbsp; "
@@ -1141,54 +1249,81 @@ def render_confidence_summary(
                     unsafe_allow_html=True,
                 )
                 st.caption(interpret_rouge(rouge_data['rouge1'], synth_type_num))
+                st.caption(
+                    "This score measures how much of the response is drawn "
+                    "from the retrieved Lincoln texts versus the model's own "
+                    "language. A higher score means the response stays close "
+                    "to the sources. A lower score is normal when Nicolay is "
+                    "summarising an absence — but is a caution flag for "
+                    "direct-retrieval responses."
+                )
             else:
-                st.markdown("⬜ Not computed (missing retrieved text)")
+                st.markdown("⬜ Not computed")
 
         st.divider()
 
-        # ── Signals 3 + 4: Reranker score spread + source diversity ──────────
+        # ── Signals 3 + 4: Retrieval quality ─────────────────────────────────
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.caption("**Retrieval signal**")
+            st.caption("**Retrieval quality**")
         with col2:
-            reranker_data = analyze_reranker_scores(reranked_results)
             if reranker_data:
                 st.markdown(
-                    f"Sources retrieved: **{reranker_data['n_distinct_sources']}** distinct document(s)"
+                    f"**{reranker_data['n_distinct_sources']}** distinct Lincoln "
+                    f"document(s) retrieved"
                 )
-                spread_interp = interpret_spread(reranker_data['spread'])
+                spread_interp = interpret_spread(reranker_data['spread'], synth_type_num)
                 st.markdown(
                     f"Score spread: **{reranker_data['spread']}** — {spread_interp}"
                 )
-                st.markdown(f"Max reranker score: **{reranker_data['max_score']}**")
+                st.caption(
+                    "The retrieval system scores each passage on how well it "
+                    "matches the query. A wide spread means one passage stood "
+                    "out clearly as the best match. A narrow spread means "
+                    "several passages scored similarly — which is expected for "
+                    "synthesis queries, but a potential warning for simple ones."
+                )
                 if reranker_data['calibration_warning']:
                     st.warning(
-                        "⚠️ **High score on flat distribution** — the reranker returned "
-                        "high confidence across all results with little discrimination. "
-                        "Retrieved documents may be topically coherent but off-target. "
-                        "Verify this response independently."
+                        "⚠️ **High confidence, low discrimination.** The retrieval "
+                        "system returned high scores for all passages with little "
+                        "difference between them. This sometimes happens when the "
+                        "corpus doesn't contain exactly the right documents — the "
+                        "system retrieves the closest available material, which may "
+                        "not fully address the question. Consider rephrasing the "
+                        "query or checking the Corpus Coverage panel."
                     )
             else:
                 st.markdown("⬜ Not computed")
 
         st.divider()
 
-        # ── Signal 5: Complexity-type match ───────────────────────────────────
+        # ── Signal 5: Complexity match ────────────────────────────────────────
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.caption("**Complexity match**")
-            st.caption("*(heuristic)*")
+            st.caption("**Response depth**")
         with col2:
-            _, complexity_msg = check_complexity_match(query_text, synth_type_num)
+            complexity_matched, complexity_msg = check_complexity_match(
+                query_text, synth_type_num
+            )
             st.markdown(complexity_msg)
+            if not complexity_matched:
+                st.caption(
+                    "The query appears to ask for a complex, multi-source answer, "
+                    "but Nicolay produced a simpler response. This may mean the "
+                    "corpus doesn't have enough relevant material, or the query "
+                    "could be rephrased to surface more evidence."
+                )
 
-        # ── Footer disclaimer ─────────────────────────────────────────────────
+        # ── Footer ─────────────────────────────────────────────────────────────
+        st.divider()
         st.caption(
-            "ℹ️ These signals indicate the *epistemological conditions* of this response, "
-            "not a verified accuracy score. Corpus grounding measures lexical overlap with "
-            "retrieved sources, not factual correctness. The complexity match is a heuristic "
-            "with known false-positive rate. Human verification is recommended for all "
-            "quoted claims."
+            "These indicators are based on what the system can check automatically "
+            "— not a guarantee of accuracy. 'Source tracking' shows how closely "
+            "the response draws on the retrieved Lincoln texts. Quote verification "
+            "checks whether direct quotations actually appear in the corpus. "
+            "Some signals are rough estimates. Always read the source passages "
+            "yourself before relying on any quoted claim."
         )
 
 

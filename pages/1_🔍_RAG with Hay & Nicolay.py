@@ -1264,19 +1264,24 @@ def render_confidence_summary(
             st.caption("**How closely does the response track the sources?**")
         with col2:
             if rouge_data:
+                r1_val = rouge_data['rouge1']
+                r2_val = rouge_data['rouge2']
                 st.markdown(
-                    f"ROUGE-1: **{rouge_data['rouge1']}** &nbsp;&nbsp; "
-                    f"ROUGE-2: **{rouge_data['rouge2']}**",
+                    f"ROUGE-1: **{r1_val}** &nbsp;&nbsp; ROUGE-2: **{r2_val}**",
                     unsafe_allow_html=True,
                 )
-                st.caption(interpret_rouge(rouge_data['rouge1'], synth_type_num))
+                st.caption(interpret_rouge(r1_val, synth_type_num))
                 st.caption(
-                    "This score measures how much of the response is drawn "
-                    "from the retrieved Lincoln texts versus the model's own "
-                    "language. A higher score means the response stays close "
-                    "to the sources. A lower score is normal when Nicolay is "
-                    "summarising an absence — but is a caution flag for "
-                    "direct-retrieval responses."
+                    "These scores (range 0.0–1.0) measure how much of the response "
+                    "uses words and phrases drawn from the retrieved Lincoln passages. "
+                    "ROUGE-1 counts individual word overlap; ROUGE-2 counts "
+                    "two-word phrase overlap — a stricter test. "
+                    "As a rough guide: **above 0.45** suggests the response stays "
+                    "close to the retrieved text; **0.25–0.45** indicates moderate "
+                    "grounding with some inference beyond the sources; **below 0.25** "
+                    "means the response has diverged significantly — which is expected "
+                    "and correct for absence responses, but a caution flag for "
+                    "direct-retrieval ones."
                 )
             else:
                 st.markdown("⬜ Not computed")
@@ -1298,11 +1303,16 @@ def render_confidence_summary(
                     f"Score spread: **{reranker_data['spread']}** — {spread_interp}"
                 )
                 st.caption(
-                    "The retrieval system scores each passage on how well it "
-                    "matches the query. A wide spread means one passage stood "
-                    "out clearly as the best match. A narrow spread means "
-                    "several passages scored similarly — which is expected for "
-                    "synthesis queries, but a potential warning for simple ones."
+                    "The score spread (range 0.0–1.0) is the gap between the "
+                    "highest- and lowest-scoring retrieved passages. "
+                    "**Above ~0.20**: one passage clearly stood out as the best "
+                    "match. **0.05–0.20**: several passages scored similarly — "
+                    "normal for synthesis queries where multiple documents are "
+                    "relevant, but worth noting for simpler questions where one "
+                    "passage should dominate. **Near 0.0 with a high max score** "
+                    "is the most concerning pattern: the system is confident but "
+                    "not discriminating, which can indicate the corpus lacks the "
+                    "right documents for this query."
                 )
                 if reranker_data['calibration_warning']:
                     st.warning(
@@ -1319,7 +1329,7 @@ def render_confidence_summary(
 
         st.divider()
 
-        # ── Signal 5: Complexity match ────────────────────────────────────────
+        # ── Signal 5: Response depth ──────────────────────────────────────────
         col1, col2 = st.columns([1, 2])
         with col1:
             st.caption("**Response depth**")
@@ -1328,12 +1338,23 @@ def render_confidence_summary(
                 query_text, synth_type_num
             )
             st.markdown(complexity_msg)
+            st.caption(
+                "This check compares the apparent complexity of your question "
+                "against the type of response Nicolay produced (Type 1–5). "
+                "Questions with comparative or synthesis language — words like "
+                "'compare,' 'how did Lincoln's position change,' 'throughout his "
+                "career,' 'consistent' — are flagged as high-complexity. "
+                "A mismatch (complex question, simple response) may mean the "
+                "corpus lacks enough relevant material, or that rephrasing the "
+                "query could surface more evidence. This is a heuristic estimate, "
+                "not a definitive judgment."
+            )
             if not complexity_matched:
-                st.caption(
+                st.warning(
                     "The query appears to ask for a complex, multi-source answer, "
-                    "but Nicolay produced a simpler response. This may mean the "
-                    "corpus doesn't have enough relevant material, or the query "
-                    "could be rephrased to surface more evidence."
+                    "but Nicolay produced a simpler response. The corpus may not "
+                    "have enough relevant material, or rephrasing the query may "
+                    "surface more evidence."
                 )
 
         # ── Footer ─────────────────────────────────────────────────────────────
@@ -2071,7 +2092,9 @@ if submitted:
             "Hay is a fine-tuned model that provides an initial answer and "
             "steers keyword and semantic search. Compare its response with "
             "Nicolay's synthesis below to see how retrieval-augmented generation "
-            "refines the output."
+            "refines the output. **Note:** Hay's response is preliminary analysis "
+            "generated before document retrieval — it is not verified against the "
+            "corpus and may contain claims that go beyond the retrieved sources."
         )
         with st.expander("**Hay's Response**", expanded=True):
             st.markdown(initial_answer)

@@ -368,17 +368,76 @@ def _sliding_window_verify(norm_quote, norm_chunk, min_window=30, step=10):
     return False, ''
 
 
+def _search_same_document(norm_quote, text_id, lincoln_dict):
+    """
+    When a quote fails verification against its claimed chunk, search all other
+    chunks that share the same source document.  Returns (found: bool, chunk_id).
+
+    This distinguishes chunk displacement (quote is real but assigned to the
+    wrong chunk ID within a multi-chunk document) from outright fabrication
+    (quote does not appear anywhere in the document).
+    """
+    # Get the source string for the claimed chunk
+    entry = triple_lookup(lincoln_dict, text_id)
+    target_source = entry.get('source', '')
+    if not target_source:
+        return False, ''
+
+    # Normalise source for comparison (strip 'Source: ' prefix, lower)
+    def _ns(s):
+        import re as _re
+        s = _re.sub(r'^source:\s*', '', s.strip(), flags=_re.IGNORECASE)
+        return s.lower().strip()
+
+    norm_target = _ns(target_source)
+
+    # Walk every integer-keyed entry (avoids duplicate checks on alias keys)
+    seen_ids = set()
+    for key, candidate in lincoln_dict.items():
+        if not isinstance(key, int):
+            continue
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
+        if not isinstance(candidate, dict):
+            continue
+        cand_source = _ns(candidate.get('source', ''))
+        if cand_source != norm_target:
+            continue
+        # Same document — check if the quote appears in this chunk
+        cand_ft = candidate.get('full_text', '')
+        if not cand_ft:
+            continue
+        norm_cand = _norm_chunk(cand_ft)
+        # Exact or anchor match
+        if norm_quote in norm_cand:
+            return True, str(key)
+        anchor = norm_quote[:60]
+        if len(anchor) > 20 and anchor in norm_cand:
+            return True, str(key)
+        # Sliding window
+        sw_found, _ = _sliding_window_verify(norm_quote, norm_cand)
+        if sw_found:
+            return True, str(key)
+
+    return False, ''
+
+
 def verify_quote(key_quote, text_id, lincoln_dict):
     """
     Returns (verified: bool, method: str).
-    method ∈ {'exact', 'fuzzy', 'sliding', 'not_found', 'chunk_missing', 'no_quote'}
+    method ∈ {'exact', 'fuzzy', 'sliding', 'displaced',
+               'not_found', 'chunk_missing', 'no_quote'}
 
-    Four-stage verification:
+    Five-stage verification:
       1. Exact match after whitespace normalization.
       2. Ellipsis-split fuzzy match (handles '...' elisions).
       3. 60-character opening anchor match.
-      4. Sliding-window match (handles mid-sentence quoting and light
-         paraphrasing — the two remaining false-negative patterns).
+      4. Sliding-window match (catches mid-sentence starts and light condensing).
+      5. Same-document search — if stages 1–4 fail on the claimed chunk, scan
+         every other chunk in the same source document.  A hit here means the
+         quote is real but Nicolay cited the wrong chunk ID ('displaced').
+         No hit anywhere in the document = 'not_found' (likely fabricated).
     """
     if not key_quote or not key_quote.strip():
         return False, "no_quote"
@@ -404,10 +463,15 @@ def verify_quote(key_quote, text_id, lincoln_dict):
     if len(anchor) > 20 and anchor in norm_ch:
         return True, "fuzzy"
 
-    # Stage 4 — sliding window (catches mid-sentence starts and light paraphrase)
+    # Stage 4 — sliding window
     found, _ = _sliding_window_verify(norm_q, norm_ch)
     if found:
         return True, "sliding"
+
+    # Stage 5 — same-document search (displacement vs fabrication)
+    displaced, _ = _search_same_document(norm_q, text_id, lincoln_dict)
+    if displaced:
+        return False, "displaced"   # real quote, wrong chunk — flag but note it's genuine
 
     return False, "not_found"
 
@@ -426,8 +490,13 @@ def quote_badge_html(verified, method):
     if verified and method in ("fuzzy", "sliding"):
         return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
                 '✅ Quote verified — partial or condensed match confirmed in Lincoln corpus</span>')
+    if method == "displaced":
+        return ('<span style="color:#664d03;background:#fff3cd;padding:1px 6px;'
+                'border-radius:4px;font-size:0.95em;font-weight:600;">'
+                '🔀 Quote found in document but assigned to wrong chunk — '
+                'correct source, displaced chunk ID</span>')
     return ('<span style="color:#721c24;font-size:0.95em;font-weight:600;">'
-            '⚠️ Quote not found in corpus chunk — possible fabrication or displacement</span>')
+            '⚠️ Quote not found in corpus — possible fabrication or out-of-corpus citation</span>')
 
 
 # ── U10: FinalAnswer quote verification ──────────────────────────────────────
@@ -457,12 +526,13 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
     any of the reranked result chunks (not just the selected matches).
 
     Returns:
-        verified_quotes   — list of (quote_str, text_id, source) that verified
-        unverified_quotes — list of quote_str that could not be found
+        verified_quotes   — list of (quote_str, text_id, source) confirmed in corpus
+        displaced_quotes  — list of quote_str found in document but wrong chunk
+        unverified_quotes — list of quote_str not found anywhere in corpus
     """
     quotes = extract_quoted_strings(final_answer_text)
     if not quotes:
-        return [], []
+        return [], [], []
 
     # Build search set: all reranked result text IDs + their full_text
     corpus_chunks = []
@@ -474,27 +544,27 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
         if ft:
             corpus_chunks.append((tid, source, ft))
 
-    verified, unverified = [], []
+    verified, displaced, unverified = [], [], []
     for quote in quotes:
         found = False
         norm_q = _norm_chunk(quote)
         for tid, source, chunk in corpus_chunks:
-            # Primary: use verify_quote (now normalizes internally)
             v, method = verify_quote(quote, tid, lincoln_dict)
             if v:
                 verified.append((quote, tid, source))
                 found = True
                 break
-            # Fallback: direct normalized anchor check against the reranked
-            # result's Key Quote field (may differ from lincoln_dict full_text)
+            if method == "displaced":
+                displaced.append(quote)
+                found = True
+                break
+            # Direct fallback against the reranked Key Quote field
             norm_direct = _norm_chunk(chunk)
             anchor = norm_q[:60]
             if len(anchor) > 20 and anchor in norm_direct:
                 verified.append((quote, tid, source))
                 found = True
                 break
-            # Sliding-window fallback against the reranked result's Key Quote
-            # field (catches mid-sentence starts and condensed paraphrases)
             sw_found, _ = _sliding_window_verify(norm_q, norm_direct)
             if sw_found:
                 verified.append((quote, tid, source))
@@ -503,7 +573,7 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
         if not found:
             unverified.append(quote)
 
-    return verified, unverified
+    return verified, displaced, unverified
 
 
 def check_out_of_corpus_references(references, reranked_results):
@@ -558,39 +628,38 @@ def check_out_of_corpus_references(references, reranked_results):
 def render_final_answer_with_verification(fa_block, reranked_results, lincoln_dict):
     """
     [U10] Render Nicolay's FinalAnswer with inline quote verification.
-    Verified quotes annotated ✅; unverified quotes flagged ⚠️.
+    Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️.
     Out-of-corpus references flagged in References list.
     """
     fa_text = fa_block.get('Text', 'No response available')
     refs    = fa_block.get('References', [])
 
-    verified_quotes, unverified_quotes = verify_final_answer_quotes(
+    verified_quotes, displaced_quotes, unverified_quotes = verify_final_answer_quotes(
         fa_text, reranked_results, lincoln_dict
     )
     out_of_corpus_refs = check_out_of_corpus_references(refs, reranked_results)
 
-    # Annotate the text: insert inline markers after closing quote
+    # Annotate the text: insert inline markers after closing quote.
+    # Use literal str.replace — NOT re.escape — which adds backslashes that
+    # prevent str.replace from matching the literal text.
     annotated = fa_text
     for q, tid, source in verified_quotes:
-        # Try curly-quote wrapping first, then straight
         for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
-            pattern = open_q + re.escape(q) + close_q
-            if pattern in annotated:
-                annotated = annotated.replace(
-                    pattern,
-                    open_q + q + close_q + ' ✅',
-                    1
-                )
+            literal = open_q + q + close_q
+            if literal in annotated:
+                annotated = annotated.replace(literal, literal + ' ✅', 1)
+                break
+    for q in displaced_quotes:
+        for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
+            literal = open_q + q + close_q
+            if literal in annotated:
+                annotated = annotated.replace(literal, literal + ' 🔀', 1)
                 break
     for q in unverified_quotes:
         for open_q, close_q in [('\u201c', '\u201d'), ('"', '"')]:
-            pattern = open_q + re.escape(q) + close_q
-            if pattern in annotated:
-                annotated = annotated.replace(
-                    pattern,
-                    open_q + q + close_q + ' ⚠️',
-                    1
-                )
+            literal = open_q + q + close_q
+            if literal in annotated:
+                annotated = annotated.replace(literal, literal + ' ⚠️', 1)
                 break
 
     st.markdown(f"**Response:**\n{annotated}")
@@ -612,20 +681,25 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
             else:
                 st.markdown(f"- {ref}")
 
-    # Summary legend if any annotations fired
+    # Summary legend — only shown when annotations fired
     has_verified   = bool(verified_quotes)
+    has_displaced  = bool(displaced_quotes)
     has_unverified = bool(unverified_quotes)
     has_ooc        = bool(out_of_corpus_refs)
 
-    if has_verified or has_unverified or has_ooc:
+    if has_verified or has_displaced or has_unverified or has_ooc:
         st.markdown("---")
         legend_parts = []
         if has_verified:
             legend_parts.append("✅ Quote verified against retrieved corpus chunk")
+        if has_displaced:
+            legend_parts.append(
+                "🔀 Quote confirmed in document but Nicolay cited the wrong chunk ID — "
+                "source is correct, chunk reference is displaced"
+            )
         if has_unverified:
             legend_parts.append(
-                "⚠️ Quote not found in retrieved sources — possible fabrication, "
-                "displacement, or paraphrase"
+                "⚠️ Quote not found anywhere in corpus — possible fabrication or out-of-corpus citation"
             )
         if has_ooc:
             legend_parts.append(
@@ -1634,29 +1708,40 @@ if submitted:
                 st.write("**Formatted input to Nicolay:**")
                 st.write(formatted_input)
 
-        # Full Chain-of-Thought trace (minus Model Feedback which is in its own tab)
+        # Full Chain-of-Thought trace — separate section for visibility
         if perform_reranking and model_output:
+            st.divider()
+            st.markdown("### 🧩 Nicolay's Chain-of-Thought Trace")
+            st.caption(
+                "The reasoning Nicolay performed before producing its final response — "
+                "query analysis, initial answer review, match evaluation, and meta-analysis. "
+                "Model Feedback is available in its own tab."
+            )
+
             match_analysis_pipe = model_output.get("Match Analysis", {})
-            with st.expander("**Analysis Metadata — Full Chain-of-Thought**"):
-                for section, label in [
-                    ("User Query Analysis",  "User Query Analysis"),
-                    ("Initial Answer Review","Initial Answer Review"),
-                    ("Meta Analysis",        "Meta Analysis"),
-                ]:
-                    block = model_output.get(section, {})
-                    if block:
-                        st.markdown(f"**{label}:**")
+
+            # One expander per CoT section for easy scanning
+            for section, label, icon in [
+                ("User Query Analysis",   "User Query Analysis",   "🔍"),
+                ("Initial Answer Review", "Initial Answer Review", "📝"),
+                ("Match Analysis",        "Match Analysis",        "🎯"),
+                ("Meta Analysis",         "Meta Analysis",         "🔬"),
+            ]:
+                block = (match_analysis_pipe if section == "Match Analysis"
+                         else model_output.get(section, {}))
+                if not block:
+                    continue
+                with st.expander(f"**{icon} {label}**", expanded=False):
+                    if section == "Match Analysis":
+                        for mk, info in block.items():
+                            st.markdown(f"**{mk}:**")
+                            for k, v in info.items():
+                                st.markdown(f"- **{k}:** {v}")
+                    else:
                         for k, v in block.items():
                             st.markdown(f"- **{k}:** {v}")
 
-                if match_analysis_pipe:
-                    st.markdown("**Match Analysis (raw):**")
-                    for mk, info in match_analysis_pipe.items():
-                        st.markdown(f"- **{mk}:**")
-                        for k, v in info.items():
-                            st.markdown(f"  - {k}: {v}")
-
-                st.write("**Full Model Output (JSON):**")
+            with st.expander("**📄 Full Model Output (raw JSON)**", expanded=False):
                 st.write(nic_raw)
 
     # ── Tab 3: Model Feedback ──────────────────────────────────────────────────

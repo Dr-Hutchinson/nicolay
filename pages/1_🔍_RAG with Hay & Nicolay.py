@@ -43,6 +43,46 @@ st.set_page_config(
     page_icon='🔍'
 )
 
+# ── Tab styling — make tabs visually prominent ────────────────────────────────
+st.markdown("""
+<style>
+/* Tab bar background */
+div[data-baseweb="tab-list"] {
+    background-color: #1a1a2e;
+    border-radius: 8px 8px 0 0;
+    padding: 4px 8px 0 8px;
+    gap: 4px;
+}
+/* Individual tab buttons */
+button[data-baseweb="tab"] {
+    background-color: #2a2a4a !important;
+    color: #a0a8c0 !important;
+    border-radius: 6px 6px 0 0 !important;
+    padding: 10px 24px !important;
+    font-size: 0.95em !important;
+    font-weight: 600 !important;
+    border: none !important;
+    transition: background 0.2s, color 0.2s;
+}
+/* Hovered tab */
+button[data-baseweb="tab"]:hover {
+    background-color: #3a3a6a !important;
+    color: #d0d8f0 !important;
+}
+/* Active / selected tab */
+button[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #4a6fa5 !important;
+    color: #ffffff !important;
+    border-bottom: 3px solid #7eb3ff !important;
+}
+/* Tab panel top border */
+div[data-baseweb="tab-panel"] {
+    border-top: 3px solid #4a6fa5;
+    padding-top: 1.2em;
+}
+</style>
+""", unsafe_allow_html=True)
+
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 client = OpenAI()
 
@@ -290,10 +330,25 @@ def format_reranked_for_nicolay(reranked_results, lincoln_dict):
 
 
 # ── E1 / U8: Quote verification ───────────────────────────────────────────────
+def _norm_chunk(text):
+    """
+    Normalize corpus chunk text for quote matching.
+    Resolves literal \\n escape sequences and collapses whitespace so that
+    line-break differences don't cause false negatives.
+    """
+    text = text.replace('\\n', ' ').replace('\r', ' ')
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
 def verify_quote(key_quote, text_id, lincoln_dict):
     """
     Returns (verified: bool, method: str).
     method ∈ {'exact', 'fuzzy', 'not_found', 'chunk_missing', 'no_quote'}
+
+    Normalization applied to both quote and chunk before comparison so that
+    escaped newlines (literal \\\\n sequences common in the Lincoln parquet)
+    do not produce false not_found results.
     """
     if not key_quote or not key_quote.strip():
         return False, "no_quote"
@@ -301,14 +356,24 @@ def verify_quote(key_quote, text_id, lincoln_dict):
     chunk = entry.get('full_text', '')
     if not chunk:
         return False, "chunk_missing"
-    if key_quote.strip() in chunk:
+
+    norm_q     = _norm_chunk(key_quote)
+    norm_chunk = _norm_chunk(chunk)
+
+    # Exact match (after normalization)
+    if norm_q in norm_chunk:
         return True, "exact"
-    parts = [p.strip() for p in key_quote.split("...") if p.strip()]
-    if len(parts) >= 2 and parts[0] in chunk and parts[-1] in chunk:
+
+    # Ellipsis-split fuzzy match
+    parts = [_norm_chunk(p) for p in key_quote.split("...") if p.strip()]
+    if len(parts) >= 2 and parts[0] in norm_chunk and parts[-1] in norm_chunk:
         return True, "fuzzy"
-    anchor = key_quote.strip()[:60]
-    if len(anchor) > 20 and anchor in chunk:
+
+    # 60-character anchor match
+    anchor = norm_q[:60]
+    if len(anchor) > 20 and anchor in norm_chunk:
         return True, "fuzzy"
+
     return False, "not_found"
 
 
@@ -377,15 +442,19 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
     verified, unverified = [], []
     for quote in quotes:
         found = False
+        norm_q = _norm_chunk(quote)
         for tid, source, chunk in corpus_chunks:
+            # Primary: use verify_quote (now normalizes internally)
             v, method = verify_quote(quote, tid, lincoln_dict)
             if v:
                 verified.append((quote, tid, source))
                 found = True
                 break
-            # Anchor check against this chunk directly (handles chunks not in lincoln_dict)
-            anchor = quote.strip()[:60]
-            if len(anchor) > 20 and anchor in chunk:
+            # Fallback: direct normalized anchor check against the reranked
+            # result's Key Quote field (may differ from lincoln_dict full_text)
+            norm_direct = _norm_chunk(chunk)
+            anchor = norm_q[:60]
+            if len(anchor) > 20 and anchor in norm_direct:
                 verified.append((quote, tid, source))
                 found = True
                 break
@@ -399,22 +468,48 @@ def check_out_of_corpus_references(references, reranked_results):
     """
     [U10] Check whether sources named in FinalAnswer.References appear in
     the reranked result set. Returns list of reference strings not found.
+
+    Normalization strips the 'Source:' prefix common in corpus source fields,
+    removes punctuation differences (periods vs commas, trailing dots), and
+    compares lowercased token sets so that e.g.
+      'First Annual Message, December 3, 1861'  matches
+      'Source:  First Annual Message. December 3, 1861.'
     """
     if not references or not reranked_results:
         return []
-    reranked_sources = [r.get('Source', '').lower() for r in reranked_results]
+
+    def _norm_ref(s):
+        s = re.sub(r'^source:\s*', '', s.strip(), flags=re.IGNORECASE)
+        s = re.sub(r'[.,;:\-]', ' ', s)
+        s = re.sub(r'\s+', ' ', s).strip().lower()
+        return s
+
+    normed_sources = [_norm_ref(r.get('Source', '')) for r in reranked_results]
+
     out_of_corpus = []
     for ref in references:
-        ref_lower = ref.lower().strip()
-        # Consider matched if any reranked source contains or is contained by ref
-        matched = any(
-            ref_lower in src or src in ref_lower or
-            # fuzzy: first 30 chars overlap
-            (len(ref_lower) > 15 and ref_lower[:25] in src)
-            for src in reranked_sources
-        )
+        norm_ref = _norm_ref(ref)
+        ref_tokens = set(norm_ref.split())
+
+        matched = False
+        for ns in normed_sources:
+            # Exact normalized match
+            if norm_ref == ns:
+                matched = True
+                break
+            # Substring in either direction
+            if norm_ref in ns or ns in norm_ref:
+                matched = True
+                break
+            # High token overlap (≥80% of reference tokens found in source)
+            src_tokens = set(ns.split())
+            if ref_tokens and len(ref_tokens & src_tokens) / len(ref_tokens) >= 0.8:
+                matched = True
+                break
+
         if not matched:
             out_of_corpus.append(ref)
+
     return out_of_corpus
 
 
@@ -1120,36 +1215,43 @@ if submitted:
     text_keywords     = user_text_keywords or model_text_keywords
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # RUN SEARCHES (no UI output here — results fed into tabs below)
+    # RUN SEARCHES — single status block gives users step-by-step progress
     # ═══════════════════════════════════════════════════════════════════════════
 
-    # ── Keyword Search (silent, populates search_results_df) ──────────────────
-    search_results_df = pd.DataFrame()
-    if perform_keyword_search:
-        results_list = search_with_dynamic_weights_expanded(
-            user_keywords=weighted_keywords,
-            corpus_terms={"terms": corpus_terms},
-            data=lincoln_data,
-            year_keywords=year_keywords,
-            text_keywords=text_keywords,
-            top_n_results=5
-        )
-        if results_list:
-            search_results_df = pd.DataFrame(results_list)
-            if "quote" in search_results_df.columns and "key_quote" not in search_results_df.columns:
-                search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
-        if not search_results_df.empty:
-            log_keyword_search_results(
-                keyword_results_logger, search_results_df, user_query,
-                initial_answer, model_weighted_keywords,
-                model_year_keywords, model_text_keywords
-            )
+    with st.status("⚙️ Running pipeline…", expanded=True) as pipeline_status:
 
-    # ── Semantic Search (silent, populates semantic_matches_df) ───────────────
-    semantic_matches_df  = pd.DataFrame()
-    user_query_embedding = None
-    if perform_semantic_search:
-        with st.spinner("Running semantic search…"):
+        # ── Step 1: Keyword Search ────────────────────────────────────────────
+        search_results_df = pd.DataFrame()
+        if perform_keyword_search:
+            st.write("🔑 **Step 1 of 5** — Running weighted keyword search…")
+            results_list = search_with_dynamic_weights_expanded(
+                user_keywords=weighted_keywords,
+                corpus_terms={"terms": corpus_terms},
+                data=lincoln_data,
+                year_keywords=year_keywords,
+                text_keywords=text_keywords,
+                top_n_results=5
+            )
+            if results_list:
+                search_results_df = pd.DataFrame(results_list)
+                if "quote" in search_results_df.columns and "key_quote" not in search_results_df.columns:
+                    search_results_df.rename(columns={"quote": "key_quote"}, inplace=True)
+            n_kw = len(search_results_df)
+            st.write(f"   ✅ Keyword search complete — {n_kw} result{'s' if n_kw != 1 else ''} found.")
+            if not search_results_df.empty:
+                log_keyword_search_results(
+                    keyword_results_logger, search_results_df, user_query,
+                    initial_answer, model_weighted_keywords,
+                    model_year_keywords, model_text_keywords
+                )
+        else:
+            st.write("🔑 **Step 1 of 5** — Keyword search skipped.")
+
+        # ── Step 2: Semantic Search ───────────────────────────────────────────
+        semantic_matches_df  = pd.DataFrame()
+        user_query_embedding = None
+        if perform_semantic_search:
+            st.write("🧠 **Step 2 of 5** — Running semantic (embedding) search…")
             semantic_matches_df, user_query_embedding = search_text_local(
                 lincoln_index_df, user_query + " " + initial_answer, n=5
             )
@@ -1165,67 +1267,74 @@ if submitted:
                 top_segments.append(top_seg[0])
             semantic_matches_df = semantic_matches_df.copy()
             semantic_matches_df["TopSegment"] = top_segments
-        log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
+            n_sem = len(semantic_matches_df)
+            st.write(f"   ✅ Semantic search complete — {n_sem} result{'s' if n_sem != 1 else ''} found.")
+            log_semantic_search_results(semantic_results_logger, semantic_matches_df, initial_answer)
+        else:
+            st.write("🧠 **Step 2 of 5** — Semantic search skipped.")
 
-    # ── Reranking (silent, populates full_reranked_results) ───────────────────
-    full_reranked_results = []
-    formatted_input       = ""
-    model_output          = {}
-    nic_raw               = ""
+        # ── Step 3: Reranking ─────────────────────────────────────────────────
+        full_reranked_results = []
+        formatted_input       = ""
+        model_output          = {}
+        nic_raw               = ""
 
-    if perform_reranking:
+        if perform_reranking:
 
-        def add_num_id(df):
-            df = df.copy()
-            df['_num_id'] = (df['text_id'].astype(str)
-                             .str.extract(r'(\d+)')[0]
-                             .astype(float).astype('Int64'))
-            return df
+            def add_num_id(df):
+                df = df.copy()
+                df['_num_id'] = (df['text_id'].astype(str)
+                                 .str.extract(r'(\d+)')[0]
+                                 .astype(float).astype('Int64'))
+                return df
 
-        s_df = add_num_id(search_results_df)  if not search_results_df.empty  else pd.DataFrame(columns=['_num_id'])
-        e_df = add_num_id(semantic_matches_df) if not semantic_matches_df.empty else pd.DataFrame(columns=['_num_id'])
+            s_df = add_num_id(search_results_df)  if not search_results_df.empty  else pd.DataFrame(columns=['_num_id'])
+            e_df = add_num_id(semantic_matches_df) if not semantic_matches_df.empty else pd.DataFrame(columns=['_num_id'])
 
-        frames = [df for df in [s_df, e_df] if not df.empty and '_num_id' in df.columns]
-        combined_df = (pd.concat(frames, ignore_index=True)
-                       .drop_duplicates(subset=['_num_id'])
-                       if frames else pd.DataFrame())
+            frames = [df for df in [s_df, e_df] if not df.empty and '_num_id' in df.columns]
+            combined_df = (pd.concat(frames, ignore_index=True)
+                           .drop_duplicates(subset=['_num_id'])
+                           if frames else pd.DataFrame())
 
-        all_combined_data = []
-        kw_ids  = set(s_df['_num_id'].dropna()) if not s_df.empty else set()
-        sem_ids = set(e_df['_num_id'].dropna()) if not e_df.empty else set()
+            all_combined_data = []
+            kw_ids  = set(s_df['_num_id'].dropna()) if not s_df.empty else set()
+            sem_ids = set(e_df['_num_id'].dropna()) if not e_df.empty else set()
 
-        if not combined_df.empty:
-            for _, row in combined_df.iterrows():
-                num_id = row.get('_num_id')
-                if num_id in kw_ids and perform_keyword_search:
-                    stype = "Keyword"
-                elif num_id in sem_ids and perform_semantic_search:
-                    stype = "Semantic"
-                else:
-                    continue
+            if not combined_df.empty:
+                for _, row in combined_df.iterrows():
+                    num_id = row.get('_num_id')
+                    if num_id in kw_ids and perform_keyword_search:
+                        stype = "Keyword"
+                    elif num_id in sem_ids and perform_semantic_search:
+                        stype = "Semantic"
+                    else:
+                        continue
 
-                tid  = str(row.get('text_id', str(num_id))).strip()
-                summ = str(row.get('summary', ''))
-                entry = triple_lookup(lincoln_dict, tid)
-                ft = entry.get('full_text') or ""
-                if not ft:
-                    if stype == "Keyword":
-                        ft = str(row.get('key_quote', row.get('quote', '')))
-                    elif user_query_embedding is not None:
-                        raw_ft = str(row.get('full_text', ''))
-                        segs   = segment_text(raw_ft)
-                        if segs:
-                            scores = compare_segments_parallel(segs, user_query_embedding)
-                            ft = max(scores, key=lambda x: x[1])[0] if scores else raw_ft[:500]
+                    tid  = str(row.get('text_id', str(num_id))).strip()
+                    summ = str(row.get('summary', ''))
+                    entry = triple_lookup(lincoln_dict, tid)
+                    ft = entry.get('full_text') or ""
+                    if not ft:
+                        if stype == "Keyword":
+                            ft = str(row.get('key_quote', row.get('quote', '')))
+                        elif user_query_embedding is not None:
+                            raw_ft = str(row.get('full_text', ''))
+                            segs   = segment_text(raw_ft)
+                            if segs:
+                                scores = compare_segments_parallel(segs, user_query_embedding)
+                                ft = max(scores, key=lambda x: x[1])[0] if scores else raw_ft[:500]
 
-                all_combined_data.append(
-                    yaml.dump({"search_type": stype, "text_id": tid,
-                               "summary": summ, "full_text": ft},
-                              allow_unicode=True, default_flow_style=False, sort_keys=False)
-                )
+                    all_combined_data.append(
+                        yaml.dump({"search_type": stype, "text_id": tid,
+                                   "summary": summ, "full_text": ft},
+                                  allow_unicode=True, default_flow_style=False, sort_keys=False)
+                    )
 
-        if all_combined_data:
-            with st.spinner("Ranking results with Cohere…"):
+            n_candidates = len(all_combined_data)
+            st.write(f"📊 **Step 3 of 5** — Reranking {n_candidates} candidate"
+                     f"{'s' if n_candidates != 1 else ''} with Cohere…")
+
+            if all_combined_data:
                 try:
                     reranked_resp = co.rerank(
                         model='rerank-v4.0-pro', query=user_query,
@@ -1252,18 +1361,23 @@ if submitted:
                             'Key Quote': r_ft,
                             'Relevance Score': r.relevance_score
                         })
+                    top_score = full_reranked_results[0]['Relevance Score'] if full_reranked_results else 0
+                    st.write(f"   ✅ Reranking complete — top relevance score: {top_score:.3f}.")
                 except Exception as e:
                     st.error(f"Reranking error: {e}")
                     st.exception(e)
 
-        formatted_input = format_reranked_for_nicolay(full_reranked_results, lincoln_dict)
-        if full_reranked_results:
-            log_reranking_results(reranking_results_logger,
-                                  pd.DataFrame(full_reranked_results), user_query)
+            formatted_input = format_reranked_for_nicolay(full_reranked_results, lincoln_dict)
+            if full_reranked_results:
+                log_reranking_results(reranking_results_logger,
+                                      pd.DataFrame(full_reranked_results), user_query)
 
-        # ── Nicolay model call ────────────────────────────────────────────────
-        if formatted_input:
-            with st.spinner("Nicolay is synthesising a response…"):
+            # ── Step 4: Hay analysis display note ────────────────────────────
+            st.write("🎩 **Step 4 of 5** — Hay's keyword analysis complete.")
+
+            # ── Step 5: Nicolay synthesis ─────────────────────────────────────
+            if formatted_input:
+                st.write("📜 **Step 5 of 5** — Nicolay is synthesising a response…")
                 nic_resp = client.chat.completions.create(
                     model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
                     messages=[
@@ -1277,13 +1391,21 @@ if submitted:
                     temperature=0, max_tokens=4000, top_p=1,
                     frequency_penalty=0, presence_penalty=0
                 )
-            nic_raw = nic_resp.choices[0].message.content
-            if not nic_raw:
-                st.error("Nicolay returned an empty response.")
-                st.stop()
-            model_output = _parse_model_json(nic_raw, "Nicolay v3")
-            if not model_output:
-                st.stop()
+                nic_raw = nic_resp.choices[0].message.content
+                if not nic_raw:
+                    st.error("Nicolay returned an empty response.")
+                    st.stop()
+                model_output = _parse_model_json(nic_raw, "Nicolay v3")
+                if not model_output:
+                    st.stop()
+                st.write("   ✅ Synthesis complete.")
+            else:
+                st.write("📜 **Step 5 of 5** — Skipped (no formatted input for Nicolay).")
+
+        else:
+            st.write("📊 **Steps 3–5** — Reranking and synthesis skipped.")
+
+        pipeline_status.update(label="✅ Pipeline complete — see results below.", state="complete")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # [U11] THREE-TAB RESULT LAYOUT

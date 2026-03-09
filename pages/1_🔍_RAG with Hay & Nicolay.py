@@ -333,22 +333,52 @@ def format_reranked_for_nicolay(reranked_results, lincoln_dict):
 def _norm_chunk(text):
     """
     Normalize corpus chunk text for quote matching.
-    Resolves literal \\n escape sequences and collapses whitespace so that
-    line-break differences don't cause false negatives.
+    Resolves both literal \\\\n escape sequences (common in parquet fields)
+    and real newlines, then collapses all whitespace.
     """
-    text = text.replace('\\n', ' ').replace('\r', ' ')
+    text = text.replace('\\n', ' ').replace('\n', ' ').replace('\r', ' ')
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
+
+
+def _sliding_window_verify(norm_quote, norm_chunk, min_window=30, step=10):
+    """
+    Sliding-window substring search.  Catches two failure modes that anchor
+    and exact checks miss:
+
+      1. Mid-sentence quoting — Nicolay starts a quote part-way through a
+         sentence (e.g. omits 'On the 5th of March…' preamble), so the
+         opening anchor is absent even though most of the text is verbatim.
+
+      2. Light paraphrasing / sentence condensation — Nicolay occasionally
+         drops a clause (e.g. 'throughout the whole of this unhappy contest')
+         while preserving the surrounding text verbatim.
+
+    Tries progressively shorter windows (60 → min_window chars) and returns
+    (True, matched_segment) on the first hit, (False, '') otherwise.
+    A min_window of 30 chars is long enough to be highly distinctive in
+    19th-century prose while still catching condensed openings.
+    """
+    q_len = len(norm_quote)
+    for window in range(min(60, q_len), min_window - 1, -step):
+        for start in range(0, q_len - window + 1, step):
+            segment = norm_quote[start:start + window]
+            if segment in norm_chunk:
+                return True, segment
+    return False, ''
 
 
 def verify_quote(key_quote, text_id, lincoln_dict):
     """
     Returns (verified: bool, method: str).
-    method ∈ {'exact', 'fuzzy', 'not_found', 'chunk_missing', 'no_quote'}
+    method ∈ {'exact', 'fuzzy', 'sliding', 'not_found', 'chunk_missing', 'no_quote'}
 
-    Normalization applied to both quote and chunk before comparison so that
-    escaped newlines (literal \\\\n sequences common in the Lincoln parquet)
-    do not produce false not_found results.
+    Four-stage verification:
+      1. Exact match after whitespace normalization.
+      2. Ellipsis-split fuzzy match (handles '...' elisions).
+      3. 60-character opening anchor match.
+      4. Sliding-window match (handles mid-sentence quoting and light
+         paraphrasing — the two remaining false-negative patterns).
     """
     if not key_quote or not key_quote.strip():
         return False, "no_quote"
@@ -357,22 +387,27 @@ def verify_quote(key_quote, text_id, lincoln_dict):
     if not chunk:
         return False, "chunk_missing"
 
-    norm_q     = _norm_chunk(key_quote)
-    norm_chunk = _norm_chunk(chunk)
+    norm_q  = _norm_chunk(key_quote)
+    norm_ch = _norm_chunk(chunk)
 
-    # Exact match (after normalization)
-    if norm_q in norm_chunk:
+    # Stage 1 — exact (normalized)
+    if norm_q in norm_ch:
         return True, "exact"
 
-    # Ellipsis-split fuzzy match
+    # Stage 2 — ellipsis split
     parts = [_norm_chunk(p) for p in key_quote.split("...") if p.strip()]
-    if len(parts) >= 2 and parts[0] in norm_chunk and parts[-1] in norm_chunk:
+    if len(parts) >= 2 and parts[0] in norm_ch and parts[-1] in norm_ch:
         return True, "fuzzy"
 
-    # 60-character anchor match
+    # Stage 3 — 60-char opening anchor
     anchor = norm_q[:60]
-    if len(anchor) > 20 and anchor in norm_chunk:
+    if len(anchor) > 20 and anchor in norm_ch:
         return True, "fuzzy"
+
+    # Stage 4 — sliding window (catches mid-sentence starts and light paraphrase)
+    found, _ = _sliding_window_verify(norm_q, norm_ch)
+    if found:
+        return True, "sliding"
 
     return False, "not_found"
 
@@ -388,9 +423,9 @@ def quote_badge_html(verified, method):
     if verified and method == "exact":
         return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
                 '✅ Quote verified — text confirmed present in Lincoln corpus</span>')
-    if verified and method == "fuzzy":
+    if verified and method in ("fuzzy", "sliding"):
         return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
-                '✅ Quote verified — partial match confirmed in Lincoln corpus</span>')
+                '✅ Quote verified — partial or condensed match confirmed in Lincoln corpus</span>')
     return ('<span style="color:#721c24;font-size:0.95em;font-weight:600;">'
             '⚠️ Quote not found in corpus chunk — possible fabrication or displacement</span>')
 
@@ -455,6 +490,13 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
             norm_direct = _norm_chunk(chunk)
             anchor = norm_q[:60]
             if len(anchor) > 20 and anchor in norm_direct:
+                verified.append((quote, tid, source))
+                found = True
+                break
+            # Sliding-window fallback against the reranked result's Key Quote
+            # field (catches mid-sentence starts and condensed paraphrases)
+            sw_found, _ = _sliding_window_verify(norm_q, norm_direct)
+            if sw_found:
                 verified.append((quote, tid, source))
                 found = True
                 break
@@ -1408,23 +1450,33 @@ if submitted:
         pipeline_status.update(label="✅ Pipeline complete — see results below.", state="complete")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # [U11] THREE-TAB RESULT LAYOUT
-    # Tab 1 — Answer   : Hay initial answer + Nicolay synthesis (primary view)
-    # Tab 2 — Sources  : Match Analysis cards + Retrieval Diagnostics
-    # Tab 3 — Pipeline : Keyword/Semantic search results + reranking metadata
-    #                    + full CoT expander
+    # [U11] THREE-TAB RESULT LAYOUT  (revised schema)
+    # Tab 1 — Answer & Sources : Hay + Nicolay synthesis + Match cards +
+    #                             Retrieval diagnostics (primary view)
+    # Tab 2 — Pipeline         : Keyword/Semantic search results + reranking
+    #                             metadata + full CoT trace
+    # Tab 3 — Model Feedback   : Nicolay's self-assessment and CoT sections
     # ═══════════════════════════════════════════════════════════════════════════
 
-    tab_answer, tab_sources, tab_pipeline = st.tabs([
-        "💬 Answer",
-        "📚 Sources & Matches",
+    tab_answer, tab_pipeline, tab_feedback = st.tabs([
+        "💬 Answer & Sources",
         "🔬 Pipeline",
+        "🤖 Model Feedback",
     ])
 
-    # ── Tab 1: Answer ──────────────────────────────────────────────────────────
+    # Precompute shared values needed across tabs
+    match_analysis  = model_output.get("Match Analysis", {})  if model_output else {}
+    qa_block        = model_output.get("User Query Analysis", {}) if model_output else {}
+    synth_raw       = qa_block.get("synthesis_assessment", "")
+    synth_badge, synth_tooltip = synthesis_type_badge(synth_raw)
+    synth_key_m     = re.search(r"Type\s*([1-5])", str(synth_raw), re.IGNORECASE)
+    synth_key       = synth_key_m.group(1) if synth_key_m else ""
+    fa_block        = model_output.get("FinalAnswer", {}) if model_output else {}
+
+    # ── Tab 1: Answer & Sources ────────────────────────────────────────────────
     with tab_answer:
 
-        # Hay initial response
+        # ── Hay initial response ──────────────────────────────────────────────
         st.subheader("Hay's Initial Analysis")
         st.caption(
             "Hay is a fine-tuned model that provides an initial answer and "
@@ -1439,16 +1491,6 @@ if submitted:
         if not perform_reranking or not model_output:
             st.info("Enable 'Response and Analysis' to see Nicolay's synthesis.")
         else:
-            match_analysis = model_output.get("Match Analysis", {})
-            qa_block  = model_output.get("User Query Analysis", {})
-            synth_raw = qa_block.get("synthesis_assessment", "")
-            synth_badge, synth_tooltip = synthesis_type_badge(synth_raw)
-
-            # Extract type key for history logging (computed here, used later)
-            synth_key_m = re.search(r"Type\s*([1-5])", str(synth_raw), re.IGNORECASE)
-            synth_key   = synth_key_m.group(1) if synth_key_m else ""
-            fa_block    = model_output.get("FinalAnswer", {})
-
             st.divider()
             st.subheader("Nicolay's Synthesis")
 
@@ -1456,9 +1498,9 @@ if submitted:
                 st.write(nicolay_model_explainer)
 
             # ── [U9] Multi-signal diagnostic panel ───────────────────────────
-            fa_text_for_diag = fa_block.get("Text", "")
             signals = compute_diagnostic_signals(
-                full_reranked_results, match_analysis, synth_raw, fa_text_for_diag
+                full_reranked_results, match_analysis,
+                synth_raw, fa_block.get("Text", "")
             )
             render_diagnostic_signals(signals)
 
@@ -1469,12 +1511,23 @@ if submitted:
                     if synth_tooltip:
                         st.caption(synth_tooltip)
                 st.markdown("")
-                # [U10] Render FinalAnswer with inline quote verification
                 render_final_answer_with_verification(
                     fa_block, full_reranked_results, lincoln_dict
                 )
 
-            # ── Log & history (done here so synth_key is in scope) ────────────
+            # ── Match Analysis cards directly below Nicolay response ──────────
+            st.divider()
+            if match_analysis:
+                render_match_analysis_cards(
+                    match_analysis, lincoln_dict, full_reranked_results
+                )
+            else:
+                st.info("No match analysis available for this query.")
+
+            # ── [U6] Retrieval diagnostics ────────────────────────────────────
+            render_retrieval_diagnostics(full_reranked_results, match_analysis)
+
+            # ── Log & history ─────────────────────────────────────────────────
             highlight_success = {}
             for mk, info in match_analysis.items():
                 v, _ = verify_quote(info.get("Key Quote", ""),
@@ -1485,33 +1538,11 @@ if submitted:
                 nicolay_data_logger, model_output, user_query,
                 highlight_success, initial_answer
             )
-            # [FIX] Dedup guard: only append if this query isn't already the
-            # most recent entry (prevents double-logging on Streamlit reruns)
             existing = st.session_state.get("query_history", [])
             if not existing or existing[-1].get("query") != user_query:
                 record_history(user_query, model_output, synth_key)
 
-    # ── Tab 2: Sources & Matches ───────────────────────────────────────────────
-    with tab_sources:
-        if not perform_reranking or not model_output:
-            st.info("Enable 'Response and Analysis' to see source match analysis.")
-        else:
-            match_analysis = model_output.get("Match Analysis", {})
-
-            # Match Analysis cards
-            if match_analysis:
-                render_match_analysis_cards(
-                    match_analysis, lincoln_dict, full_reranked_results
-                )
-            else:
-                st.info("No match analysis available for this query.")
-
-            st.divider()
-
-            # [U6] Retrieval diagnostics (ID normalisation fix applied above)
-            render_retrieval_diagnostics(full_reranked_results, match_analysis)
-
-    # ── Tab 3: Pipeline ────────────────────────────────────────────────────────
+    # ── Tab 2: Pipeline ────────────────────────────────────────────────────────
     with tab_pipeline:
 
         # Keyword search results
@@ -1577,7 +1608,7 @@ if submitted:
 
         st.divider()
 
-        # Reranking results and Nicolay CoT metadata
+        # Reranking
         if perform_reranking and full_reranked_results:
             st.markdown("### Ranked Search Results")
             with st.expander("**How Does This Work?: Relevance Ranking with Cohere's Rerank**"):
@@ -1603,6 +1634,7 @@ if submitted:
                 st.write("**Formatted input to Nicolay:**")
                 st.write(formatted_input)
 
+        # Full Chain-of-Thought trace (minus Model Feedback which is in its own tab)
         if perform_reranking and model_output:
             match_analysis_pipe = model_output.get("Match Analysis", {})
             with st.expander("**Analysis Metadata — Full Chain-of-Thought**"):
@@ -1610,7 +1642,6 @@ if submitted:
                     ("User Query Analysis",  "User Query Analysis"),
                     ("Initial Answer Review","Initial Answer Review"),
                     ("Meta Analysis",        "Meta Analysis"),
-                    ("Model Feedback",       "Model Feedback"),
                 ]:
                     block = model_output.get(section, {})
                     if block:
@@ -1627,3 +1658,53 @@ if submitted:
 
                 st.write("**Full Model Output (JSON):**")
                 st.write(nic_raw)
+
+    # ── Tab 3: Model Feedback ──────────────────────────────────────────────────
+    with tab_feedback:
+        if not perform_reranking or not model_output:
+            st.info("Enable 'Response and Analysis' to see model feedback.")
+        else:
+            mf = model_output.get("Model Feedback", {})
+            if not mf:
+                st.info("No model feedback available for this query.")
+            else:
+                st.subheader("Nicolay's Self-Assessment")
+                st.caption(
+                    "This section surfaces Nicolay's own evaluation of its response: "
+                    "the quality of retrieval, what evidence is missing, and suggestions "
+                    "for improving the query or the corpus coverage."
+                )
+
+                # Retrieval Quality Notes
+                rqn = mf.get("Retrieval Quality Notes", mf.get("Response Effectiveness", ""))
+                if rqn:
+                    with st.container(border=True):
+                        st.markdown("**Retrieval Quality Notes**")
+                        st.markdown(rqn)
+
+                # Critical Missing Evidence Flag
+                cmef = mf.get("Critical Missing Evidence Flag", "")
+                if cmef:
+                    with st.container(border=True):
+                        st.markdown("**Critical Missing Evidence Flag**")
+                        st.warning(cmef)
+
+                # Suggested Improvements
+                si = mf.get("Suggested Improvements", mf.get("Suggestions for Improvement", ""))
+                if si:
+                    with st.container(border=True):
+                        st.markdown("**Suggested Improvements**")
+                        st.markdown(si)
+
+                # Any remaining fields not already displayed
+                displayed = {
+                    "Retrieval Quality Notes", "Response Effectiveness",
+                    "Critical Missing Evidence Flag",
+                    "Suggested Improvements", "Suggestions for Improvement"
+                }
+                extras = {k: v for k, v in mf.items() if k not in displayed}
+                if extras:
+                    with st.expander("Additional Model Feedback Fields"):
+                        for k, v in extras.items():
+                            st.markdown(f"**{k}:** {v}")
+

@@ -1102,8 +1102,12 @@ def _compute_overall_confidence(
 
     Low  — any unverified quotes, OR calibration warning, OR ROUGE < 0.25
            for Type 1/2 (direct retrieval with weak grounding).
-    High — no unverified quotes AND no calibration warning AND
-           (ROUGE ≥ 0.45 for Types 1/2, or ROUGE ≥ 0.30 for Types 4/5).
+    High — type-specific:
+           Types 1/2: no unverified quotes, no calib warning, ROUGE ≥ 0.45
+           Types 4/5: no unverified quotes, no calib warning, ROUGE ≥ 0.30
+           Type 3:    no unverified quotes, no calib warning
+                      (ROUGE thresholds don't apply — low ROUGE is expected
+                      when the response correctly reports corpus absence)
     Medium — everything else.
 
     Returns (rating: str, icon: str, color: str, explanation: str).
@@ -1112,6 +1116,7 @@ def _compute_overall_confidence(
     calib_warning     = reranker_data.get('calibration_warning', False) if reranker_data else False
     r1                = rouge_data.get('rouge1', 0.0) if rouge_data else 0.0
     direct_type       = synth_type_num in (1, 2)
+    absence_type      = synth_type_num == 3
     synthesis_type    = synth_type_num in (4, 5)
 
     # ── Low conditions ────────────────────────────────────────────────────────
@@ -1136,6 +1141,19 @@ def _compute_overall_confidence(
                 "evidence. Treat quoted material with particular caution.")
 
     # ── High conditions ───────────────────────────────────────────────────────
+
+    # Type 3 — absence/partial: ROUGE thresholds do not apply.
+    # A well-executed absence response correctly reports what the corpus
+    # lacks; low ROUGE is expected and healthy, not a warning sign.
+    if absence_type and not has_unverified and not calib_warning:
+        return ("high", "✅", "#d1e7dd",
+                "Nicolay correctly identified the limits of the corpus on this "
+                "query. The response is transparent about what the Lincoln texts "
+                "don't directly address, and any quoted passages are verified. "
+                "This is the expected, well-calibrated behavior for a question "
+                "that falls outside or at the edges of the corpus's scope.")
+
+    # Types 1/2 and 4/5 — ROUGE threshold required
     rouge_threshold = 0.45 if direct_type else 0.30
     rouge_ok        = r1 >= rouge_threshold
     if not has_unverified and not calib_warning and rouge_ok:
@@ -1155,7 +1173,10 @@ def _compute_overall_confidence(
     if len(displaced_quotes) > 0:
         parts.append("one or more quotes appear in the right document but "
                      "were drawn from a different passage than cited")
-    if direct_type and 0.25 <= r1 < 0.45:
+    if absence_type:
+        parts.append("retrieval was partial — the corpus may contain related "
+                     "material but Nicolay flagged incomplete coverage")
+    elif direct_type and 0.25 <= r1 < 0.45:
         parts.append("the response only partially tracks the retrieved text — "
                      "some content may go beyond what the corpus directly supports")
     if not parts:

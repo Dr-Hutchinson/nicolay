@@ -1779,7 +1779,10 @@ if submitted:
     # ── Hay model call ────────────────────────────────────────────────────────
     with st.spinner("Hay is analysing your query…"):
         hay_resp = client.chat.completions.create(
-            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            # Hay model v.3
+            #model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            # Hay model v.4
+            model = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
             messages=[{"role":"system","content":keyword_prompt},
                       {"role":"user","content":user_query}],
             temperature=0, max_tokens=800, top_p=1,
@@ -2355,4 +2358,3 @@ if submitted:
                     with st.expander("Additional Model Feedback Fields"):
                         for k, v in extras.items():
                             st.markdown(f"**{k}:** {v}")
-

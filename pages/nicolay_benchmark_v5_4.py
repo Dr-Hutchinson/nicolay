@@ -230,7 +230,12 @@ st.markdown("""
 # MODEL CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u"
+# Hay 3.0 model
+#HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u"
+
+# Hay 4.0 model
+HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt"
+
 NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt"
 COHERE_RERANK_MODEL = "rerank-v4.0-pro"
 RERANK_K = 5
@@ -1979,7 +1984,7 @@ def run_pipeline_for_query(
     # corpus_for_verify was built at step 2b above (new 772-chunk corpus).
     status("✅ Verifying quotes...")
 
-    
+
     # DEBUG: Nicolay citation IDs vs corpus keys (catches ID drift instantly)
     try:
         _cited_ids = _extract_cited_ids(nicolay_output)

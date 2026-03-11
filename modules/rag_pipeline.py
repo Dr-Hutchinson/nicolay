@@ -155,7 +155,10 @@ def run_rag_pipeline(
             {"role": "user", "content": user_query}
         ]
         response = openai_client.chat.completions.create(
-            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            # Hay v.3 model
+            #model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            # Hay v. 4 model
+            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
             messages=messages_for_model,
             temperature=0,
             max_tokens=800  # Increased for v3 query_assessment field

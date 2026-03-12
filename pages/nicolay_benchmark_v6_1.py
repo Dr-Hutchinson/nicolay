@@ -2815,9 +2815,10 @@ def main():
                     st.caption("**Corpus grounding (lexical overlap)**")
                 with _col_rb:
                     if _conf_r1 is not None:
+                        _conf_r2_str = f"{_conf_r2:.3f}" if _conf_r2 is not None else "n/a"
                         st.markdown(
                             f"ROUGE-1: **{_conf_r1:.3f}** &nbsp;&nbsp; "
-                            f"ROUGE-2: **{_conf_r2:.3f if _conf_r2 else 'n/a'}**",
+                            f"ROUGE-2: **{_conf_r2_str}**",
                             unsafe_allow_html=True,
                         )
                         if _conf_synth in (1, 2):

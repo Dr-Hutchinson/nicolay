@@ -2034,7 +2034,10 @@ if submitted:
             if formatted_input:
                 st.write("📜 **Step 5 of 5** — Nicolay is synthesising a response…")
                 nic_resp = client.chat.completions.create(
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+                    # nicolay_v3
+                    #model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+                    # nicolay_v4
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
                     messages=[
                         {"role":"system","content":response_prompt},
                         {"role":"user","content":(

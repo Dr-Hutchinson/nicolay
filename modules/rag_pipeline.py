@@ -310,7 +310,12 @@ def run_rag_pipeline(
                 ]
 
                 second_model_response = openai_client.chat.completions.create(
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+                    # Nicolay v.3
+                    #model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+
+                    # Nicolay v.4
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
+
                     messages=nicolay_messages,
                     temperature=0,
                     max_tokens=4000  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers

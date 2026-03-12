@@ -236,7 +236,13 @@ st.markdown("""
 # Hay 4.0 model
 HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt"
 
-NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt"
+# Nicolay 3.0 model
+#NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt"
+
+# Nicolay 4.0 model
+NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5"
+
+
 COHERE_RERANK_MODEL = "rerank-v4.0-pro"
 RERANK_K = 5
 

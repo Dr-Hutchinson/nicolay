@@ -1560,6 +1560,19 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
 
     hay_out = qresult.get("hay_output", {})
 
+    # Derive the active model IDs from the stamped model_config_tag in qresult.
+    # This is the ground truth for what models actually ran — reading the global
+    # HAY_MODEL / NICOLAY_MODEL here would log the *current* sidebar selection,
+    # which may differ from what was active when this query executed (e.g. after
+    # a pair switch between runs or on Cloud where globals reset on rerun).
+    _tag = qresult.get("model_config_tag", "")
+    def _extract_model_from_tag(tag, key):
+        import re as _re_tag
+        m = _re_tag.search(rf"{key}=([^|]+)", tag)
+        return m.group(1) if m else ""
+    _hay_model_logged     = _extract_model_from_tag(_tag, "hay")     or str(HAY_MODEL)
+    _nicolay_model_logged = _extract_model_from_tag(_tag, "nicolay") or str(NICOLAY_MODEL)
+
     # Build record — do NOT include 'Timestamp' here; DataLogger adds it automatically.
     # All values must be JSON-serializable primitives (str, int, float, bool) because
     # pygsheets cannot write Python objects directly to cells.
@@ -1567,10 +1580,10 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
         "QueryID": str(qresult.get("id", "")),
         "Query": str(qresult.get("query", "")),
         "Category": str(qresult.get("category", "")),
-        # HV-5: Model configuration tag
-        "ModelConfigTag": str(qresult.get("model_config_tag", "")),
-        "HayModel": str(HAY_MODEL),
-        "NicolayModel": str(NICOLAY_MODEL),
+        # HV-5: Model configuration tag — stamped at pipeline start, source of truth
+        "ModelConfigTag": str(_tag),
+        "HayModel": _hay_model_logged,
+        "NicolayModel": _nicolay_model_logged,
         # Pipeline reliability
         "PipelineAttempts": int(qresult.get("pipeline_attempts", 1) or 1),
         "PipelineRetryLog": str(qresult.get("pipeline_retry_log", "") or ""),

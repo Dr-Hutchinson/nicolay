@@ -163,6 +163,149 @@ import nltk
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction, corpus_bleu
 from rouge_score import rouge_scorer
 
+# ── U12 confidence signals (ported from main app, pure computation) ────────────────────
+
+def _u12_extract_synth_type_num(synthesis_assessment_str):
+    """Extract integer synthesis type (1-5) from Nicolay's synthesis_assessment field."""
+    m = re.search(r'Type\s+(\d)', str(synthesis_assessment_str), re.IGNORECASE)
+    return int(m.group(1)) if m else 3
+
+
+def _u12_compute_corpus_grounding(final_answer_text, reranked_list, top_n=3):
+    """ROUGE-1/2 between FinalAnswer and top-N reranked chunk Key Quote text."""
+    if not final_answer_text or not reranked_list:
+        return None
+    ref_chunks = reranked_list[:top_n]
+    reference_text = " ".join(
+        r.get("Key Quote", "") or r.get("full_text", "") or r.get("Full Text", "")
+        for r in ref_chunks
+    ).strip()
+    if not reference_text:
+        return None
+    try:
+        scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2"], use_stemmer=True)
+        s = scorer.score(reference_text, final_answer_text)
+        return {
+            "rouge1": round(s["rouge1"].fmeasure, 4),
+            "rouge2": round(s["rouge2"].fmeasure, 4),
+        }
+    except Exception:
+        return None
+
+
+def _u12_analyze_reranker_scores(reranked_list):
+    """Score ceiling, spread, source diversity, calibration warning (flat+high = bad)."""
+    if not reranked_list:
+        return None
+    scores = [
+        r.get("Relevance Score", r.get("relevance_score", 0))
+        for r in reranked_list[:5]
+    ]
+    scores = [s for s in scores if s is not None]
+    if not scores:
+        return None
+    sources = [r.get("Source", "") or r.get("source", "") for r in reranked_list[:5]]
+    n_distinct = len(set(s for s in sources if s))
+    max_s  = max(scores)
+    min_s  = min(scores)
+    spread = round(max_s - min_s, 4)
+    calib_warning = (max_s >= 0.70 and spread <= 0.08)
+    return {
+        "max_score":          round(max_s, 4),
+        "min_score":          round(min_s, 4),
+        "spread":             spread,
+        "n_distinct_sources": n_distinct,
+        "calibration_warning": calib_warning,
+    }
+
+
+def _u12_compute_overall_confidence(
+    verified_quotes, displaced_quotes, unverified_quotes,
+    rouge_data, reranker_data, synth_type_num
+):
+    """Return (rating, icon, explanation): 'high' / 'medium' / 'low'."""
+    has_unverified = len(unverified_quotes) > 0
+    calib_warning  = reranker_data.get("calibration_warning", False) if reranker_data else False
+    r1             = rouge_data.get("rouge1", 0.0) if rouge_data else 0.0
+    direct_type    = synth_type_num in (1, 2)
+    absence_type   = synth_type_num == 3
+
+    if has_unverified:
+        return ("low", "🔴",
+                "One or more quotes could not be verified against the corpus.")
+    if calib_warning:
+        return ("low", "🔴",
+                "High-confidence retrieval with flat spread — corpus may lack ideal documents.")
+    if direct_type and r1 < 0.25:
+        return ("low", "🔴",
+                "Type 1/2 response with weak corpus grounding (ROUGE-1 < 0.25).")
+    if absence_type and not has_unverified and not calib_warning:
+        return ("high", "✅",
+                "Absence response: corpus limits correctly identified, quotes verified.")
+    rouge_threshold = 0.45 if direct_type else 0.30
+    if not has_unverified and not calib_warning and r1 >= rouge_threshold:
+        return ("high", "✅",
+                "All quotes verified and response closely tracks retrieved sources.")
+    return ("medium", "⚠️",
+            "Mixed signals — review source passages before relying on specific claims.")
+
+
+def compute_confidence_signals(qresult):
+    """
+    Compute all U12 confidence signals from a completed qresult dict.
+    Returns a flat dict of confidence_* fields ready for storage in results/CSV/Sheets.
+
+    Note: ROUGE is computed against Key Quotes recovered from Match Analysis if available.
+    A richer recomputation with full chunk text is done in the display panel (Tab 1).
+    """
+    final_text   = qresult.get("nicolay_final_answer_text", "") or ""
+    synth_raw    = qresult.get("nicolay_synthesis_assessment_raw", "") or ""
+    synth_type   = _u12_extract_synth_type_num(synth_raw)
+
+    qv_list    = qresult.get("quote_verification", [])
+    verified   = [q for q in qv_list if q.get("outcome") == "verified"]
+    displaced  = [q for q in qv_list if q.get("outcome") in ("displacement", "approximate_displacement")]
+    unverified = [q for q in qv_list if q.get("outcome") == "fabrication"]
+
+    # Build a thin reranked_list from stored scores for reranker analysis
+    reranker_scores = qresult.get("reranker_scores", [])[:5]
+    retrieved_ids   = qresult.get("retrieved_doc_ids", [])[:5]
+    nicolay_out     = qresult.get("nicolay_output", {}) or {}
+    match_analysis  = nicolay_out.get("Match Analysis", {}) if isinstance(nicolay_out, dict) else {}
+
+    reranked_proxy = []
+    for s, tid in zip(reranker_scores, retrieved_ids):
+        kq = ""
+        if isinstance(match_analysis, dict):
+            for mv in match_analysis.values():
+                if isinstance(mv, dict):
+                    mid = _extract_int_from_text_id(mv.get("Text ID", ""))
+                    if mid == tid:
+                        kq = mv.get("Key Quote", "") or ""
+                        break
+        reranked_proxy.append({"Relevance Score": s, "Source": "", "Key Quote": kq})
+
+    rouge_data    = _u12_compute_corpus_grounding(final_text, reranked_proxy) if final_text else None
+    reranker_data = _u12_analyze_reranker_scores(reranked_proxy)
+
+    rating, icon, explanation = _u12_compute_overall_confidence(
+        verified, displaced, unverified, rouge_data, reranker_data, synth_type
+    )
+
+    return {
+        "confidence_rating":        rating,
+        "confidence_icon":          icon,
+        "confidence_explanation":   explanation,
+        "confidence_synth_type":    synth_type,
+        "confidence_rouge1":        (rouge_data or {}).get("rouge1"),
+        "confidence_rouge2":        (rouge_data or {}).get("rouge2"),
+        "confidence_calib_warning": (reranker_data or {}).get("calibration_warning", False),
+        "confidence_spread":        (reranker_data or {}).get("spread"),
+        "confidence_n_sources":     (reranker_data or {}).get("n_distinct_sources"),
+        "confidence_max_score":     (reranker_data or {}).get("max_score"),
+    }
+
+
 # API clients
 import openai
 import cohere
@@ -227,21 +370,36 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MODEL CONSTANTS
+# MODEL PAIRS REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
+# Each entry maps a display label to its hay/nicolay model IDs and a short
+# label tag used in CSV/Sheets ModelConfigTag values.
+# Add new pairs here as additional fine-tuning iterations complete.
 
-# Hay 3.0 model
-#HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u"
+MODEL_PAIRS = {
+    "H3N3 — Hay v3 + Nicolay v3 (baseline)": {
+        "hay":     "ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+        "nicolay": "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+        "label":   "H3N3",
+    },
+    "H4N3 — Hay v4 + Nicolay v3": {
+        "hay":     "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
+        "nicolay": "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+        "label":   "H4N3",
+    },
+    "H4N4 — Hay v4 + Nicolay v4": {
+        "hay":     "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
+        "nicolay": "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
+        "label":   "H4N4",
+    },
+}
 
-# Hay 4.0 model
-HAY_MODEL    = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt"
-
-# Nicolay 3.0 model
-#NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt"
-
-# Nicolay 4.0 model
-NICOLAY_MODEL = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5"
-
+# Default active pair — overridden by sidebar selection at runtime.
+# These module-level variables remain the single source of truth used by
+# run_pipeline_for_query(), log_query_to_sheets(), and empty_results().
+_DEFAULT_PAIR_KEY = "H3N3 — Hay v3 + Nicolay v3 (baseline)"
+HAY_MODEL     = MODEL_PAIRS[_DEFAULT_PAIR_KEY]["hay"]
+NICOLAY_MODEL = MODEL_PAIRS[_DEFAULT_PAIR_KEY]["nicolay"]
 
 COHERE_RERANK_MODEL = "rerank-v4.0-pro"
 RERANK_K = 5
@@ -1482,6 +1640,14 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
         "RubricEpistemicCalibration": str(qresult.get("rubric_epistemic_calibration", "") if qresult.get("rubric_epistemic_calibration") is not None else ""),
         "RubricTotal": str(qresult.get("rubric_total", "") if qresult.get("rubric_total") is not None else ""),
         "EvaluatorNotes": str(qresult.get("evaluator_notes", "")),
+        # U12 confidence signals (v5.5)
+        "ConfidenceRating":       str(qresult.get("confidence_rating", "") or ""),
+        "ConfidenceRouge1":       float(qresult.get("confidence_rouge1") or 0),
+        "ConfidenceRouge2":       float(qresult.get("confidence_rouge2") or 0),
+        "ConfidenceCalibWarning": str(qresult.get("confidence_calib_warning", False)),
+        "ConfidenceSpread":       float(qresult.get("confidence_spread") or 0),
+        "ConfidenceNSources":     int(qresult.get("confidence_n_sources") or 0),
+        "ConfidenceMaxScore":     float(qresult.get("confidence_max_score") or 0),
     }
 
     try:
@@ -1531,6 +1697,10 @@ def init_benchmark_sheet_headers(gc_client):
         "RubricFactualAccuracy", "RubricCitationAccuracy",
         "RubricHistoriographicalDepth", "RubricEpistemicCalibration",
         "RubricTotal", "EvaluatorNotes",
+        # U12 confidence signals (v5.5)
+        "ConfidenceRating", "ConfidenceRouge1", "ConfidenceRouge2",
+        "ConfidenceCalibWarning", "ConfidenceSpread", "ConfidenceNSources",
+        "ConfidenceMaxScore",
     ]
     try:
         sh = gc_client.open_by_key("1uQx9ERAHL0EKaI5QEpfywGxS40TpQ0Ao0HLfJe74auo").sheet1
@@ -2041,6 +2211,24 @@ def run_pipeline_for_query(
     result["critical_missing_evidence"] = qdef.get("critical_missing_evidence")
     result["watchlist"] = qdef.get("watchlist", [])
 
+    # ── 9. CONFIDENCE SIGNALS ───────────────────────────────────────────────────────────────────────────
+    # U12-equivalent five-signal confidence assessment. ROUGE is computed
+    # against Key Quote text recovered from Nicolay's Match Analysis; a
+    # richer recomputation runs in the Tab 1 display panel.
+    status("📊 Computing confidence signals...")
+    try:
+        conf = compute_confidence_signals(result)
+        result.update(conf)
+    except Exception as _conf_err:
+        result.update({
+            "confidence_rating": "unknown", "confidence_icon": "?",
+            "confidence_explanation": f"Signal computation failed: {_conf_err}",
+            "confidence_synth_type": None, "confidence_rouge1": None,
+            "confidence_rouge2": None, "confidence_calib_warning": False,
+            "confidence_spread": None, "confidence_n_sources": None,
+            "confidence_max_score": None,
+        })
+
     status(f"✓ {qid} complete")
     return result
 
@@ -2193,8 +2381,27 @@ def main():
                 st.warning(f"⚠️ Sheets init failed: {e}")
 
         st.markdown("---")
+        st.markdown("### 🤖 Model Pair")
+        selected_pair_key = st.radio(
+            "Active model pair",
+            list(MODEL_PAIRS.keys()),
+            index=0,
+            label_visibility="collapsed",
+        )
+        _pair = MODEL_PAIRS[selected_pair_key]
+        # Update module-level variables so run_pipeline_for_query() picks up the selection.
+        import sys as _sys_mp
+        _mod_mp = _sys_mp.modules[__name__]
+        _mod_mp.HAY_MODEL     = _pair["hay"]
+        _mod_mp.NICOLAY_MODEL = _pair["nicolay"]
+        st.caption(
+            f"🤖 **Hay:** `{_pair['hay'].split(':')[-2]}`  \n"
+            f"📚 **Nicolay:** `{_pair['nicolay'].split(':')[-2]}`"
+        )
+
+        st.markdown("---")
         st.markdown("### 📋 Run Mode")
-        run_mode = st.radio("Mode", ["Single Query", "Full Benchmark", "Resume from Checkpoint"],
+        run_mode = st.radio("Mode", ["Single Query", "Full Benchmark", "Resume from Checkpoint", "Compare Pair"],
                             label_visibility="collapsed")
 
         st.markdown("---")
@@ -2264,6 +2471,21 @@ def main():
             st.info(f"Pending: {len(pending)} queries — {', '.join(pending) if pending else 'none'}")
             if pending and st.button("▶️ Resume", type="primary"):
                 do_run = "resume"
+        elif run_mode == "Compare Pair":
+            _cp_baseline_key = list(MODEL_PAIRS.keys())[0]
+            _cp_compare_key  = selected_pair_key
+            _cp_baseline_lbl = MODEL_PAIRS[_cp_baseline_key]["label"]
+            _cp_compare_lbl  = MODEL_PAIRS[_cp_compare_key]["label"]
+            if _cp_baseline_key == _cp_compare_key:
+                st.warning("⚠️ Select a different pair than the baseline (H3N3) to compare.")
+            else:
+                st.info(
+                    f"Runs **{selected_query_id}** through **{_cp_baseline_lbl}** (baseline) "
+                    f"and **{_cp_compare_lbl}** (selected) back-to-back, "
+                    f"then shows a side-by-side comparison."
+                )
+            if st.button(f"▶️ Compare {selected_query_id}", type="primary"):
+                do_run = "compare"
 
         # Validate prerequisites — run_rag_pipeline loads its own data, so we
         # only need to verify API keys are present before dispatching.
@@ -2283,6 +2505,87 @@ def main():
                     queries_to_run = BENCHMARK_QUERIES
                 elif do_run == "resume":
                     queries_to_run = [q for q in BENCHMARK_QUERIES if q["id"] not in results.get("queries", {})]
+                elif do_run == "compare":
+                    # Compare Pair: run selected query through baseline (H3N3) and the
+                    # selected pair, then display side-by-side. Does not write to the
+                    # main results store — stored separately under session_state.
+                    import sys as _sys_cp
+                    _mod_cp = _sys_cp.modules[__name__]
+                    _cp_baseline_key2 = list(MODEL_PAIRS.keys())[0]
+                    _cp_compare_key2  = selected_pair_key
+                    _compare_results  = {}
+                    _compare_progress = st.progress(0)
+                    _compare_status   = st.empty()
+
+                    for _cp_step, (_cp_pk, _cp_cfg) in enumerate([
+                        (_cp_baseline_key2, MODEL_PAIRS[_cp_baseline_key2]),
+                        (_cp_compare_key2,  MODEL_PAIRS[_cp_compare_key2]),
+                    ]):
+                        _compare_status.info(
+                            f"🔄 Running {selected_query_id} with "
+                            f"{_cp_cfg['label']} ({_cp_step + 1}/2)…"
+                        )
+                        _mod_cp.HAY_MODEL     = _cp_cfg["hay"]
+                        _mod_cp.NICOLAY_MODEL = _cp_cfg["nicolay"]
+                        with st.spinner(f"Processing {selected_query_id} [{_cp_cfg['label']}]…"):
+                            _cp_qr = run_pipeline_for_query(
+                                qdef,
+                                openai_api_key=openai_key,
+                                cohere_api_key=cohere_key,
+                                corpus_file=corpus_file,
+                                status_cb=lambda msg: _compare_status.info(msg)
+                            )
+                        _cp_qr["_pair_label"] = _cp_cfg["label"]
+                        _compare_results[_cp_cfg["label"]] = _cp_qr
+                        _compare_progress.progress((_cp_step + 1) / 2)
+
+                    # Restore selected pair
+                    _mod_cp.HAY_MODEL     = MODEL_PAIRS[selected_pair_key]["hay"]
+                    _mod_cp.NICOLAY_MODEL = MODEL_PAIRS[selected_pair_key]["nicolay"]
+                    st.session_state[f"_compare_{selected_query_id}"] = _compare_results
+                    _compare_status.success(f"✅ Compare complete — {selected_query_id}")
+
+                    # Side-by-side display
+                    st.markdown("---")
+                    st.markdown("### 🔬 Side-by-Side Comparison")
+                    _cp_labels = list(_compare_results.keys())
+                    _cp_cols   = st.columns(len(_cp_labels))
+                    for _cpc, _cpl in zip(_cp_cols, _cp_labels):
+                        _cr = _compare_results[_cpl]
+                        with _cpc:
+                            st.markdown(f"#### {_cpl}")
+                            _cr_ci  = _cr.get("confidence_icon", "?")
+                            _cr_cl  = (_cr.get("confidence_rating") or "unknown").capitalize()
+                            st.markdown(f"**Confidence:** {_cr_ci} {_cr_cl}")
+                            _cr_t   = _cr.get("nicolay_synthesis_type_raw", "?")
+                            _cr_p5  = _cr.get("precision_at_5", 0) or 0
+                            _cr_r5  = _cr.get("recall_at_5", 0) or 0
+                            _cr_fab = _cr.get("quotes_fabricated_count", 0) or 0
+                            _cr_dis = _cr.get("quotes_displaced_count", 0) or 0
+                            _cr_r1  = _cr.get("confidence_rouge1")
+                            _cr_cw  = _cr.get("confidence_calib_warning", False)
+                            st.markdown(
+                                f"**Type:** `{_cr_t}` &nbsp;·&nbsp; "
+                                f"**P@5:** {_cr_p5:.2f} &nbsp;·&nbsp; **R@5:** {_cr_r5:.2f}",
+                                unsafe_allow_html=True
+                            )
+                            _fab_icon = "🚨" if _cr_fab > 0 else "✅"
+                            st.markdown(
+                                f"{_fab_icon} **Fabrications:** {_cr_fab} &nbsp;·&nbsp; "
+                                f"**Displaced:** {_cr_dis}",
+                                unsafe_allow_html=True
+                            )
+                            if _cr_r1 is not None:
+                                st.markdown(f"**ROUGE-1:** {_cr_r1:.3f}")
+                            if _cr_cw:
+                                st.warning("⚠️ Calibration warning: flat spread")
+                            with st.expander("FinalAnswer", expanded=True):
+                                _cr_fa = _cr.get("nicolay_final_answer_text", "") or ""
+                                st.markdown(_cr_fa[:1500] + ("…" if len(_cr_fa) > 1500 else ""))
+                            with st.expander("Hay Initial Answer"):
+                                st.markdown(_cr.get("hay_initial_answer", "") or "")
+
+                    queries_to_run = []   # skip normal loop
                 else:
                     queries_to_run = [qdef]
 
@@ -2423,7 +2726,183 @@ def main():
                         st.code(retry_log)
 
 
-            # Nicolay output
+            # ── Response Confidence Summary (U12) ──────────────────────────────────────────────────
+            # Same five-signal panel as the main app.  ROUGE is recomputed here
+            # using Key Quote text recovered from Match Analysis (richer than the
+            # proxy stored in qresult, which is based on reranker scores alone).
+            _conf_rating   = qr.get("confidence_rating", "unknown")
+            _conf_icon     = qr.get("confidence_icon", "?")
+            _conf_explain  = qr.get("confidence_explanation", "")
+            _conf_synth    = qr.get("confidence_synth_type", 3) or 3
+            _conf_calib    = qr.get("confidence_calib_warning", False)
+            _conf_spread   = qr.get("confidence_spread")
+            _conf_nsrc     = qr.get("confidence_n_sources")
+            _conf_maxscore = qr.get("confidence_max_score")
+            _conf_r1_stored = qr.get("confidence_rouge1")
+            _conf_r2_stored = qr.get("confidence_rouge2")
+
+            _qv_list      = qr.get("quote_verification", [])
+            _verified_q   = [q for q in _qv_list if q.get("outcome") == "verified"]
+            _displaced_q  = [q for q in _qv_list if q.get("outcome") in
+                              ("displacement", "approximate_displacement")]
+            _unverified_q = [q for q in _qv_list if q.get("outcome") == "fabrication"]
+
+            # Attempt to recompute ROUGE with richer chunk text from Match Analysis
+            _final_for_rouge = qr.get("nicolay_final_answer_text", "") or ""
+            _stored_scores   = qr.get("reranker_scores", [])[:5]
+            _stored_ids      = qr.get("retrieved_doc_ids", [])[:5]
+            _ma_for_rouge    = (qr.get("nicolay_output") or {}).get("Match Analysis", {})
+            _rp_for_rouge    = []
+            for _rs, _rid in zip(_stored_scores, _stored_ids):
+                _kq = ""
+                if isinstance(_ma_for_rouge, dict):
+                    for _mv in _ma_for_rouge.values():
+                        if isinstance(_mv, dict) and _extract_int_from_text_id(
+                                _mv.get("Text ID", "")) == _rid:
+                            _kq = _mv.get("Key Quote", "") or ""
+                            break
+                _rp_for_rouge.append({"Relevance Score": _rs, "Source": "", "Key Quote": _kq})
+
+            _rouge_live = _u12_compute_corpus_grounding(_final_for_rouge, _rp_for_rouge)
+            _conf_r1 = (_rouge_live or {}).get("rouge1", _conf_r1_stored)
+            _conf_r2 = (_rouge_live or {}).get("rouge2", _conf_r2_stored)
+
+            _conf_label = _conf_rating.capitalize() if _conf_rating else "Unknown"
+            with st.expander(
+                f"📊 Response Confidence: {_conf_icon} {_conf_label}",
+                expanded=False
+            ):
+                st.markdown(f"**Overall confidence: {_conf_icon} {_conf_label}**")
+                if _conf_explain:
+                    st.markdown(_conf_explain)
+                st.divider()
+
+                # Signal 1: Quote verification
+                _total_q = len(_verified_q) + len(_displaced_q) + len(_unverified_q)
+                _col_qa, _col_qb = st.columns([1, 2])
+                with _col_qa:
+                    st.caption("**Quote verification**")
+                with _col_qb:
+                    if _total_q == 0:
+                        st.markdown("⬜ No direct quotes in this response")
+                        st.caption("Nicolay did not include any directly quoted text.")
+                    elif not _unverified_q and not _displaced_q:
+                        st.markdown(f"✅ {_total_q}/{_total_q} quotes verified")
+                        st.caption("Every quoted passage confirmed present in the Lincoln corpus.")
+                    elif _unverified_q:
+                        st.markdown(
+                            f"🔴 {len(_verified_q)}/{_total_q} verified — "
+                            f"**{len(_unverified_q)} not found in corpus**"
+                        )
+                        st.caption(
+                            "One or more quoted passages could not be located in the Lincoln corpus. "
+                            "These may be fabricated, misremembered, or from a source outside the collection."
+                        )
+                    else:
+                        st.markdown(
+                            f"🔀 {len(_verified_q)}/{_total_q} verified — "
+                            f"**{len(_displaced_q)} displaced**"
+                        )
+                        st.caption(
+                            "Displaced quote appears in the correct document but was drawn "
+                            "from a different passage than cited."
+                        )
+                st.divider()
+
+                # Signal 2: Corpus grounding (ROUGE)
+                _col_ra, _col_rb = st.columns([1, 2])
+                with _col_ra:
+                    st.caption("**Corpus grounding (lexical overlap)**")
+                with _col_rb:
+                    if _conf_r1 is not None:
+                        st.markdown(
+                            f"ROUGE-1: **{_conf_r1:.3f}** &nbsp;&nbsp; "
+                            f"ROUGE-2: **{_conf_r2:.3f if _conf_r2 else 'n/a'}**",
+                            unsafe_allow_html=True,
+                        )
+                        if _conf_synth in (1, 2):
+                            _rouge_lbl = ("✅ Closely tracks retrieved sources" if _conf_r1 >= 0.45
+                                          else "⚠️ Low grounding for direct retrieval type" if _conf_r1 < 0.25
+                                          else "Moderate grounding — some inference beyond sources")
+                        elif _conf_synth == 3:
+                            _rouge_lbl = "Partial grounding expected for absence/partial response"
+                        else:
+                            _rouge_lbl = ("✅ Good synthesis grounding" if _conf_r1 >= 0.30
+                                          else "⚠️ Low grounding — verify independently")
+                        st.caption(_rouge_lbl)
+                        st.caption(
+                            "Scores (0.0–1.0) measure word/phrase overlap between FinalAnswer "
+                            "and Key Quotes from retrieved passages. Above ~0.45 = closely tracks sources; "
+                            "0.25–0.45 = moderate grounding; below 0.25 = significant divergence "
+                            "(expected for absence responses; caution flag for direct-retrieval types)."
+                        )
+                    else:
+                        st.markdown("⬜ Not computed (no Key Quote text available)")
+                st.divider()
+
+                # Signals 3+4: Retrieval quality
+                _col_sa, _col_sb = st.columns([1, 2])
+                with _col_sa:
+                    st.caption("**Retrieval quality**")
+                with _col_sb:
+                    if _conf_nsrc is not None:
+                        st.markdown(f"**{_conf_nsrc}** distinct Lincoln document(s) in top-5")
+                    if _conf_spread is not None:
+                        _spread_lbl = (
+                            "Differentiated retrieval ✅" if _conf_spread >= 0.20
+                            else "Moderate differentiation" if _conf_spread >= 0.10
+                            else "Flat distribution ⚠️ — no passage clearly dominant"
+                        )
+                        st.markdown(f"Score spread: **{_conf_spread:.3f}** — {_spread_lbl}")
+                    if _conf_maxscore is not None:
+                        st.caption(f"Max reranker score: {_conf_maxscore:.3f}")
+                    if _conf_calib:
+                        st.warning(
+                            "⚠️ **High confidence, flat spread.** Retrieval returned "
+                            "high scores with little discrimination. Corpus may lack ideal documents "
+                            "for this query. The response may sound plausible but rest on off-target sources."
+                        )
+                st.divider()
+
+                # Signal 5: Complexity–type match
+                _col_ca, _col_cb = st.columns([1, 2])
+                with _col_ca:
+                    st.caption("**Response depth**")
+                with _col_cb:
+                    if _conf_synth in (4, 5):
+                        st.markdown("Multi-passage synthesis — type consistent with complex query ✅")
+                    else:
+                        import re as _re_cp
+                        _cpat = _re_cp.compile(
+                            r"(compare|contrast|how did .+ change|evolution of|shift|differ|"
+                            r"difference|between|throughout|across|over time|consistent|"
+                            r"inconsistent|develop|arc|trajectory)",
+                            _re_cp.IGNORECASE
+                        )
+                        _q_text = qr.get("query", "")
+                        _est_c  = "high" if _cpat.search(_q_text) else "moderate"
+                        if _conf_synth in (1, 2) and _est_c == "high":
+                            st.warning(
+                                "⚠️ Query appears complex but response is Type 1/2 — "
+                                "possible under-synthesis (heuristic estimate)."
+                            )
+                        else:
+                            st.markdown("Query complexity consistent with synthesis type ✅")
+                        st.caption(
+                            "Heuristic: queries with comparative/synthesis language flagged as "
+                            "high-complexity. A mismatch may mean the corpus lacks enough relevant "
+                            "material, or rephrasing could surface more evidence."
+                        )
+
+                st.divider()
+                st.caption(
+                    "Signals are automatically computed — not a guarantee of accuracy. "
+                    "Quote verification checks whether direct quotations appear in the Lincoln corpus. "
+                    "ROUGE measures lexical overlap with Key Quotes from retrieved passages. "
+                    "Always read source passages before relying on specific claims."
+                )
+
+            # ── Nicolay output ───────────────────────────────────────────────────────────────────────────
             with st.expander("✍️ Nicolay Output", expanded=True):
                 final_text = get_final_answer_text(qr.get("nicolay_output", {}))
                 st.markdown("**Final Answer:**")

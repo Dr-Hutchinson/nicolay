@@ -2919,7 +2919,7 @@ def main():
                             _cr_fa    = _cr.get("nicolay_final_answer_text", "") or ""
                             _cr_qvl   = _cr.get("quote_verification", [])
 
-                            # Inline-verified FinalAnswer
+                            # Build annotation lists for inline verification markers
                             _cr_iv_v  = [(q.get("cited_passage",""), q.get("cited_chunk_text_id",""), "")
                                           for q in _cr_qvl if q.get("outcome") in ("verified", "approximate_quote")]
                             _cr_iv_d  = [q.get("cited_passage","") for q in _cr_qvl
@@ -2955,57 +2955,180 @@ def main():
                                     if _lit in _cr_annot:
                                         _cr_annot = _cr_annot.replace(_lit, _lit + " 🏷️", 1); break
 
-                            with st.expander("FinalAnswer", expanded=True):
+                            # FinalAnswer with inline verification markers
+                            with st.expander("✍️ FinalAnswer", expanded=True):
                                 st.markdown(_cr_annot)
                                 _cr_iv_leg = []
-                                if _cr_iv_v: _cr_iv_leg.append("✅ verified")
-                                if _cr_iv_d: _cr_iv_leg.append("🔀 displaced")
-                                if _cr_iv_u: _cr_iv_leg.append("⚠️ fabrication")
-                                if _cr_iv_ml: _cr_iv_leg.append("🏷️ mislabeled source")
+                                if _cr_iv_v:  _cr_iv_leg.append("✅ verified against corpus")
+                                if _cr_iv_d:  _cr_iv_leg.append("🔀 found in document, displaced chunk")
+                                if _cr_iv_u:  _cr_iv_leg.append("⚠️ not found — possible fabrication")
+                                if _cr_iv_ml: _cr_iv_leg.append("🏷️ text verified but source attribution wrong")
                                 if _cr_iv_leg:
                                     st.caption(" · ".join(_cr_iv_leg))
+                                st.caption(f"Word count: {_cr.get('nicolay_final_answer_wordcount', 0)}")
 
-                            # Match Analysis cards
+                            # ── QUOTE VERIFICATION debug table ────────────────
+                            with st.expander("🔎 Quote Verification", expanded=False):
+                                if _cr_qvl:
+                                    _cp_qv_icons = {
+                                        "verified": "✅", "approximate_quote": "🟡",
+                                        "displacement": "⚠️", "approximate_displacement": "🟠",
+                                        "fabrication": "🚨", "source_mislabeled": "🏷️",
+                                        "too_short": "—",
+                                    }
+                                    for _cp_qv in _cr_qvl:
+                                        _cp_icon = _cp_qv_icons.get(_cp_qv.get("outcome",""), "?")
+                                        st.markdown(
+                                            f"{_cp_icon} **{_cp_qv.get('match','')}** "
+                                            f"({_cp_qv.get('text_id','')}) — *{_cp_qv.get('outcome','')}*"
+                                        )
+                                        if _cp_qv.get("cited_passage"):
+                                            st.caption(f'"{str(_cp_qv["cited_passage"])[:150]}..."')
+                                        st.caption(
+                                            f"cited_num={_cp_qv.get('cited_num')} | "
+                                            f"cited_chunk_present={_cp_qv.get('cited_chunk_present')} | "
+                                            f"cited_source={(_cp_qv.get('cited_chunk_source') or '')[:80]}"
+                                        )
+                                        if _cp_qv.get("cited_chunk_preview"):
+                                            st.caption(f"cited_chunk_preview: {_cp_qv.get('cited_chunk_preview')}")
+                                        if _cp_qv.get("match_method") or _cp_qv.get("approx_score") is not None:
+                                            _cp_ms = _cp_qv.get("match_method","")
+                                            _cp_sc = _cp_qv.get("approx_score", None)
+                                            st.caption(f"match_method={_cp_ms}" + (
+                                                f" | approx_score={_cp_sc:.2f}" if isinstance(_cp_sc, (int,float)) else ""))
+                                        if _cp_qv.get("match_chunk_num") is not None:
+                                            st.caption(
+                                                f"found_at_chunk={_cp_qv.get('match_chunk_num')} | "
+                                                f"found_source={(_cp_qv.get('match_chunk_source') or '')[:80]}"
+                                            )
+                                        if _cp_qv.get("note"):
+                                            st.caption(_cp_qv["note"])
+                                else:
+                                    st.info("No quote verification data for this result.")
+
+                            # ── MATCH ANALYSIS CARDS (full, with corpus highlight) ──
                             _cr_ma = (_cr.get("nicolay_output") or {}).get("Match Analysis", {})
                             if _cr_ma and isinstance(_cr_ma, dict):
-                                with st.expander("Match Analysis cards", expanded=False):
-                                    _cr_sc_map = {str(t): s for t, s in
-                                                  zip(_cr.get("retrieved_doc_ids",[]),
-                                                      _cr.get("reranker_scores",[]))}
-                                    import re as _cp_re
-                                    for _cmi, (_cmk, _cmv) in enumerate(_cr_ma.items()):
-                                        if not isinstance(_cmv, dict): continue
-                                        _cm_tid  = str(_cmv.get("Text ID",""))
-                                        _cm_src  = (_cmv.get("Source","") or "").strip().lstrip("Ss ource:")
-                                        _cm_kq   = _cmv.get("Key Quote","")
-                                        _cm_rel  = _cmv.get("Relevance Assessment","")
-                                        _cm_sum  = _cmv.get("Summary","")
-                                        _cm_sc   = _cr_sc_map.get(_cm_tid)
-                                        _cm_qv   = next((q for q in _cr_qvl
-                                                         if str(q.get("cited_num","")) == _cm_tid
-                                                         or q.get("match","") == _cmk), None)
-                                        _cm_out  = (_cm_qv or {}).get("outcome","")
-                                        _cm_vico = {"verified":"✅","approximate_quote":"🟡","displacement":"🔀","approximate_displacement":"🔀","fabrication":"⚠️","source_mislabeled":"🏷️"}.get(_cm_out,"⬜")
-                                        # Relevance color
-                                        _cm_rt   = _cm_rel.lower()
-                                        if "high" in _cm_rt: _cm_bg,_cm_fg = "#d4edda","#155724"
-                                        elif "medium" in _cm_rt or "moderate" in _cm_rt: _cm_bg,_cm_fg = "#fff3cd","#856404"
-                                        elif "low" in _cm_rt: _cm_bg,_cm_fg = "#f8d7da","#721c24"
-                                        else: _cm_bg,_cm_fg = "#e2e3e5","#383d41"
-                                        _cm_lbl  = _cp_re.split(r"[—,]", _cm_rel or "N/A")[0].strip()[:25]
-                                        _cm_badge = (f'<span style="background:{_cm_bg};color:{_cm_fg};'
-                                                     f'padding:3px 8px;border-radius:10px;font-size:0.8em;'
-                                                     f'font-weight:700;">{_cm_lbl}</span>')
+                                st.markdown("---")
+                                st.markdown("##### 🎯 Match Analysis")
+                                _cr_sc_map = {str(t): s for t, s in
+                                              zip(_cr.get("retrieved_doc_ids",[]),
+                                                  _cr.get("reranker_scores",[]))}
+                                import re as _cp_re2
+                                _cr_col_l, _cr_col_r = st.columns(2)
+                                _cr_col_map = {0: _cr_col_l, 1: _cr_col_r}
+                                for _cmi, (_cmk, _cmv) in enumerate(_cr_ma.items()):
+                                    if not isinstance(_cmv, dict): continue
+                                    _cm_tid  = str(_cmv.get("Text ID",""))
+                                    _cm_src  = (_cmv.get("Source","") or "").strip()
+                                    if _cm_src.lower().startswith("source:"):
+                                        _cm_src = _cm_src[len("source:"):].strip()
+                                    _cm_kq   = _cmv.get("Key Quote","")
+                                    _cm_rel  = _cmv.get("Relevance Assessment","")
+                                    _cm_sum  = _cmv.get("Summary","")
+                                    _cm_hist = _cmv.get("Historical Context","")
+                                    _cm_sc   = _cr_sc_map.get(_cm_tid)
+                                    _cm_qv   = next((q for q in _cr_qvl
+                                                     if str(q.get("cited_num","")) == _cm_tid
+                                                     or q.get("match","") == _cmk), None)
+                                    _cm_out  = (_cm_qv or {}).get("outcome","")
+
+                                    # Relevance badge
+                                    _cm_rt = (_cm_rel or "").lower()
+                                    if "high" in _cm_rt:   _cm_bg,_cm_fg = "#d4edda","#155724"
+                                    elif "medium" in _cm_rt or "moderate" in _cm_rt: _cm_bg,_cm_fg = "#fff3cd","#856404"
+                                    elif "low" in _cm_rt:  _cm_bg,_cm_fg = "#f8d7da","#721c24"
+                                    else:                   _cm_bg,_cm_fg = "#e2e3e5","#383d41"
+                                    _cm_rel_lbl = _cp_re2.split(r"[—,]", _cm_rel or "N/A")[0].strip()[:30]
+                                    _cm_rel_badge = (
+                                        f'<span style="background:{_cm_bg};color:{_cm_fg};padding:4px 12px;'                                        f'border-radius:12px;font-size:0.85em;font-weight:700;'                                        f'display:inline-block;">{_cm_rel_lbl}</span>'
+                                    )
+
+                                    # Verification badge (full text, matching main app)
+                                    if _cm_out == "verified":
+                                        _cm_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:600;">✅ Quote verified in corpus</span>'
+                                    elif _cm_out in ("displacement","approximate_displacement"):
+                                        _cm_vbadge = '<span style="color:#664d03;background:#fff3cd;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🔀 Found in document, displaced chunk</span>'
+                                    elif _cm_out == "approximate_quote":
+                                        _cm_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:500;">🟡 Approximate match confirmed</span>'
+                                    elif _cm_out == "fabrication":
+                                        _cm_vbadge = '<span style="color:#721c24;font-size:0.9em;font-weight:600;">⚠️ Not found in corpus</span>'
+                                    elif _cm_out == "source_mislabeled":
+                                        _cm_vbadge = '<span style="color:#495057;background:#e2e3e5;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🏷️ Text found — source attribution wrong</span>'
+                                    else:
+                                        _cm_vbadge = '<span style="color:#6c757d;font-size:0.9em;">⬜ Not verified</span>'
+
+                                    with _cr_col_map[_cmi % 2]:
                                         with st.container(border=True):
                                             _cmh1, _cmh2 = st.columns([5,1])
-                                            with _cmh1: st.markdown(f"**{_cmk}** {_cm_vico}")
-                                            with _cmh2: st.markdown(f'<div style="text-align:right;">{_cm_badge}</div>', unsafe_allow_html=True)
+                                            with _cmh1:
+                                                st.markdown(f"**{_cmk}**")
+                                            with _cmh2:
+                                                st.markdown(f'<div style="text-align:right;">{_cm_rel_badge}</div>', unsafe_allow_html=True)
+                                            # Full untruncated source
                                             st.markdown(f"**ID:** {_cm_tid}  ·  **Source:** {_cm_src}")
-                                            if _cm_sc is not None: st.caption(f"Reranker: {_cm_sc:.3f}")
+                                            if _cm_sc is not None:
+                                                st.caption(f"Reranker score: {_cm_sc:.3f}")
                                             if _cm_kq:
-                                                st.markdown(f'> *“{_cm_kq[:280]}”*')
+                                                _cm_kq_disp = _cm_kq[:320] + ("…" if len(_cm_kq) > 320 else "")
+                                                st.markdown(f'> *"{_cm_kq_disp}"*')
                                             if _cm_sum:
-                                                st.markdown(f"**Analysis:** {_cm_sum[:250]}…" if len(_cm_sum)>250 else f"**Analysis:** {_cm_sum}")
+                                                _cm_sum_disp = _cm_sum[:300] + ("…" if len(_cm_sum) > 300 else "")
+                                                st.markdown(f"**Nicolay's Analysis:** {_cm_sum_disp}")
+                                            st.markdown(_cm_vbadge, unsafe_allow_html=True)
+
+                                            # Full-text expander with corpus highlight
+                                            with st.expander(f"Full text & highlight — {_cmk}", expanded=False):
+                                                if _cm_hist:
+                                                    st.markdown(f"**Historical Context:** {_cm_hist}")
+                                                _cp_shared_key = f"_corpus_shared_{corpus_file}"
+                                                _cp_corpus_ss = (
+                                                    st.session_state.get(f"_corpus_{_cr.get('id','')}")
+                                                    or st.session_state.get(_cp_shared_key)
+                                                )
+                                                _cp_int_id = None
+                                                try:
+                                                    _cp_int_id = int(_cm_tid)
+                                                except (ValueError, TypeError):
+                                                    pass
+                                                _cp_chunk = None
+                                                if _cp_corpus_ss and _cp_int_id is not None:
+                                                    _cp_chunk = _cp_corpus_ss.get(_cp_int_id)
+                                                if _cp_chunk:
+                                                    _cp_ft = _cp_chunk.get("full_text","")
+                                                    if _cp_ft:
+                                                        _cp_html = _cp_ft.replace("\n","<br>")
+                                                        if _cm_kq and _cm_kq in _cp_ft:
+                                                            _cp_html = _cp_html.replace(_cm_kq, f"<mark>{_cm_kq}</mark>", 1)
+                                                        elif _cm_kq:
+                                                            _cp_segs = [p.strip() for p in _cm_kq.split("...") if p.strip()]
+                                                            for _cp_seg in _cp_segs:
+                                                                if len(_cp_seg) > 20 and _cp_seg in _cp_ft:
+                                                                    _cp_html = _cp_html.replace(_cp_seg, f"<mark>{_cp_seg}</mark>", 1)
+                                                                    break
+                                                        st.markdown("**Full Text with Highlighted Quote:**")
+                                                        st.markdown(
+                                                            f'<div style="font-size:0.95em;line-height:1.65;">{_cp_html}</div>',
+                                                            unsafe_allow_html=True
+                                                        )
+                                                    else:
+                                                        st.info("Full text not available for this chunk.")
+                                                else:
+                                                    st.info("Corpus not cached — re-run the query to enable full-text display.")
+
+                            # ── RAW JSON OUTPUT ───────────────────────────────
+                            with st.expander("🔬 Raw JSON — Nicolay output", expanded=False):
+                                _cr_nico_raw = _cr.get("nicolay_output") or {}
+                                if _cr_nico_raw:
+                                    st.json(_cr_nico_raw)
+                                else:
+                                    st.info("nicolay_output not stored in this result.")
+                            with st.expander("🔬 Raw JSON — Hay output", expanded=False):
+                                _cr_hay_raw = _cr.get("hay_output") or {}
+                                if _cr_hay_raw:
+                                    st.json(_cr_hay_raw)
+                                else:
+                                    st.info("hay_output not stored in this result.")
 
                             # ── CONFIDENCE PANEL ────────────────────────────────
                             st.divider()

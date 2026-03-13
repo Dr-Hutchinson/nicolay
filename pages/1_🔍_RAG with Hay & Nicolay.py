@@ -847,13 +847,24 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
     # Build search set from reranked results.
     # reranked_corpus is restricted to these chunks so Stage 3 displacement
     # stays scoped to retrieved documents only.
+    #
+    # KEY FALLBACK: If triple_lookup returns {} (corpus mismatch — e.g., the
+    # main app's lincoln_dict is the old 80-doc corpus but the pipeline is now
+    # returning new 772-chunk IDs), we construct a synthetic chunk from the
+    # reranked result's Key Quote and Source fields.  This preserves the exact
+    # text that was retrieved and passed to Nicolay, so verification runs
+    # against what the model actually saw rather than failing silently.
     reranked_chunks = []
     reranked_corpus = {}
     for r in reranked_results:
         tid = str(r.get('Text ID', ''))
         entry = triple_lookup(lincoln_dict, tid)
         source = r.get('Source', '') or entry.get('source', '')
-        if entry.get('full_text'):
+        ft = entry.get('full_text', '') or r.get('Key Quote', '')
+        if ft:
+            # If triple_lookup failed, build a synthetic chunk from the result row
+            if not entry.get('full_text'):
+                entry = {'full_text': ft, 'source': source, 'text_id': tid}
             reranked_chunks.append((tid, source, entry))
             m = re.search(r'(\d+)', tid)
             if m:

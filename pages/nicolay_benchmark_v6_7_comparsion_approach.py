@@ -323,7 +323,7 @@ def compute_confidence_signals(qresult, corpus=None):
     qv_list    = qresult.get("quote_verification", [])
     verified   = [q for q in qv_list if q.get("outcome") == "verified"]
     displaced  = [q for q in qv_list if q.get("outcome") in ("displacement", "approximate_displacement")]
-    unverified = [q for q in qv_list if q.get("outcome") == "fabrication"]
+    unverified = [q for q in qv_list if q.get("outcome") in ("fabrication", "source_mislabeled")]
 
     # Build a thin reranked_list from stored scores for reranker analysis
     reranker_scores = qresult.get("reranker_scores", [])[:5]
@@ -1458,6 +1458,35 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
         "loose_segments": segs_loose[:3],
         "num_loose_segments": len(segs_loose),
     }
+def _source_matches_refs(corpus_source: str, claimed_source: str) -> bool:
+    """
+    Compare a corpus chunk's actual source against Nicolay's claimed source label.
+    Returns True if they refer to the same document (token-Jaccard ≥ 0.35).
+
+    Handles the common cases:
+      "At Peoria, Illinois. October 16, 1854."  vs  "Peoria Address (1854)"   → 0.50 ✓
+      "First Annual Message. December 3, 1861"  vs  same with Source: prefix  → 1.00 ✓
+    And correctly rejects:
+      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
+        vs "Speech to the Young Men's Lyceum, Springfield, 1838"              → 0.11 ✗
+    """
+    if not corpus_source or not claimed_source:
+        return True  # cannot check → don't penalise
+
+    def _norm(s):
+        import re as _re
+        s = _re.sub(r'^source:\s*', '', str(s).strip(), flags=_re.IGNORECASE)
+        s = _re.sub(r'[.,;:\-()]', ' ', s)
+        s = _re.sub(r'\s+', ' ', s).strip().lower()
+        return s
+
+    ta = set(t for t in _norm(corpus_source).split() if len(t) > 2)
+    tb = set(t for t in _norm(claimed_source).split() if len(t) > 2)
+    if not ta or not tb:
+        return True
+    return len(ta & tb) / max(len(ta), len(tb)) >= 0.35
+
+
 def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) -> list[dict]:
     """Run quote verification for all Match Analysis entries (with debug metadata)."""
     match_analysis = nicolay_output.get("Match Analysis", {})
@@ -1484,12 +1513,26 @@ def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) 
         # Was this ID actually part of the reranked top-k list?
         reranked_rec = reranked_by_num.get(cited_num) if cited_num is not None else None
 
+        # Source mislabeling check: if quote text verified but claimed source
+        # doesn't match corpus source → override outcome to source_mislabeled.
+        # This catches parametric laundering: real text, fabricated attribution.
+        claimed_source = str(match_val.get("Source", "") or "").strip()
+        actual_source  = str(cited_chunk.get("source", "")) if cited_chunk else ""
+        if (verification.get("outcome") == "verified"
+                and claimed_source
+                and not _source_matches_refs(actual_source, claimed_source)):
+            verification = {**verification, "outcome": "source_mislabeled",
+                            "note": "MISLABELED — quote text verified but source attribution "
+                                    f"does not match corpus source. "
+                                    f"Claimed: '{claimed_source[:80]}' | "
+                                    f"Actual: '{actual_source[:80]}'"}
+
         results.append({
             "match": match_key,
             "text_id": text_id_str,
             "cited_num": cited_num,
             "cited_chunk_present": cited_present,
-            "cited_chunk_source": str(cited_chunk.get("source", "")) if cited_chunk else "",
+            "cited_chunk_source": actual_source,
             "cited_chunk_text_id": str(cited_chunk.get("text_id", "")) if cited_chunk else "",
             "cited_passage": key_passage,
             "cited_in_reranked_topk": bool(reranked_rec),
@@ -2349,11 +2392,12 @@ def run_pipeline_for_query(
     qv = verify_all_quotes(nicolay_output, reranked, corpus_for_verify)
     result["quote_verification"] = qv
     outcomes = [q.get("outcome") for q in qv]
-    result["quotes_verified_count"] = outcomes.count("verified")
-    result["quotes_approx_count"] = outcomes.count("approximate_quote")
-    result["quotes_displaced_count"] = outcomes.count("displacement")
+    result["quotes_verified_count"]     = outcomes.count("verified")
+    result["quotes_approx_count"]        = outcomes.count("approximate_quote")
+    result["quotes_displaced_count"]     = outcomes.count("displacement")
     result["quotes_approx_displaced_count"] = outcomes.count("approximate_displacement")
-    result["quotes_fabricated_count"] = outcomes.count("fabrication")
+    result["quotes_fabricated_count"]    = outcomes.count("fabrication")
+    result["quotes_mislabeled_count"]    = outcomes.count("source_mislabeled")
 
     # ── 7. BLEU / ROUGE ───────────────────────────────────────────────────────
     status("📊 Computing BLEU/ROUGE scores...")
@@ -2831,6 +2875,8 @@ def main():
                                           if q.get("outcome") in ("displacement","approximate_displacement","approximate_quote")]
                             _cr_iv_u  = [q.get("cited_passage","") for q in _cr_qvl
                                           if q.get("outcome") == "fabrication"]
+                            _cr_iv_ml = [q.get("cited_passage","") for q in _cr_qvl
+                                          if q.get("outcome") == "source_mislabeled"]
                             _QPAIRS   = [('“','”'),('"','"'),('‘','’'),("'","'")]
                             _cr_annot = _cr_fa
                             for _iq, _, __ in _cr_iv_v:
@@ -2851,6 +2897,12 @@ def main():
                                     _lit = _oq + _iq + _cq
                                     if _lit in _cr_annot:
                                         _cr_annot = _cr_annot.replace(_lit, _lit + " ⚠️", 1); break
+                            for _iq in _cr_iv_ml:
+                                if not _iq: continue
+                                for _oq, _cq in _QPAIRS:
+                                    _lit = _oq + _iq + _cq
+                                    if _lit in _cr_annot:
+                                        _cr_annot = _cr_annot.replace(_lit, _lit + " 🏷️", 1); break
 
                             with st.expander("FinalAnswer", expanded=True):
                                 st.markdown(_cr_annot)
@@ -2858,6 +2910,7 @@ def main():
                                 if _cr_iv_v: _cr_iv_leg.append("✅ verified")
                                 if _cr_iv_d: _cr_iv_leg.append("🔀 displaced")
                                 if _cr_iv_u: _cr_iv_leg.append("⚠️ fabrication")
+                                if _cr_iv_ml: _cr_iv_leg.append("🏷️ mislabeled source")
                                 if _cr_iv_leg:
                                     st.caption(" · ".join(_cr_iv_leg))
 
@@ -2881,7 +2934,7 @@ def main():
                                                          if str(q.get("cited_num","")) == _cm_tid
                                                          or q.get("match","") == _cmk), None)
                                         _cm_out  = (_cm_qv or {}).get("outcome","")
-                                        _cm_vico = {"verified":"✅","approximate_quote":"🟡","displacement":"🔀","approximate_displacement":"🔀","fabrication":"⚠️"}.get(_cm_out,"⬜")
+                                        _cm_vico = {"verified":"✅","approximate_quote":"🟡","displacement":"🔀","approximate_displacement":"🔀","fabrication":"⚠️","source_mislabeled":"🏷️"}.get(_cm_out,"⬜")
                                         # Relevance color
                                         _cm_rt   = _cm_rel.lower()
                                         if "high" in _cm_rt: _cm_bg,_cm_fg = "#d4edda","#155724"
@@ -2924,18 +2977,23 @@ def main():
                                 st.divider()
 
                                 # Signal 1 — Quote verification
+                                _cr_nml = _cr.get("quotes_mislabeled_count", 0) or 0
+                                _cr_total_q = _cr_nv + _cr_nd + _cr_nu + _cr_nml
                                 _cs1, _cs2 = st.columns([1, 2])
                                 with _cs1: st.caption("**Quote verification**")
                                 with _cs2:
                                     if _cr_total_q == 0:
                                         st.markdown("⬜ No direct quotes")
                                         st.caption("No quoted text in FinalAnswer.")
-                                    elif _cr_nu == 0 and _cr_nd == 0:
+                                    elif _cr_nu == 0 and _cr_nd == 0 and _cr_nml == 0:
                                         st.markdown(f"✅ {_cr_total_q}/{_cr_total_q} verified")
                                         st.caption("All quoted passages confirmed in corpus.")
                                     elif _cr_nu > 0:
                                         st.markdown(f"🔴 {_cr_nv}/{_cr_total_q} verified — **{_cr_nu} not found**")
                                         st.caption("One or more quotes not found anywhere in corpus.")
+                                    elif _cr_nml > 0:
+                                        st.markdown(f"🏷️ {_cr_nv}/{_cr_total_q} correctly attributed — **{_cr_nml} mislabeled**")
+                                        st.caption("Quote text found in corpus but source attribution wrong.")
                                     else:
                                         st.markdown(f"🔀 {_cr_nv}/{_cr_total_q} verified — **{_cr_nd} displaced**")
                                         st.caption("Quote in right document but wrong chunk.")
@@ -3331,7 +3389,7 @@ def main():
             with st.expander("✍️ Nicolay Output", expanded=True):
                 final_text = get_final_answer_text(qr.get("nicolay_output", {}))
                 _qv_for_inline = qr.get("quote_verification", [])
-                # Reconstruct verified/displaced/unverified lists from stored qv results
+                # Reconstruct verified/displaced/unverified/mislabeled lists from stored qv results
                 # so we can annotate the FinalAnswer text without re-running verification.
                 _iv_verified   = [(q.get("cited_passage",""), q.get("cited_chunk_text_id",""), q.get("cited_chunk_source",""))
                                    for q in _qv_for_inline if q.get("outcome") == "verified"]
@@ -3341,12 +3399,14 @@ def main():
                                    and q.get("outcome") != "verified"]
                 _iv_unverified = [q.get("cited_passage","")
                                    for q in _qv_for_inline if q.get("outcome") == "fabrication"]
+                _iv_mislabeled = [q.get("cited_passage","")
+                                   for q in _qv_for_inline if q.get("outcome") == "source_mislabeled"]
 
                 # Annotate FinalAnswer text with inline emoji markers
                 _QUOTE_PAIRS_IV = [
-                    ('“', '”'),
+                    ('\u201c', '\u201d'),
                     ('"',      '"'     ),
-                    ('‘', '’'),
+                    ('\u2018', '\u2019'),
                     ("'",      "'"     ),
                 ]
                 _annotated_fa = final_text
@@ -3371,6 +3431,13 @@ def main():
                         if _lit in _annotated_fa:
                             _annotated_fa = _annotated_fa.replace(_lit, _lit + " ⚠️", 1)
                             break
+                for _iq in _iv_mislabeled:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🏷️", 1)
+                            break
 
                 st.markdown("**Final Answer:**")
                 st.markdown(_annotated_fa)
@@ -3378,18 +3445,20 @@ def main():
                 _iv_has_v = bool(_iv_verified)
                 _iv_has_d = bool(_iv_displaced)
                 _iv_has_u = bool(_iv_unverified)
-                if _iv_has_v or _iv_has_d or _iv_has_u:
+                _iv_has_m = bool(_iv_mislabeled)
+                if _iv_has_v or _iv_has_d or _iv_has_u or _iv_has_m:
                     _iv_legend = []
                     if _iv_has_v: _iv_legend.append("✅ verified against corpus")
                     if _iv_has_d: _iv_legend.append("🔀 found in document, displaced chunk")
                     if _iv_has_u: _iv_legend.append("⚠️ not found — possible fabrication")
+                    if _iv_has_m: _iv_legend.append("🏷️ text verified but source attribution wrong")
                     st.caption(" · ".join(_iv_legend))
                 st.caption(f"Word count: {qr.get('nicolay_final_answer_wordcount', 0)}")
 
             # Quote verification
             with st.expander("🔎 Quote Verification", expanded=False):
                 for qv_item in qr.get("quote_verification", []):
-                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "⚠️", "approximate_displacement": "🟠", "fabrication": "🚨", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
+                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "⚠️", "approximate_displacement": "🟠", "fabrication": "🚨", "source_mislabeled": "🏷️", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
                     st.markdown(f"{icon} **{qv_item.get('match', '')}** ({qv_item.get('text_id', '')}) — *{qv_item.get('outcome', '')}*")
                     if qv_item.get("cited_passage"):
                         st.caption(f"\"{str(qv_item['cited_passage'])[:150]}...\"")

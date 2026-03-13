@@ -764,57 +764,75 @@ def extract_quoted_strings(text, min_words=7):
 def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict):
     """
     [U10] For each quoted string in FinalAnswer, check whether it appears in
-    any of the reranked result chunks (not just the selected matches).
+    any of the reranked result chunks.
 
-    Uses _verify_quote_rich() for each reranked chunk — same multi-stage logic
-    as the benchmark verifier.  Outcome mapping:
-      verified / approximate_quote / token_coverage  → verified_quotes
-      displacement / approximate_displacement         → displaced_quotes
-      fabrication                                     → unverified_quotes
+    Uses _verify_quote_rich() with each reranked chunk as the "cited chunk".
+    Two important scoping decisions:
 
-    approximate_quote is treated as verified (not displaced) because token-coverage
-    ≥ 0.86 in the cited chunk means the quote content is genuinely there — the
-    difference is minor condensation, not a wrong source.
+    1. ALL reranked chunks are tried before settling on a classification.
+       An early chunk may report 'displacement' because _verify_quote_rich's
+       corpus-wide Stage 3 finds the quote in a *later* reranked chunk.
+       We exhaust all five before concluding a quote is displaced or unverified.
+
+    2. The corpus passed to _verify_quote_rich is restricted to the reranked
+       chunks only (not the full lincoln_dict).  Stage 3 displacement therefore
+       only fires within the retrieved documents.  A quote that exists in the
+       full corpus but was NOT retrieved should be 'unverified' — Nicolay cited
+       something it was not given — not 'displaced'.
+
+    Outcome mapping:
+      verified / approximate_quote            → verified_quotes
+      displacement / approximate_displacement → displaced_quotes
+      fabrication                             → unverified_quotes
 
     Returns:
         verified_quotes   — list of (quote_str, text_id, source) confirmed in corpus
         displaced_quotes  — list of quote_str found in document but wrong chunk
-        unverified_quotes — list of quote_str not found anywhere in corpus
+        unverified_quotes — list of quote_str not found in any retrieved source
     """
     quotes = extract_quoted_strings(final_answer_text)
     if not quotes:
         return [], [], []
 
-    # Build integer-keyed corpus from lincoln_dict for _verify_quote_rich
-    corpus = {k: v for k, v in lincoln_dict.items() if isinstance(k, int)}
-
-    # Build search set from reranked results
+    # Build search set from reranked results.
+    # reranked_corpus is restricted to these chunks so Stage 3 displacement
+    # stays scoped to retrieved documents only.
     reranked_chunks = []
+    reranked_corpus = {}
     for r in reranked_results:
         tid = str(r.get('Text ID', ''))
         entry = triple_lookup(lincoln_dict, tid)
         source = r.get('Source', '') or entry.get('source', '')
         if entry.get('full_text'):
             reranked_chunks.append((tid, source, entry))
+            m = re.search(r'(\d+)', tid)
+            if m:
+                reranked_corpus[int(m.group(1))] = entry
 
     _VERIFIED_OUTCOMES  = {"verified", "approximate_quote"}
     _DISPLACED_OUTCOMES = {"displacement", "approximate_displacement"}
 
     verified, displaced, unverified = [], [], []
     for quote in quotes:
-        found = False
+        best_verified  = None   # (quote_str, tid, source) — first verified hit
+        best_displaced = None   # quote_str — first displaced hit (fallback only)
+
+        # Try every reranked chunk without breaking early on displacement.
+        # A quote displaced relative to chunk A may be verified in chunk B.
         for tid, source, cited_chunk in reranked_chunks:
-            result = _verify_quote_rich(quote, cited_chunk, corpus)
+            result = _verify_quote_rich(quote, cited_chunk, reranked_corpus)
             outcome = result.get("outcome", "fabrication")
             if outcome in _VERIFIED_OUTCOMES:
-                verified.append((quote, tid, source))
-                found = True
-                break
-            if outcome in _DISPLACED_OUTCOMES:
-                displaced.append(quote)
-                found = True
-                break
-        if not found:
+                best_verified = (quote, tid, source)
+                break                               # verified is best — stop
+            if outcome in _DISPLACED_OUTCOMES and best_displaced is None:
+                best_displaced = quote              # record but keep trying
+
+        if best_verified:
+            verified.append(best_verified)
+        elif best_displaced:
+            displaced.append(best_displaced)
+        else:
             unverified.append(quote)
 
     return verified, displaced, unverified

@@ -761,7 +761,47 @@ def extract_quoted_strings(text, min_words=7):
     return found
 
 
-def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict):
+def _source_matches_refs(corpus_source: str, references: list) -> bool:
+    """
+    Check whether a corpus chunk's actual source matches any entry in
+    Nicolay's References list.  Used to detect source mislabeling:
+    quote text is real but Nicolay invented the attribution.
+
+    Normalises both sides: strip 'Source:' prefix, lowercase, collapse
+    punctuation, then compare by token-Jaccard overlap.  Threshold 0.35
+    is deliberately generous to handle:
+      "Peoria Address (1854)" ↔ "At Peoria, Illinois. October 16, 1854."  → 0.50 ✓
+      "First Annual Message. December 3, 1861" ↔ same with 'Source:' prefix → 1.00 ✓
+    And tight enough to reject:
+      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
+        vs "Speech to the Young Men's Lyceum, Springfield, 1838"   → 0.11 ✗
+      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
+        vs "Speech at Springfield, Illinois, June 26, 1858"        → 0.22 ✗
+    """
+    if not references:
+        return True   # no references list → cannot perform check, don't penalise
+
+    def _norm(s):
+        s = re.sub(r'^source:\s*', '', str(s).strip(), flags=re.IGNORECASE)
+        s = re.sub(r'[.,;:\-()]', ' ', s)
+        s = re.sub(r'\s+', ' ', s).strip().lower()
+        return s
+
+    def _overlap(a, b):
+        ta = set(t for t in _norm(a).split() if len(t) > 2)
+        tb = set(t for t in _norm(b).split() if len(t) > 2)
+        if not ta or not tb:
+            return 0.0
+        return len(ta & tb) / max(len(ta), len(tb))
+
+    for ref in references:
+        if _overlap(corpus_source, ref) >= 0.35:
+            return True
+    return False
+
+
+def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict,
+                                refs=None):
     """
     [U10] For each quoted string in FinalAnswer, check whether it appears in
     any of the reranked result chunks.
@@ -780,19 +820,29 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
        full corpus but was NOT retrieved should be 'unverified' — Nicolay cited
        something it was not given — not 'displaced'.
 
+    3. Source mislabeling check (when refs is provided): after a quote is
+       verified, the matched chunk's actual corpus source is compared against
+       the References list.  If no Reference matches the real source, the quote
+       is routed to mislabeled_quotes — quote text is genuine corpus text but
+       Nicolay fabricated the attribution.  This is worse than displacement and
+       is treated as unverified for confidence scoring.
+
     Outcome mapping:
       verified / approximate_quote            → verified_quotes
+                                                (+ source check passes, or refs=None)
+      verified but source mismatch            → mislabeled_quotes
       displacement / approximate_displacement → displaced_quotes
       fabrication                             → unverified_quotes
 
-    Returns:
-        verified_quotes   — list of (quote_str, text_id, source) confirmed in corpus
-        displaced_quotes  — list of quote_str found in document but wrong chunk
-        unverified_quotes — list of quote_str not found in any retrieved source
+    Returns 4-tuple:
+        verified_quotes    — list of (quote_str, text_id, source) confirmed with correct source
+        displaced_quotes   — list of quote_str found in corpus but wrong chunk
+        unverified_quotes  — list of quote_str not found in any retrieved source
+        mislabeled_quotes  — list of quote_str verified in corpus but source attribution wrong
     """
     quotes = extract_quoted_strings(final_answer_text)
     if not quotes:
-        return [], [], []
+        return [], [], [], []
 
     # Build search set from reranked results.
     # reranked_corpus is restricted to these chunks so Stage 3 displacement
@@ -812,30 +862,35 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
     _VERIFIED_OUTCOMES  = {"verified", "approximate_quote"}
     _DISPLACED_OUTCOMES = {"displacement", "approximate_displacement"}
 
-    verified, displaced, unverified = [], [], []
+    verified, displaced, unverified, mislabeled = [], [], [], []
     for quote in quotes:
-        best_verified  = None   # (quote_str, tid, source) — first verified hit
+        best_verified  = None   # (quote_str, tid, corpus_source) — first verified hit
         best_displaced = None   # quote_str — first displaced hit (fallback only)
 
         # Try every reranked chunk without breaking early on displacement.
-        # A quote displaced relative to chunk A may be verified in chunk B.
-        for tid, source, cited_chunk in reranked_chunks:
+        for tid, _source, cited_chunk in reranked_chunks:
             result = _verify_quote_rich(quote, cited_chunk, reranked_corpus)
             outcome = result.get("outcome", "fabrication")
             if outcome in _VERIFIED_OUTCOMES:
-                best_verified = (quote, tid, source)
-                break                               # verified is best — stop
+                actual_source = cited_chunk.get("source", "")
+                best_verified = (quote, tid, actual_source)
+                break
             if outcome in _DISPLACED_OUTCOMES and best_displaced is None:
-                best_displaced = quote              # record but keep trying
+                best_displaced = quote
 
         if best_verified:
-            verified.append(best_verified)
+            q_str, tid, actual_source = best_verified
+            if refs is not None and not _source_matches_refs(actual_source, refs):
+                # Quote text is real but attribution is fabricated — source mislabeling
+                mislabeled.append(q_str)
+            else:
+                verified.append(best_verified)
         elif best_displaced:
             displaced.append(best_displaced)
         else:
             unverified.append(quote)
 
-    return verified, displaced, unverified
+    return verified, displaced, unverified, mislabeled
 
 
 def check_out_of_corpus_references(references, reranked_results):
@@ -891,21 +946,27 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
                                            precomputed_quotes=None):
     """
     [U10] Render Nicolay's FinalAnswer with inline quote verification.
-    Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️.
+    Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️;
+    source-mislabeled quotes annotated 🏷️ (quote text real, attribution fabricated).
     Out-of-corpus references flagged in References list.
 
-    precomputed_quotes: optional tuple (verified, displaced, unverified) from
-      verify_final_answer_quotes() — supplied by Tab 1 to avoid running
+    precomputed_quotes: optional tuple (verified, displaced, unverified[, mislabeled])
+      from verify_final_answer_quotes() — supplied by Tab 1 to avoid running
       verification twice when the confidence summary panel is also shown.
+      Accepts both 3-tuple (legacy) and 4-tuple (current).
     """
     fa_text = fa_block.get('Text', 'No response available')
     refs    = fa_block.get('References', [])
 
     if precomputed_quotes is not None:
-        verified_quotes, displaced_quotes, unverified_quotes = precomputed_quotes
+        if len(precomputed_quotes) == 4:
+            verified_quotes, displaced_quotes, unverified_quotes, mislabeled_quotes = precomputed_quotes
+        else:
+            verified_quotes, displaced_quotes, unverified_quotes = precomputed_quotes
+            mislabeled_quotes = []
     else:
-        verified_quotes, displaced_quotes, unverified_quotes = verify_final_answer_quotes(
-            fa_text, reranked_results, lincoln_dict
+        verified_quotes, displaced_quotes, unverified_quotes, mislabeled_quotes = (
+            verify_final_answer_quotes(fa_text, reranked_results, lincoln_dict, refs=refs)
         )
     out_of_corpus_refs = check_out_of_corpus_references(refs, reranked_results)
 
@@ -938,6 +999,12 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
             if literal in annotated:
                 annotated = annotated.replace(literal, literal + ' ⚠️', 1)
                 break
+    for q in mislabeled_quotes:
+        for open_q, close_q in _QUOTE_PAIRS:
+            literal = open_q + q + close_q
+            if literal in annotated:
+                annotated = annotated.replace(literal, literal + ' 🏷️', 1)
+                break
 
     st.markdown(f"**Response:**\n{annotated}")
 
@@ -962,9 +1029,10 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
     has_verified   = bool(verified_quotes)
     has_displaced  = bool(displaced_quotes)
     has_unverified = bool(unverified_quotes)
+    has_mislabeled = bool(mislabeled_quotes)
     has_ooc        = bool(out_of_corpus_refs)
 
-    if has_verified or has_displaced or has_unverified or has_ooc:
+    if has_verified or has_displaced or has_unverified or has_mislabeled or has_ooc:
         st.markdown("---")
         legend_parts = []
         if has_verified:
@@ -977,6 +1045,11 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
         if has_unverified:
             legend_parts.append(
                 "⚠️ Quote not found anywhere in corpus — possible fabrication or out-of-corpus citation"
+            )
+        if has_mislabeled:
+            legend_parts.append(
+                "🏷️ Quote text found in corpus but source attribution does not match — "
+                "Nicolay cited the correct text from the wrong speech"
             )
         if has_ooc:
             legend_parts.append(
@@ -1426,6 +1499,7 @@ def render_confidence_summary(
     unverified_quotes,
     synth_type_num,
     query_text,
+    mislabeled_quotes=None,
 ):
     """
     [U12] Render the Response Confidence Summary panel.
@@ -1460,10 +1534,12 @@ def render_confidence_summary(
         with col1:
             st.caption("**Quote verification**")
         with col2:
+            _ml = mislabeled_quotes or []
+            _ml_count = len(_ml)
             if total_q == 0:
                 st.markdown("⬜ No direct quotes in this response")
                 st.caption("Nicolay did not include any directly quoted text.")
-            elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0:
+            elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0 and _ml_count == 0:
                 st.markdown(f"✅ {total_q}/{total_q} quotes verified")
                 st.caption("Every quoted passage was confirmed present in the Lincoln corpus.")
             elif len(unverified_quotes) > 0:
@@ -1475,6 +1551,17 @@ def render_confidence_summary(
                     "One or more quoted passages could not be located anywhere "
                     "in the Lincoln corpus. These may be fabricated, misremembered, "
                     "or drawn from a source outside the collection."
+                )
+            elif _ml_count > 0:
+                st.markdown(
+                    f"🏷️ {len(verified_quotes)}/{total_q} correctly attributed — "
+                    f"**{_ml_count} source mislabeled**"
+                )
+                st.caption(
+                    "The quote text was found in the Lincoln corpus, but Nicolay's "
+                    "source attribution does not match the actual document. The model "
+                    "cited the correct passage from the wrong speech — a parametric "
+                    "memory error in the attribution, not the quotation itself."
                 )
             else:
                 st.markdown(
@@ -2355,11 +2442,12 @@ if submitted:
 
             # ── [U12] Response Confidence Summary (plain container, not nested) ──
             fa_text = fa_block.get('Text', '')
-            _verified_q, _displaced_q, _unverified_q = (
+            _fa_refs = fa_block.get('References', [])
+            _verified_q, _displaced_q, _unverified_q, _mislabeled_q = (
                 verify_final_answer_quotes(
-                    fa_text, full_reranked_results, lincoln_dict
+                    fa_text, full_reranked_results, lincoln_dict, refs=_fa_refs
                 )
-                if fa_text else ([], [], [])
+                if fa_text else ([], [], [], [])
             )
             try:
                 render_confidence_summary(
@@ -2367,9 +2455,10 @@ if submitted:
                     reranked_results    = full_reranked_results,
                     verified_quotes     = _verified_q,
                     displaced_quotes    = _displaced_q,
-                    unverified_quotes   = _unverified_q,
+                    unverified_quotes   = _unverified_q + _mislabeled_q,  # mislabeled = unverified for scoring
                     synth_type_num      = extract_synth_type_num(synth_raw),
                     query_text          = user_query,
+                    mislabeled_quotes   = _mislabeled_q,
                 )
             except Exception as _cs_err:
                 st.warning(f"⚠️ Confidence summary could not render: {_cs_err}")
@@ -2386,7 +2475,7 @@ if submitted:
                 # running verification a second time.
                 render_final_answer_with_verification(
                     fa_block, full_reranked_results, lincoln_dict,
-                    precomputed_quotes=(_verified_q, _displaced_q, _unverified_q),
+                    precomputed_quotes=(_verified_q, _displaced_q, _unverified_q, _mislabeled_q),
                 )
 
             # ── Match Analysis cards directly below Nicolay response ──────────

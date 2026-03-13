@@ -15,14 +15,6 @@ v5.4 changes:
   - New questions: FR-2, AN-5, CA-5, CA-6, S-4, S-5, RC-3, RC-4, RC-5
   - RC-2 included but flagged blocked (Last Public Address absent from corpus)
   - Groups: core (retained), revised (Q5-rev, Q11-rev), new (FR-2 through RC-5)
-
-v6.4 patch — unified verification alignment:
-  - compute_confidence_signals: approximate_quote now counted in verified bucket
-    (was silently dropped, causing under-count and potential false 🔴 Low ratings
-    on paraphrase-as-quote cases — Q4 fabrication taxonomy)
-  - Display panel qv filtering (line ~2849): same fix applied
-  - Both changes consistent with how the main app (v1.9) treats approximate_quote
-  - verify_quote() core logic and outcome taxonomy unchanged; this is a bucketing fix only
 """
 
 import streamlit as st
@@ -323,24 +315,15 @@ def compute_confidence_signals(qresult, corpus=None):
             speech-level source diversity counting (chunks from the same speech
             counted once). Pass corpus_for_verify from run_pipeline_for_query.
             If omitted, falls back to qv cited_chunk_source strings.
-
-    v6.4 patch — approximate_quote alignment:
-        outcome='approximate_quote' (paraphrase-as-quote; content genuine,
-        only quote-mark precision imperfect) is now counted in the verified
-        bucket alongside 'verified'. Previously it fell into neither bucket,
-        causing the confidence panel to silently under-count verified quotes
-        and potentially misfire a 🔴 Low rating on paraphrase-as-quote cases.
-        approximate_displacement already handled correctly (displaced bucket).
     """
     final_text   = qresult.get("nicolay_final_answer_text", "") or ""
     synth_raw    = qresult.get("nicolay_synthesis_assessment_raw", "") or ""
     synth_type   = _u12_extract_synth_type_num(synth_raw)
 
     qv_list    = qresult.get("quote_verification", [])
-    # approximate_quote: content genuine (paraphrase-as-quote); count as verified
     verified   = [q for q in qv_list if q.get("outcome") in ("verified", "approximate_quote")]
     displaced  = [q for q in qv_list if q.get("outcome") in ("displacement", "approximate_displacement")]
-    unverified = [q for q in qv_list if q.get("outcome") == "fabrication"]
+    unverified = [q for q in qv_list if q.get("outcome") in ("fabrication", "source_mislabeled")]
 
     # Build a thin reranked_list from stored scores for reranker analysis
     reranker_scores = qresult.get("reranker_scores", [])[:5]
@@ -1067,7 +1050,9 @@ def normalize_for_quote_matching_loose(text: str) -> str:
 
 def _quote_segments_for_matching_loose(passage: str) -> list[str]:
     """Segments-in-order matching, but under loose normalization.
-    Strip all four quote-char variants before segmenting (same fix as strict version).
+    Strip all four quote-char variants (ASCII + curly) before segmenting so that
+    passages wrapped in curly quotes don't carry quote chars into the segment
+    string and fail a strict substring match against unquoted corpus text.
     """
     if not passage:
         return []
@@ -1113,10 +1098,6 @@ def _quote_segments_for_matching(passage: str) -> list[str]:
     This solves the exact bug you hit in Q8:
     Nicolay's Key Quote often ends with "..." which is not present in the corpus,
     causing false "fabrication" even when the quote is present verbatim.
-
-    Strip all four quote-char variants (ASCII + curly) before segmenting so that
-    passages wrapped in curly quotes don't carry quote chars into the segment
-    string and fail a strict substring match against unquoted corpus text.
     """
     if not passage:
         return []
@@ -1125,6 +1106,8 @@ def _quote_segments_for_matching(passage: str) -> list[str]:
     p = unicodedata.normalize("NFKD", str(passage)).strip()
 
     # Strip ALL common surrounding quotation marks (ASCII + curly variants)
+    # so that curly-quote-wrapped passages don't include the quote chars in
+    # the segment string and thereby fail a strict substring match.
     p = p.strip('\u201c\u201d\u2018\u2019"\'').strip()
 
     # Split on ellipsis markers (internal or trailing)
@@ -1296,6 +1279,81 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
                     "num_loose_segments": len(segs_loose),
                 }
 
+    # ── Stage 3.5 — Hyphen/punctuation-collapsed anchor on cited chunk ────────
+    # Catches parsing artifacts where hyphens become spaces, commas are dropped,
+    # or words are truncated at chunk boundaries — all corpus-level noise, not
+    # Nicolay errors.  Uses a 3-character edit-distance tolerance on the 60-char
+    # opening anchor so legitimate paraphrases (word-level changes) still fail.
+    # This fires BEFORE the corpus-wide displacement scan, so these cases return
+    # verified rather than displaced.
+    def _edit_distance_short(a: str, b: str) -> int:
+        """Levenshtein distance — O(mn) but called only on ≤60-char strings."""
+        if a == b:
+            return 0
+        la, lb = len(a), len(b)
+        if la == 0: return lb
+        if lb == 0: return la
+        prev = list(range(lb + 1))
+        for i, ca in enumerate(a, 1):
+            curr = [i] + [0] * lb
+            for j, cb in enumerate(b, 1):
+                curr[j] = min(prev[j] + 1, curr[j-1] + 1,
+                              prev[j-1] + (0 if ca == cb else 1))
+            prev = curr
+        return prev[lb]
+
+    if cited_norm_loose:
+        # Build a hyphen-collapsed version: all non-alphanumeric runs → single space
+        def _hyphen_collapse(text: str) -> str:
+            import re as _re35
+            return _re35.sub(r"[^a-z0-9]+", " ", text).strip()
+
+        _hc_chunk  = _hyphen_collapse(cited_norm_loose)
+        _hc_q_segs = [_hyphen_collapse(s) for s in segs_loose if s]
+
+        if _hc_q_segs:
+            _hc_anchor = _hc_q_segs[0][:60]
+            if len(_hc_anchor) >= 20:
+                # Exact substring on collapsed form
+                if _hc_anchor in _hc_chunk:
+                    return {
+                        "outcome": "verified",
+                        "in_cited_chunk": True,
+                        "in_any_chunk": True,
+                        "fabricated": False,
+                        "match_source_id": cited_text_id or "unknown",
+                        "match_method": "fuzzy_punctuation",
+                        "note": "VERIFIED — hyphen/punctuation-collapsed anchor match in cited chunk",
+                        "cited_chunk_present": cited_chunk_present,
+                        "cited_chunk_source": cited_source,
+                        "cited_chunk_text_id": cited_text_id,
+                        "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+                        "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+                    }
+                # Edit-distance tolerance (≤3 chars) on 60-char window scan
+                _anchor_len = len(_hc_anchor)
+                _found_fuzzy = False
+                for _start in range(0, max(1, len(_hc_chunk) - _anchor_len + 1)):
+                    _window = _hc_chunk[_start:_start + _anchor_len]
+                    if len(_window) >= _anchor_len - 2 and _edit_distance_short(_hc_anchor, _window) <= 3:
+                        _found_fuzzy = True
+                        break
+                if _found_fuzzy:
+                    return {
+                        "outcome": "verified",
+                        "in_cited_chunk": True,
+                        "in_any_chunk": True,
+                        "fabricated": False,
+                        "match_source_id": cited_text_id or "unknown",
+                        "match_method": "fuzzy_punctuation",
+                        "note": "VERIFIED — edit-distance ≤3 anchor match after punctuation collapse (corpus parsing artifact)",
+                        "cited_chunk_present": cited_chunk_present,
+                        "cited_chunk_source": cited_source,
+                        "cited_chunk_text_id": cited_text_id,
+                        "cited_chunk_text_len": len(cited_text) if cited_text else 0,
+                        "cited_chunk_preview": _safe_preview(cited_text, 140) if cited_text else "",
+                    }
+
     # ── Token-coverage heuristic (last chance): treat as approximate if most content tokens appear
     # This catches lightly paraphrased "quotes" that aren't substring-identical.
     if cited_norm_loose:
@@ -1406,6 +1464,35 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
         "loose_segments": segs_loose[:3],
         "num_loose_segments": len(segs_loose),
     }
+def _source_matches_refs(corpus_source: str, claimed_source: str) -> bool:
+    """
+    Compare a corpus chunk's actual source against Nicolay's claimed source label.
+    Returns True if they refer to the same document (token-Jaccard ≥ 0.35).
+
+    Handles the common cases:
+      "At Peoria, Illinois. October 16, 1854."  vs  "Peoria Address (1854)"   → 0.50 ✓
+      "First Annual Message. December 3, 1861"  vs  same with Source: prefix  → 1.00 ✓
+    And correctly rejects:
+      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
+        vs "Speech to the Young Men's Lyceum, Springfield, 1838"              → 0.11 ✗
+    """
+    if not corpus_source or not claimed_source:
+        return True  # cannot check → don't penalise
+
+    def _norm(s):
+        import re as _re
+        s = _re.sub(r'^source:\s*', '', str(s).strip(), flags=_re.IGNORECASE)
+        s = _re.sub(r'[.,;:\-()]', ' ', s)
+        s = _re.sub(r'\s+', ' ', s).strip().lower()
+        return s
+
+    ta = set(t for t in _norm(corpus_source).split() if len(t) > 2)
+    tb = set(t for t in _norm(claimed_source).split() if len(t) > 2)
+    if not ta or not tb:
+        return True
+    return len(ta & tb) / max(len(ta), len(tb)) >= 0.35
+
+
 def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) -> list[dict]:
     """Run quote verification for all Match Analysis entries (with debug metadata)."""
     match_analysis = nicolay_output.get("Match Analysis", {})
@@ -1432,12 +1519,26 @@ def verify_all_quotes(nicolay_output: dict, reranked: list[dict], corpus: dict) 
         # Was this ID actually part of the reranked top-k list?
         reranked_rec = reranked_by_num.get(cited_num) if cited_num is not None else None
 
+        # Source mislabeling check: if quote text verified but claimed source
+        # doesn't match corpus source → override outcome to source_mislabeled.
+        # This catches parametric laundering: real text, fabricated attribution.
+        claimed_source = str(match_val.get("Source", "") or "").strip()
+        actual_source  = str(cited_chunk.get("source", "")) if cited_chunk else ""
+        if (verification.get("outcome") == "verified"
+                and claimed_source
+                and not _source_matches_refs(actual_source, claimed_source)):
+            verification = {**verification, "outcome": "source_mislabeled",
+                            "note": "MISLABELED — quote text verified but source attribution "
+                                    f"does not match corpus source. "
+                                    f"Claimed: '{claimed_source[:80]}' | "
+                                    f"Actual: '{actual_source[:80]}'"}
+
         results.append({
             "match": match_key,
             "text_id": text_id_str,
             "cited_num": cited_num,
             "cited_chunk_present": cited_present,
-            "cited_chunk_source": str(cited_chunk.get("source", "")) if cited_chunk else "",
+            "cited_chunk_source": actual_source,
             "cited_chunk_text_id": str(cited_chunk.get("text_id", "")) if cited_chunk else "",
             "cited_passage": key_passage,
             "cited_in_reranked_topk": bool(reranked_rec),
@@ -2149,6 +2250,8 @@ def run_pipeline_for_query(
         if corpus_load_error:
             _size_msg += f" ⚠️ LOAD ERROR: {corpus_load_error}"
         st.session_state[f"_debug_corpus_size_{qid}"] = _size_msg
+        # Cache corpus for match card full-text display in Tab 1
+        st.session_state[f"_corpus_{qid}"] = corpus_for_verify
     except Exception:
         pass
 
@@ -2295,11 +2398,12 @@ def run_pipeline_for_query(
     qv = verify_all_quotes(nicolay_output, reranked, corpus_for_verify)
     result["quote_verification"] = qv
     outcomes = [q.get("outcome") for q in qv]
-    result["quotes_verified_count"] = outcomes.count("verified")
-    result["quotes_approx_count"] = outcomes.count("approximate_quote")
-    result["quotes_displaced_count"] = outcomes.count("displacement")
+    result["quotes_verified_count"]     = outcomes.count("verified")
+    result["quotes_approx_count"]        = outcomes.count("approximate_quote")
+    result["quotes_displaced_count"]     = outcomes.count("displacement")
     result["quotes_approx_displaced_count"] = outcomes.count("approximate_displacement")
-    result["quotes_fabricated_count"] = outcomes.count("fabrication")
+    result["quotes_fabricated_count"]    = outcomes.count("fabrication")
+    result["quotes_mislabeled_count"]    = outcomes.count("source_mislabeled")
 
     # ── 7. BLEU / ROUGE ───────────────────────────────────────────────────────
     status("📊 Computing BLEU/ROUGE scores...")
@@ -2382,7 +2486,33 @@ def main():
         if corpus_file and not Path(corpus_file).exists():
             st.error(f"⚠️ Corpus file not found: {corpus_file}")
         elif corpus_file and Path(corpus_file).exists():
-            st.caption(f"✅ Corpus file found")
+            # Load corpus once into a shared session-state key so match card
+            # full-text expanders and quote verification work even when results
+            # are restored from a prior-session checkpoint (no pipeline run).
+            # Always re-check: if key exists but is empty (failed last load), retry.
+            _shared_key = f"_corpus_shared_{corpus_file}"
+            _corpus_shared_current = st.session_state.get(_shared_key)
+            if not _corpus_shared_current:
+                try:
+                    _raw_shared = load_corpus_any(corpus_file)
+                    _corpus_shared = {}
+                    for _item in _raw_shared:
+                        _tid = _item.get("text_id", "")
+                        _m = re.search(r"(\d+)", str(_tid))
+                        if _m:
+                            _corpus_shared[int(_m.group(1))] = _item
+                    st.session_state[_shared_key] = _corpus_shared
+                    _corpus_shared_current = _corpus_shared
+                except Exception as _ce:
+                    st.session_state[_shared_key] = {}
+                    st.error(f"⚠️ Corpus load failed: {_ce}")
+            _corpus_size = len(_corpus_shared_current) if _corpus_shared_current else 0
+            if _corpus_size >= 700:
+                st.caption(f"✅ Corpus loaded — {_corpus_size} chunks in memory")
+            elif _corpus_size > 0:
+                st.warning(f"⚠️ Corpus loaded but only {_corpus_size} chunks — expected ~772. Check file.")
+            else:
+                st.error("❌ Corpus loaded 0 chunks — quote verification will show all quotes as fabricated. Check corpus path.")
         st.warning(
             "**Pipeline corpus note:** The benchmark script loads the corpus above "
             "for metrics and quote verification. But `run_rag_pipeline()` loads its "
@@ -2495,28 +2625,67 @@ def main():
                 st.warning(f"⚠️ Sheets init failed: {e}")
 
         st.markdown("---")
-        st.markdown("### 🤖 Model Pair")
-        selected_pair_key = st.radio(
-            "Active model pair",
-            list(MODEL_PAIRS.keys()),
-            index=0,
-            label_visibility="collapsed",
-        )
-        _pair = MODEL_PAIRS[selected_pair_key]
-        # Update module-level variables so run_pipeline_for_query() picks up the selection.
-        import sys as _sys_mp
-        _mod_mp = _sys_mp.modules[__name__]
-        _mod_mp.HAY_MODEL     = _pair["hay"]
-        _mod_mp.NICOLAY_MODEL = _pair["nicolay"]
-        st.caption(
-            f"🤖 **Hay:** `{_pair['hay'].split(':')[-2]}`  \n"
-            f"📚 **Nicolay:** `{_pair['nicolay'].split(':')[-2]}`"
-        )
-
-        st.markdown("---")
         st.markdown("### 📋 Run Mode")
         run_mode = st.radio("Mode", ["Single Query", "Full Benchmark", "Resume from Checkpoint", "Compare Pair"],
                             label_visibility="collapsed")
+
+        st.markdown("---")
+        _pair_keys = list(MODEL_PAIRS.keys())
+        import sys as _sys_mp
+        _mod_mp = _sys_mp.modules[__name__]
+
+        if run_mode == "Compare Pair":
+            # ── Compare Pair: independent left / right selectors ──────────────
+            st.markdown("### 🔬 Compare Pair")
+            _cp_left_key = st.selectbox(
+                "Left pair",
+                _pair_keys,
+                index=1,  # default: H4N3
+                key="cp_left_key",
+            )
+            _cp_right_key = st.selectbox(
+                "Right pair",
+                _pair_keys,
+                index=2,  # default: H4N4
+                key="cp_right_key",
+            )
+            # Use left pair as the "active" pair for module globals (restores after compare)
+            selected_pair_key = _cp_left_key
+            _pair = MODEL_PAIRS[selected_pair_key]
+            _mod_mp.HAY_MODEL     = _pair["hay"]
+            _mod_mp.NICOLAY_MODEL = _pair["nicolay"]
+            # Validation
+            if _cp_left_key == _cp_right_key:
+                st.warning("⚠️ Left and Right pairs must be different.")
+            else:
+                _cpl_lbl = MODEL_PAIRS[_cp_left_key]["label"]
+                _cpr_lbl = MODEL_PAIRS[_cp_right_key]["label"]
+                st.caption(
+                    f"**L:** `{MODEL_PAIRS[_cp_left_key]['hay'].split(':')[-2]}` / "
+                    f"`{MODEL_PAIRS[_cp_left_key]['nicolay'].split(':')[-2]}`  \n"
+                    f"**R:** `{MODEL_PAIRS[_cp_right_key]['hay'].split(':')[-2]}` / "
+                    f"`{MODEL_PAIRS[_cp_right_key]['nicolay'].split(':')[-2]}`"
+                )
+        else:
+            # ── All other modes: single active-pair radio ─────────────────────
+            st.markdown("### 🤖 Model Pair")
+            selected_pair_key = st.radio(
+                "Active model pair",
+                _pair_keys,
+                index=0,
+                label_visibility="collapsed",
+            )
+            _pair = MODEL_PAIRS[selected_pair_key]
+            # Update module-level variables so run_pipeline_for_query() picks up the selection.
+            _mod_mp.HAY_MODEL     = _pair["hay"]
+            _mod_mp.NICOLAY_MODEL = _pair["nicolay"]
+            st.caption(
+                f"🤖 **Hay:** `{_pair['hay'].split(':')[-2]}`  \n"
+                f"📚 **Nicolay:** `{_pair['nicolay'].split(':')[-2]}`"
+            )
+            # Provide fallback values so compare-mode variables are always defined
+            _cp_left_key  = _pair_keys[0]
+            _cp_right_key = _pair_keys[1] if len(_pair_keys) > 1 else _pair_keys[0]
 
         st.markdown("---")
         show_group = st.multiselect("Query groups", ["core", "revised", "new"],
@@ -2586,16 +2755,14 @@ def main():
             if pending and st.button("▶️ Resume", type="primary"):
                 do_run = "resume"
         elif run_mode == "Compare Pair":
-            _cp_baseline_key = list(MODEL_PAIRS.keys())[0]
-            _cp_compare_key  = selected_pair_key
-            _cp_baseline_lbl = MODEL_PAIRS[_cp_baseline_key]["label"]
-            _cp_compare_lbl  = MODEL_PAIRS[_cp_compare_key]["label"]
-            if _cp_baseline_key == _cp_compare_key:
-                st.warning("⚠️ Select a different pair than the baseline (H3N3) to compare.")
+            _cp_lbl_l = MODEL_PAIRS[_cp_left_key]["label"]
+            _cp_lbl_r = MODEL_PAIRS[_cp_right_key]["label"]
+            if _cp_left_key == _cp_right_key:
+                st.warning("⚠️ Left and Right pairs must be different to compare.")
             else:
                 st.info(
-                    f"Runs **{selected_query_id}** through **{_cp_baseline_lbl}** (baseline) "
-                    f"and **{_cp_compare_lbl}** (selected) back-to-back, "
+                    f"Runs **{selected_query_id}** through **{_cp_lbl_l}** (left) "
+                    f"and **{_cp_lbl_r}** (right) back-to-back, "
                     f"then shows a side-by-side comparison."
                 )
             if st.button(f"▶️ Compare {selected_query_id}", type="primary"):
@@ -2620,24 +2787,21 @@ def main():
                 elif do_run == "resume":
                     queries_to_run = [q for q in BENCHMARK_QUERIES if q["id"] not in results.get("queries", {})]
                 elif do_run == "compare":
-                    # Compare Pair: run selected query through baseline (H3N3) and the
-                    # selected pair, then display side-by-side. Does not write to the
+                    # Compare Pair: run selected query through the two user-chosen pairs
+                    # back-to-back, then display side-by-side. Does not write to the
                     # main results store — stored separately under session_state.
                     import sys as _sys_cp
                     _mod_cp = _sys_cp.modules[__name__]
-                    _cp_baseline_key2 = list(MODEL_PAIRS.keys())[0]
-                    _cp_compare_key2  = selected_pair_key
                     _compare_results  = {}
                     _compare_progress = st.progress(0)
                     _compare_status   = st.empty()
 
-                    for _cp_step, (_cp_pk, _cp_cfg) in enumerate([
-                        (_cp_baseline_key2, MODEL_PAIRS[_cp_baseline_key2]),
-                        (_cp_compare_key2,  MODEL_PAIRS[_cp_compare_key2]),
-                    ]):
+                    for _cp_step, _cp_pk in enumerate([_cp_left_key, _cp_right_key]):
+                        _cp_cfg = MODEL_PAIRS[_cp_pk]
+                        _cp_side = "left" if _cp_step == 0 else "right"
                         _compare_status.info(
                             f"🔄 Running {selected_query_id} with "
-                            f"{_cp_cfg['label']} ({_cp_step + 1}/2)…"
+                            f"{_cp_cfg['label']} ({_cp_side}, {_cp_step + 1}/2)…"
                         )
                         _mod_cp.HAY_MODEL     = _cp_cfg["hay"]
                         _mod_cp.NICOLAY_MODEL = _cp_cfg["nicolay"]
@@ -2655,24 +2819,28 @@ def main():
                         _compare_results[_cp_cfg["label"]] = _cp_qr
                         _compare_progress.progress((_cp_step + 1) / 2)
 
-                    # Restore selected pair
+                    # Restore module globals to whichever pair is "active" (left)
                     _mod_cp.HAY_MODEL     = MODEL_PAIRS[selected_pair_key]["hay"]
                     _mod_cp.NICOLAY_MODEL = MODEL_PAIRS[selected_pair_key]["nicolay"]
                     st.session_state[f"_compare_{selected_query_id}"] = _compare_results
                     _compare_status.success(f"✅ Compare complete — {selected_query_id}")
 
-                    # Side-by-side display
+                    # ── Side-by-side comparison display ─────────────────────────
                     st.markdown("---")
-                    st.markdown("### 🔬 Side-by-Side Comparison")
+                    _cp_lbl_l2 = MODEL_PAIRS[_cp_left_key]["label"]
+                    _cp_lbl_r2 = MODEL_PAIRS[_cp_right_key]["label"]
+                    st.markdown(f"### 🔬 {_cp_lbl_l2} vs {_cp_lbl_r2}")
                     _cp_labels = list(_compare_results.keys())
                     _cp_cols   = st.columns(len(_cp_labels))
+
                     for _cpc, _cpl in zip(_cp_cols, _cp_labels):
                         _cr = _compare_results[_cpl]
                         with _cpc:
                             st.markdown(f"#### {_cpl}")
+
+                            # ── Metrics summary row ───────────────────────────
                             _cr_ci  = _cr.get("confidence_icon", "?")
                             _cr_cl  = (_cr.get("confidence_rating") or "unknown").capitalize()
-                            st.markdown(f"**Confidence:** {_cr_ci} {_cr_cl}")
                             _cr_t   = _cr.get("nicolay_synthesis_type_raw", "?")
                             _cr_p5  = _cr.get("precision_at_5", 0) or 0
                             _cr_r5  = _cr.get("recall_at_5", 0) or 0
@@ -2680,26 +2848,261 @@ def main():
                             _cr_dis = _cr.get("quotes_displaced_count", 0) or 0
                             _cr_r1  = _cr.get("confidence_rouge1")
                             _cr_cw  = _cr.get("confidence_calib_warning", False)
+                            _cr_spr = _cr.get("confidence_spread")
+                            _cr_nsrc = _count_distinct_sources_from_qv(_cr.get("quote_verification", []))
+
                             st.markdown(
-                                f"**Type:** `{_cr_t}` &nbsp;·&nbsp; "
-                                f"**P@5:** {_cr_p5:.2f} &nbsp;·&nbsp; **R@5:** {_cr_r5:.2f}",
+                                f"{_cr_ci} **{_cr_cl}** confidence &nbsp;·&nbsp; Type `{_cr_t}`",
+                                unsafe_allow_html=True
+                            )
+                            st.markdown(
+                                f"**P@5:** {_cr_p5:.2f} &nbsp;·&nbsp; **R@5:** {_cr_r5:.2f} &nbsp;·&nbsp; "
+                                f"**Speeches:** {_cr_nsrc}",
                                 unsafe_allow_html=True
                             )
                             _fab_icon = "🚨" if _cr_fab > 0 else "✅"
                             st.markdown(
-                                f"{_fab_icon} **Fabrications:** {_cr_fab} &nbsp;·&nbsp; "
-                                f"**Displaced:** {_cr_dis}",
+                                f"{_fab_icon} **Fab:** {_cr_fab} &nbsp;·&nbsp; **Displaced:** {_cr_dis}"
+                                + (f" &nbsp;·&nbsp; **ROUGE-1:** {_cr_r1:.3f}" if _cr_r1 is not None else ""),
                                 unsafe_allow_html=True
                             )
-                            if _cr_r1 is not None:
-                                st.markdown(f"**ROUGE-1:** {_cr_r1:.3f}")
+                            if _cr_spr is not None:
+                                _cr_spr_lbl = "✅ Differentiated" if _cr_spr >= 0.20 else ("⚠️ Flat" if _cr_spr < 0.10 else "Moderate")
+                                st.caption(f"Spread: {_cr_spr:.3f} — {_cr_spr_lbl}")
                             if _cr_cw:
                                 st.warning("⚠️ Calibration warning: flat spread")
+
+                            st.divider()
+
+                            # ── HAY OUTPUT ───────────────────────────────────
+                            st.markdown("##### 🔍 Hay")
+                            _cr_hay = _cr.get("hay_output", {}) or {}
+                            st.markdown(f"**Type:** `{_cr.get('hay_task_type_raw','?')}` "
+                                        + ("✅" if _cr.get("hay_task_type_correct") else "❌"))
+                            with st.expander("Initial Answer & Assessment", expanded=False):
+                                st.markdown("**Initial Answer:**")
+                                st.markdown(_cr_hay.get("initial_answer", "_none_"))
+                                st.markdown("**Query Assessment:**")
+                                st.markdown(_cr_hay.get("query_assessment", "_none_"))
+                            with st.expander("Keywords", expanded=False):
+                                st.markdown("**Weighted Keywords:**")
+                                st.json(_cr_hay.get("weighted_keywords", {}))
+                                st.markdown(f"**Year:** {_cr_hay.get('year_keywords', [])}")
+                                st.markdown(f"**Text:** {_cr_hay.get('text_keywords', [])}")
+                            if _cr.get("hay_spurious_fields"):
+                                st.warning(f"⚠️ Spurious fields: {_cr['hay_spurious_fields']}")
+                            if _cr.get("hay_training_bleed"):
+                                st.warning("⚠️ Training bleed in query_assessment")
+
+                            st.divider()
+
+                            # ── RETRIEVAL ────────────────────────────────────
+                            st.markdown("##### 📚 Retrieval")
+                            _cr_ids    = _cr.get("retrieved_doc_ids", [])
+                            _cr_scores = _cr.get("reranker_scores", [])
+                            _cr_types  = _cr.get("retrieval_search_types", [])
+                            _cr_ideal  = set(qdef.get("ideal_docs_new", []))
+                            for _ri, (_rt, _rs_val, _rtype) in enumerate(
+                                    zip(_cr_ids, _cr_scores, _cr_types)):
+                                _r_hit = "✅" if _rt in _cr_ideal else "❌"
+                                _r_sc  = f"{_rs_val:.4f}" if _rs_val is not None else "N/A"
+                                st.markdown(
+                                    f"{_r_hit} **{_ri+1}** — #{_rt} &nbsp;·&nbsp; "
+                                    f"{_r_sc} &nbsp;·&nbsp; _{_rtype}_",
+                                    unsafe_allow_html=True
+                                )
+
+                            st.divider()
+
+                            # ── NICOLAY OUTPUT ───────────────────────────────
+                            st.markdown("##### ✍️ Nicolay")
+                            _cr_fa    = _cr.get("nicolay_final_answer_text", "") or ""
+                            _cr_qvl   = _cr.get("quote_verification", [])
+
+                            # Inline-verified FinalAnswer
+                            _cr_iv_v  = [(q.get("cited_passage",""), q.get("cited_chunk_text_id",""), "")
+                                          for q in _cr_qvl if q.get("outcome") in ("verified", "approximate_quote")]
+                            _cr_iv_d  = [q.get("cited_passage","") for q in _cr_qvl
+                                          if q.get("outcome") in ("displacement","approximate_displacement")]
+                            _cr_iv_u  = [q.get("cited_passage","") for q in _cr_qvl
+                                          if q.get("outcome") == "fabrication"]
+                            _cr_iv_ml = [q.get("cited_passage","") for q in _cr_qvl
+                                          if q.get("outcome") == "source_mislabeled"]
+                            _QPAIRS   = [('“','”'),('"','"'),('‘','’'),("'","'")]
+                            _cr_annot = _cr_fa
+                            for _iq, _, __ in _cr_iv_v:
+                                if not _iq: continue
+                                for _oq, _cq in _QPAIRS:
+                                    _lit = _oq + _iq + _cq
+                                    if _lit in _cr_annot:
+                                        _cr_annot = _cr_annot.replace(_lit, _lit + " ✅", 1); break
+                            for _iq in _cr_iv_d:
+                                if not _iq: continue
+                                for _oq, _cq in _QPAIRS:
+                                    _lit = _oq + _iq + _cq
+                                    if _lit in _cr_annot:
+                                        _cr_annot = _cr_annot.replace(_lit, _lit + " 🔀", 1); break
+                            for _iq in _cr_iv_u:
+                                if not _iq: continue
+                                for _oq, _cq in _QPAIRS:
+                                    _lit = _oq + _iq + _cq
+                                    if _lit in _cr_annot:
+                                        _cr_annot = _cr_annot.replace(_lit, _lit + " ⚠️", 1); break
+                            for _iq in _cr_iv_ml:
+                                if not _iq: continue
+                                for _oq, _cq in _QPAIRS:
+                                    _lit = _oq + _iq + _cq
+                                    if _lit in _cr_annot:
+                                        _cr_annot = _cr_annot.replace(_lit, _lit + " 🏷️", 1); break
+
                             with st.expander("FinalAnswer", expanded=True):
-                                _cr_fa = _cr.get("nicolay_final_answer_text", "") or ""
-                                st.markdown(_cr_fa[:1500] + ("…" if len(_cr_fa) > 1500 else ""))
-                            with st.expander("Hay Initial Answer"):
-                                st.markdown(_cr.get("hay_initial_answer", "") or "")
+                                st.markdown(_cr_annot)
+                                _cr_iv_leg = []
+                                if _cr_iv_v: _cr_iv_leg.append("✅ verified")
+                                if _cr_iv_d: _cr_iv_leg.append("🔀 displaced")
+                                if _cr_iv_u: _cr_iv_leg.append("⚠️ fabrication")
+                                if _cr_iv_ml: _cr_iv_leg.append("🏷️ mislabeled source")
+                                if _cr_iv_leg:
+                                    st.caption(" · ".join(_cr_iv_leg))
+
+                            # Match Analysis cards
+                            _cr_ma = (_cr.get("nicolay_output") or {}).get("Match Analysis", {})
+                            if _cr_ma and isinstance(_cr_ma, dict):
+                                with st.expander("Match Analysis cards", expanded=False):
+                                    _cr_sc_map = {str(t): s for t, s in
+                                                  zip(_cr.get("retrieved_doc_ids",[]),
+                                                      _cr.get("reranker_scores",[]))}
+                                    import re as _cp_re
+                                    for _cmi, (_cmk, _cmv) in enumerate(_cr_ma.items()):
+                                        if not isinstance(_cmv, dict): continue
+                                        _cm_tid  = str(_cmv.get("Text ID",""))
+                                        _cm_src  = (_cmv.get("Source","") or "").strip().lstrip("Ss ource:")
+                                        _cm_kq   = _cmv.get("Key Quote","")
+                                        _cm_rel  = _cmv.get("Relevance Assessment","")
+                                        _cm_sum  = _cmv.get("Summary","")
+                                        _cm_sc   = _cr_sc_map.get(_cm_tid)
+                                        _cm_qv   = next((q for q in _cr_qvl
+                                                         if str(q.get("cited_num","")) == _cm_tid
+                                                         or q.get("match","") == _cmk), None)
+                                        _cm_out  = (_cm_qv or {}).get("outcome","")
+                                        _cm_vico = {"verified":"✅","approximate_quote":"🟡","displacement":"🔀","approximate_displacement":"🔀","fabrication":"⚠️","source_mislabeled":"🏷️"}.get(_cm_out,"⬜")
+                                        # Relevance color
+                                        _cm_rt   = _cm_rel.lower()
+                                        if "high" in _cm_rt: _cm_bg,_cm_fg = "#d4edda","#155724"
+                                        elif "medium" in _cm_rt or "moderate" in _cm_rt: _cm_bg,_cm_fg = "#fff3cd","#856404"
+                                        elif "low" in _cm_rt: _cm_bg,_cm_fg = "#f8d7da","#721c24"
+                                        else: _cm_bg,_cm_fg = "#e2e3e5","#383d41"
+                                        _cm_lbl  = _cp_re.split(r"[—,]", _cm_rel or "N/A")[0].strip()[:25]
+                                        _cm_badge = (f'<span style="background:{_cm_bg};color:{_cm_fg};'
+                                                     f'padding:3px 8px;border-radius:10px;font-size:0.8em;'
+                                                     f'font-weight:700;">{_cm_lbl}</span>')
+                                        with st.container(border=True):
+                                            _cmh1, _cmh2 = st.columns([5,1])
+                                            with _cmh1: st.markdown(f"**{_cmk}** {_cm_vico}")
+                                            with _cmh2: st.markdown(f'<div style="text-align:right;">{_cm_badge}</div>', unsafe_allow_html=True)
+                                            st.markdown(f"**ID:** {_cm_tid}  ·  **Source:** {_cm_src}")
+                                            if _cm_sc is not None: st.caption(f"Reranker: {_cm_sc:.3f}")
+                                            if _cm_kq:
+                                                st.markdown(f'> *“{_cm_kq[:280]}”*')
+                                            if _cm_sum:
+                                                st.markdown(f"**Analysis:** {_cm_sum[:250]}…" if len(_cm_sum)>250 else f"**Analysis:** {_cm_sum}")
+
+                            # ── CONFIDENCE PANEL ────────────────────────────────
+                            st.divider()
+                            _cr_expl   = _cr.get("confidence_explanation", "")
+                            _cr_r2     = _cr.get("confidence_rouge2")
+                            _cr_nsrc2  = _cr.get("confidence_n_sources", 0) or 0
+                            _cr_max_sc = _cr.get("confidence_max_score")
+                            _cr_st_num = _cr.get("confidence_synth_type") or 0
+                            _cr_nv     = len(_cr_iv_v)
+                            _cr_nd     = len(_cr_iv_d)
+                            _cr_nu     = len(_cr_iv_u)
+                            _cr_total_q = _cr_nv + _cr_nd + _cr_nu
+
+                            _cr_conf_hdr = f"📊 Confidence: {_cr_ci} {_cr_cl}"
+                            with st.expander(_cr_conf_hdr, expanded=False):
+                                # Overall rating banner
+                                st.markdown(f"**Overall: {_cr_ci} {_cr_cl}**")
+                                if _cr_expl:
+                                    st.markdown(_cr_expl)
+                                st.divider()
+
+                                # Signal 1 — Quote verification
+                                _cr_nml = _cr.get("quotes_mislabeled_count", 0) or 0
+                                _cr_total_q = _cr_nv + _cr_nd + _cr_nu + _cr_nml
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Quote verification**")
+                                with _cs2:
+                                    if _cr_total_q == 0:
+                                        st.markdown("⬜ No direct quotes")
+                                        st.caption("No quoted text in FinalAnswer.")
+                                    elif _cr_nu == 0 and _cr_nd == 0 and _cr_nml == 0:
+                                        st.markdown(f"✅ {_cr_total_q}/{_cr_total_q} verified")
+                                        st.caption("All quoted passages confirmed in corpus.")
+                                    elif _cr_nu > 0:
+                                        st.markdown(f"🔴 {_cr_nv}/{_cr_total_q} verified — **{_cr_nu} not found**")
+                                        st.caption("One or more quotes not found anywhere in corpus.")
+                                    elif _cr_nml > 0:
+                                        st.markdown(f"🏷️ {_cr_nv}/{_cr_total_q} correctly attributed — **{_cr_nml} mislabeled**")
+                                        st.caption("Quote text found in corpus but source attribution wrong.")
+                                    else:
+                                        st.markdown(f"🔀 {_cr_nv}/{_cr_total_q} verified — **{_cr_nd} displaced**")
+                                        st.caption("Quote in right document but wrong chunk.")
+                                st.divider()
+
+                                # Signal 2 — ROUGE corpus grounding
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Corpus grounding**")
+                                with _cs2:
+                                    if _cr_r1 is not None:
+                                        _r1_icon = "✅" if _cr_r1 >= 0.40 else ("⚠️" if _cr_r1 >= 0.25 else "🔴")
+                                        st.markdown(f"{_r1_icon} ROUGE-1: `{_cr_r1:.3f}`" +
+                                                    (f"  ·  ROUGE-2: `{_cr_r2:.3f}`" if _cr_r2 is not None else ""))
+                                        _r_thr = 0.45 if _cr_st_num in (1,2) else (None if _cr_st_num == 3 else 0.30)
+                                        if _r_thr is None:
+                                            st.caption("Type 3 (absence) — ROUGE threshold not applied.")
+                                        else:
+                                            st.caption(f"Threshold for this synthesis type: {_r_thr:.2f}")
+                                    else:
+                                        st.markdown("⬜ Not computed")
+                                st.divider()
+
+                                # Signal 3 — Reranker score ceiling
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Retrieval ceiling**")
+                                with _cs2:
+                                    if _cr_max_sc is not None:
+                                        _sc_icon = "✅" if _cr_max_sc >= 0.55 else ("⚠️" if _cr_max_sc >= 0.35 else "🔴")
+                                        st.markdown(f"{_sc_icon} Max reranker score: `{_cr_max_sc:.3f}`")
+                                        st.caption("Score ≥ 0.55 indicates strong retrieval signal.")
+                                    else:
+                                        st.markdown("⬜ Not available")
+                                st.divider()
+
+                                # Signal 4 — Spread / calibration
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Score spread**")
+                                with _cs2:
+                                    if _cr_spr is not None:
+                                        _spr_icon = "✅" if _cr_spr >= 0.20 else ("⚠️" if _cr_spr < 0.10 else "🟡")
+                                        st.markdown(f"{_spr_icon} Spread: `{_cr_spr:.3f}`")
+                                        if _cr_cw:
+                                            st.caption("⚠️ Calibration warning: scores are flat — retriever "
+                                                       "may be off-target for this query.")
+                                        else:
+                                            st.caption("Spread ≥ 0.20 = discriminating retrieval; "
+                                                       "< 0.10 = flat (suspect).")
+                                    else:
+                                        st.markdown("⬜ Not available")
+                                st.divider()
+
+                                # Signal 5 — Source diversity
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Source diversity**")
+                                with _cs2:
+                                    _div_icon = "✅" if _cr_nsrc2 >= 3 else ("⚠️" if _cr_nsrc2 == 2 else "🔴")
+                                    st.markdown(f"{_div_icon} **{_cr_nsrc2}** distinct Lincoln speech(es) in top-5")
+                                    st.caption("≥ 3 distinct speeches = well-diversified retrieval.")
 
                     queries_to_run = []   # skip normal loop
                 else:
@@ -2860,8 +3263,49 @@ def main():
             _conf_r2_stored = qr.get("confidence_rouge2")
 
             _qv_list      = qr.get("quote_verification", [])
-            # v6.4: approximate_quote (paraphrase-as-quote) counted as verified
-            _verified_q   = [q for q in _qv_list if q.get("outcome") in ("verified", "approximate_quote")]
+
+            # Re-verify if stored results were computed with an empty corpus
+            # (common for checkpoint-loaded results from a prior session).
+            # If corpus is now available in shared session state and all stored
+            # outcomes are "fabrication" or missing, re-run verification.
+            _shared_key_qv = f"_corpus_shared_{corpus_file}"
+            _corpus_for_rev = (
+                st.session_state.get(f"_corpus_{selected_query_id}")
+                or st.session_state.get(_shared_key_qv)
+            )
+            _all_fabricated = bool(_qv_list) and all(
+                q.get("outcome") in ("fabrication", "too_short") for q in _qv_list
+            )
+            if _all_fabricated and _corpus_for_rev:
+                try:
+                    _nicolay_out_rev = qr.get("nicolay_output") or {}
+                    # Reconstruct minimal reranked list from stored IDs + scores
+                    # (only needed for cited_in_reranked_topk metadata, not outcomes)
+                    _stored_ids_rev   = qr.get("retrieved_doc_ids", [])
+                    _stored_scores_rev = qr.get("reranker_scores", [])
+                    _reranked_rev = [
+                        {"text_id_num": _tid, "rank": _rank + 1,
+                         "reranker_score": _score}
+                        for _rank, (_tid, _score) in enumerate(
+                            zip(_stored_ids_rev, _stored_scores_rev))
+                        if _tid is not None
+                    ]
+                    if _nicolay_out_rev:
+                        _qv_list = verify_all_quotes(
+                            _nicolay_out_rev, _reranked_rev, _corpus_for_rev)
+                        qr["quote_verification"] = _qv_list
+                        _outcomes_rev = [q.get("outcome") for q in _qv_list]
+                        qr["quotes_verified_count"]          = _outcomes_rev.count("verified")
+                        qr["quotes_approx_count"]            = _outcomes_rev.count("approximate_quote")
+                        qr["quotes_displaced_count"]         = _outcomes_rev.count("displacement")
+                        qr["quotes_approx_displaced_count"]  = _outcomes_rev.count("approximate_displacement")
+                        qr["quotes_fabricated_count"]        = _outcomes_rev.count("fabrication")
+                        qr["quotes_mislabeled_count"]        = _outcomes_rev.count("source_mislabeled")
+                        st.caption("ℹ️ Quote verification re-run with corpus now in memory.")
+                except Exception:
+                    pass
+
+            _verified_q   = [q for q in _qv_list if q.get("outcome") == "verified"]
             _displaced_q  = [q for q in _qv_list if q.get("outcome") in
                               ("displacement", "approximate_displacement")]
             _unverified_q = [q for q in _qv_list if q.get("outcome") == "fabrication"]
@@ -3037,14 +3481,77 @@ def main():
             # ── Nicolay output ───────────────────────────────────────────────────────────────────────────
             with st.expander("✍️ Nicolay Output", expanded=True):
                 final_text = get_final_answer_text(qr.get("nicolay_output", {}))
+                _qv_for_inline = qr.get("quote_verification", [])
+                # Reconstruct verified/displaced/unverified/mislabeled lists from stored qv results
+                # so we can annotate the FinalAnswer text without re-running verification.
+                _iv_verified   = [(q.get("cited_passage",""), q.get("cited_chunk_text_id",""), q.get("cited_chunk_source",""))
+                                   for q in _qv_for_inline if q.get("outcome") == "verified"]
+                _iv_displaced  = [q.get("cited_passage","")
+                                   for q in _qv_for_inline
+                                   if q.get("outcome") in ("displacement", "approximate_displacement", "approximate_quote")
+                                   and q.get("outcome") != "verified"]
+                _iv_unverified = [q.get("cited_passage","")
+                                   for q in _qv_for_inline if q.get("outcome") == "fabrication"]
+                _iv_mislabeled = [q.get("cited_passage","")
+                                   for q in _qv_for_inline if q.get("outcome") == "source_mislabeled"]
+
+                # Annotate FinalAnswer text with inline emoji markers
+                _QUOTE_PAIRS_IV = [
+                    ('\u201c', '\u201d'),
+                    ('"',      '"'     ),
+                    ('\u2018', '\u2019'),
+                    ("'",      "'"     ),
+                ]
+                _annotated_fa = final_text
+                for _iq, _itid, _isrc in _iv_verified:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " ✅", 1)
+                            break
+                for _iq in _iv_displaced:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🔀", 1)
+                            break
+                for _iq in _iv_unverified:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " ⚠️", 1)
+                            break
+                for _iq in _iv_mislabeled:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🏷️", 1)
+                            break
+
                 st.markdown("**Final Answer:**")
-                st.markdown(final_text)
+                st.markdown(_annotated_fa)
+                # Legend
+                _iv_has_v = bool(_iv_verified)
+                _iv_has_d = bool(_iv_displaced)
+                _iv_has_u = bool(_iv_unverified)
+                _iv_has_m = bool(_iv_mislabeled)
+                if _iv_has_v or _iv_has_d or _iv_has_u or _iv_has_m:
+                    _iv_legend = []
+                    if _iv_has_v: _iv_legend.append("✅ verified against corpus")
+                    if _iv_has_d: _iv_legend.append("🔀 found in document, displaced chunk")
+                    if _iv_has_u: _iv_legend.append("⚠️ not found — possible fabrication")
+                    if _iv_has_m: _iv_legend.append("🏷️ text verified but source attribution wrong")
+                    st.caption(" · ".join(_iv_legend))
                 st.caption(f"Word count: {qr.get('nicolay_final_answer_wordcount', 0)}")
 
             # Quote verification
             with st.expander("🔎 Quote Verification", expanded=False):
                 for qv_item in qr.get("quote_verification", []):
-                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "⚠️", "approximate_displacement": "🟠", "fabrication": "🚨", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
+                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "⚠️", "approximate_displacement": "🟠", "fabrication": "🚨", "source_mislabeled": "🏷️", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
                     st.markdown(f"{icon} **{qv_item.get('match', '')}** ({qv_item.get('text_id', '')}) — *{qv_item.get('outcome', '')}*")
                     if qv_item.get("cited_passage"):
                         st.caption(f"\"{str(qv_item['cited_passage'])[:150]}...\"")
@@ -3064,6 +3571,139 @@ def main():
                     if qv_item.get("note"):
                         st.caption(qv_item["note"])
 
+
+            # ── Match Analysis cards ─────────────────────────────────────────────────────────────────────
+            # Displays reranker score badge + key quote blockquote + Nicolay's analysis +
+            # verification badge + collapsible full-text with highlight.
+            # Preserves the existing Quote Verification debug expander above.
+            _ma_cards = (qr.get("nicolay_output") or {}).get("Match Analysis", {})
+            if _ma_cards and isinstance(_ma_cards, dict):
+                st.markdown("---")
+                st.markdown("#### 🎯 Match Analysis")
+                _ma_scores_map = {}
+                _ma_retrieved  = qr.get("retrieved_doc_ids", [])
+                _ma_rscores    = qr.get("reranker_scores", [])
+                for _ma_tid, _ma_sc in zip(_ma_retrieved, _ma_rscores):
+                    _ma_scores_map[str(_ma_tid)] = _ma_sc
+
+                _ma_col_l, _ma_col_r = st.columns(2)
+                _ma_col_map = {0: _ma_col_l, 1: _ma_col_r}
+
+                for _ma_i, (_ma_key, _ma_info) in enumerate(_ma_cards.items()):
+                    if not isinstance(_ma_info, dict):
+                        continue
+                    _ma_text_id   = str(_ma_info.get("Text ID", ""))
+                    _ma_src       = (_ma_info.get("Source", "") or "").strip()
+                    if _ma_src.lower().startswith("source:"):
+                        _ma_src = _ma_src[len("source:"):].strip()
+                    _ma_kq        = _ma_info.get("Key Quote", "")
+                    _ma_summary   = _ma_info.get("Summary", "")
+                    _ma_relevance = _ma_info.get("Relevance Assessment", "")
+                    _ma_hist      = _ma_info.get("Historical Context", "")
+                    _ma_score     = _ma_scores_map.get(_ma_text_id)
+
+                    # Relevance badge
+                    _ma_rel_t = (_ma_relevance or "").lower()
+                    if "high" in _ma_rel_t:   _ma_rbg, _ma_rfg = "#d4edda", "#155724"
+                    elif "medium" in _ma_rel_t or "moderate" in _ma_rel_t: _ma_rbg, _ma_rfg = "#fff3cd", "#856404"
+                    elif "low" in _ma_rel_t:  _ma_rbg, _ma_rfg = "#f8d7da", "#721c24"
+                    else:                      _ma_rbg, _ma_rfg = "#e2e3e5", "#383d41"
+                    import re as _ma_re
+                    _ma_rel_label = _ma_re.split(r"[—,]", _ma_relevance or "N/A")[0].strip()[:30]
+                    _ma_rel_badge = (
+                        f'<span style="background:{_ma_rbg};color:{_ma_rfg};padding:4px 12px;'
+                        f'border-radius:12px;font-size:0.85em;font-weight:700;'
+                        f'display:inline-block;">{_ma_rel_label}</span>'
+                    )
+
+                    # Verification badge from stored qv results
+                    _ma_qv_item = next(
+                        (q for q in qr.get("quote_verification", [])
+                         if str(q.get("cited_num", "")) == _ma_text_id
+                         or q.get("match", "") == _ma_key),
+                        None
+                    )
+                    _ma_outcome = (_ma_qv_item or {}).get("outcome", "")
+                    if _ma_outcome == "verified":
+                        _ma_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:600;">✅ Quote verified in corpus</span>'
+                    elif _ma_outcome in ("displacement", "approximate_displacement"):
+                        _ma_vbadge = '<span style="color:#664d03;background:#fff3cd;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🔀 Found in document, displaced chunk</span>'
+                    elif _ma_outcome == "approximate_quote":
+                        _ma_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:500;">🟡 Approximate match confirmed</span>'
+                    elif _ma_outcome == "fabrication":
+                        _ma_vbadge = '<span style="color:#721c24;font-size:0.9em;font-weight:600;">⚠️ Not found in corpus</span>'
+                    else:
+                        _ma_vbadge = '<span style="color:#6c757d;font-size:0.9em;">⬜ Not verified</span>'
+
+                    with _ma_col_map[_ma_i % 2]:
+                        with st.container(border=True):
+                            # Header: title left, relevance badge right
+                            _ma_h1, _ma_h2 = st.columns([5, 1])
+                            with _ma_h1:
+                                st.markdown(f"**{_ma_key}**")
+                            with _ma_h2:
+                                st.markdown(f'<div style="text-align:right;">{_ma_rel_badge}</div>',
+                                            unsafe_allow_html=True)
+
+                            # Metadata + reranker score
+                            st.markdown(f"**ID:** {_ma_text_id}  ·  **Source:** {_ma_src}")
+                            if _ma_score is not None:
+                                st.caption(f"Reranker score: {_ma_score:.3f}")
+
+                            # Key quote blockquote
+                            if _ma_kq:
+                                _ma_kq_disp = _ma_kq[:320] + ("…" if len(_ma_kq) > 320 else "")
+                                st.markdown(f'> *“{_ma_kq_disp}”*')
+
+                            # Nicolay's analysis
+                            if _ma_summary:
+                                _ma_sum_disp = _ma_summary[:300] + ("…" if len(_ma_summary) > 300 else "")
+                                st.markdown(f"**Nicolay's Analysis:** {_ma_sum_disp}")
+
+                            # Verification badge
+                            st.markdown(_ma_vbadge, unsafe_allow_html=True)
+
+                            # Full text expander with highlight
+                            with st.expander(f"Full text & highlight — {_ma_key}", expanded=False):
+                                if _ma_hist:
+                                    st.markdown(f"**Historical Context:** {_ma_hist}")
+                                # Resolve corpus: prefer per-query cache (set during run),
+                                # fall back to shared corpus loaded from sidebar corpus_file.
+                                _shared_key_mc = f"_corpus_shared_{corpus_file}"
+                                _ma_corpus_ss = (
+                                    st.session_state.get(f"_corpus_{qr.get('id','')}")
+                                    or st.session_state.get(_shared_key_mc)
+                                )
+                                _ma_int_id = None
+                                try:
+                                    _ma_int_id = int(_ma_text_id)
+                                except (ValueError, TypeError):
+                                    pass
+                                _ma_chunk = None
+                                if _ma_corpus_ss and _ma_int_id is not None:
+                                    _ma_chunk = _ma_corpus_ss.get(_ma_int_id)
+                                if _ma_chunk:
+                                    _ma_ft = _ma_chunk.get("full_text", "")
+                                    if _ma_ft:
+                                        _ma_html = _ma_ft.replace("\n", "<br>")
+                                        if _ma_kq and _ma_kq in _ma_ft:
+                                            _ma_html = _ma_html.replace(_ma_kq, f"<mark>{_ma_kq}</mark>")
+                                        elif _ma_kq:
+                                            # Partial highlight: find first segment
+                                            _ma_segs = [p.strip() for p in _ma_kq.split("...") if p.strip()]
+                                            for _seg in _ma_segs:
+                                                if len(_seg) > 20 and _seg in _ma_ft:
+                                                    _ma_html = _ma_html.replace(_seg, f"<mark>{_seg}</mark>", 1)
+                                                    break
+                                        st.markdown("**Full Text with Highlighted Quote:**")
+                                        st.markdown(
+                                            f'<div style="font-size:0.95em;line-height:1.65;">{_ma_html}</div>',
+                                            unsafe_allow_html=True
+                                        )
+                                    else:
+                                        st.info("Full text not available for this chunk.")
+                                else:
+                                    st.info("Corpus not cached for this session. Re-run the query to enable full-text display.")
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 2: METRICS

@@ -3100,8 +3100,12 @@ def main():
                                     _cm_sum  = _cmv.get("Summary","")
                                     _cm_hist = _cmv.get("Historical Context","")
                                     _cm_sc   = _cr_sc_map.get(_cm_tid)
+                                    # Join QV record by integer ID (cited_num is stored as int;
+                                    # _cm_tid may be "Text #: 311" or "311" — extract int for
+                                    # reliable comparison) or fall back to match key equality.
+                                    _cm_tid_int = _extract_int_from_text_id(_cm_tid)
                                     _cm_qv   = next((q for q in _cr_qvl
-                                                     if str(q.get("cited_num","")) == _cm_tid
+                                                     if (_cm_tid_int is not None and q.get("cited_num") == _cm_tid_int)
                                                      or q.get("match","") == _cmk), None)
                                     _cm_out  = (_cm_qv or {}).get("outcome","")
 
@@ -3156,11 +3160,9 @@ def main():
                                             # then loads from disk on demand — no prior pipeline
                                             # run required.  Returns {} if file not found.
                                             _cp_corpus_ss = _get_or_load_corpus(corpus_file)
-                                            _cp_int_id = None
-                                            try:
-                                                _cp_int_id = int(_cm_tid)
-                                            except (ValueError, TypeError):
-                                                pass
+                                            # Use _extract_int_from_text_id() rather than bare int()
+                                            # so both "311" and "Text #: 311" formats resolve correctly.
+                                            _cp_int_id = _extract_int_from_text_id(_cm_tid)
                                             _cp_chunk = _cp_corpus_ss.get(_cp_int_id) if _cp_int_id is not None else None
                                             if _cp_chunk:
                                                 _cp_ft = _cp_chunk.get("full_text","")
@@ -3811,9 +3813,12 @@ def main():
                     )
 
                     # Verification badge from stored qv results
+                    # Use integer comparison for cited_num (stored as int); _ma_text_id
+                    # may be "Text #: 311" or "311" — extract int for reliable matching.
+                    _ma_tid_int = _extract_int_from_text_id(_ma_text_id)
                     _ma_qv_item = next(
                         (q for q in qr.get("quote_verification", [])
-                         if str(q.get("cited_num", "")) == _ma_text_id
+                         if (_ma_tid_int is not None and q.get("cited_num") == _ma_tid_int)
                          or q.get("match", "") == _ma_key),
                         None
                     )
@@ -3864,11 +3869,9 @@ def main():
                                 # _get_or_load_corpus() loads on demand if not already cached —
                                 # no prior pipeline run required.
                                 _ma_corpus_ss = _get_or_load_corpus(corpus_file)
-                                _ma_int_id = None
-                                try:
-                                    _ma_int_id = int(_ma_text_id)
-                                except (ValueError, TypeError):
-                                    pass
+                                # Use _extract_int_from_text_id() rather than bare int()
+                                # so both "311" and "Text #: 311" formats resolve correctly.
+                                _ma_int_id = _extract_int_from_text_id(_ma_text_id)
                                 _ma_chunk = _ma_corpus_ss.get(_ma_int_id) if _ma_int_id is not None else None
                                 if _ma_chunk:
                                     _ma_ft = _ma_chunk.get("full_text", "")

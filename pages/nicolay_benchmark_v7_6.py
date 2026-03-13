@@ -3505,6 +3505,11 @@ def main():
             _displaced_q  = [q for q in _qv_list if q.get("outcome") in
                               ("displacement", "approximate_displacement")]
             _unverified_q = [q for q in _qv_list if q.get("outcome") == "fabrication"]
+            # source_mislabeled: quote text verified but Nicolay's claimed source label
+            # doesn't match the actual corpus source (parametric source fabrication).
+            # Counts as an integrity failure for overall rating but is distinct from
+            # a fabricated quote — the text IS in the corpus.
+            _mislabeled_q = [q for q in _qv_list if q.get("outcome") == "source_mislabeled"]
 
             # Attempt to recompute ROUGE with richer chunk text from Match Analysis
             _final_for_rouge = qr.get("nicolay_final_answer_text", "") or ""
@@ -3544,7 +3549,10 @@ def main():
                 st.divider()
 
                 # Signal 1: Quote verification
-                _total_q = len(_verified_q) + len(_displaced_q) + len(_unverified_q)
+                # _total_q includes all classifiable outcomes: verified, displaced,
+                # fabricated, and source-mislabeled. too_short entries are excluded
+                # (they have no usable passage and don't affect the integrity score).
+                _total_q = len(_verified_q) + len(_displaced_q) + len(_unverified_q) + len(_mislabeled_q)
                 _col_qa, _col_qb = st.columns([1, 2])
                 with _col_qa:
                     st.caption("**Quote verification**")
@@ -3552,7 +3560,7 @@ def main():
                     if _total_q == 0:
                         st.markdown("⬜ No direct quotes in this response")
                         st.caption("Nicolay did not include any directly quoted text.")
-                    elif not _unverified_q and not _displaced_q:
+                    elif not _unverified_q and not _displaced_q and not _mislabeled_q:
                         st.markdown(f"✅ {_total_q}/{_total_q} quotes verified")
                         st.caption("Every quoted passage confirmed present in the Lincoln corpus.")
                     elif _unverified_q:
@@ -3563,6 +3571,15 @@ def main():
                         st.caption(
                             "One or more quoted passages could not be located in the Lincoln corpus. "
                             "These may be fabricated, misremembered, or from a source outside the collection."
+                        )
+                    elif _mislabeled_q:
+                        st.markdown(
+                            f"🏷️ {len(_verified_q)}/{_total_q} correctly attributed — "
+                            f"**{len(_mislabeled_q)} source attribution wrong**"
+                        )
+                        st.caption(
+                            "Quote text confirmed present in the corpus but Nicolay's claimed source "
+                            "label does not match the actual document. The text is real; the attribution is wrong."
                         )
                     else:
                         st.markdown(

@@ -2437,6 +2437,23 @@ def main():
             st.error(f"⚠️ Corpus file not found: {corpus_file}")
         elif corpus_file and Path(corpus_file).exists():
             st.caption(f"✅ Corpus file found")
+            # Load corpus once into a shared session-state key so match card
+            # full-text expanders work even when results are restored from a
+            # prior-session checkpoint (no pipeline run in this session).
+            _shared_key = f"_corpus_shared_{corpus_file}"
+            if _shared_key not in st.session_state:
+                try:
+                    _raw_shared = load_corpus_any(corpus_file)
+                    _corpus_shared = {}
+                    for _item in _raw_shared:
+                        _tid = _item.get("text_id", "")
+                        import re as _re_cs
+                        _m = _re_cs.search(r"(\d+)", str(_tid))
+                        if _m:
+                            _corpus_shared[int(_m.group(1))] = _item
+                    st.session_state[_shared_key] = _corpus_shared
+                except Exception as _ce:
+                    st.session_state[_shared_key] = {}
         st.warning(
             "**Pipeline corpus note:** The benchmark script loads the corpus above "
             "for metrics and quote verification. But `run_rag_pipeline()` loads its "
@@ -2885,6 +2902,98 @@ def main():
                                                 st.markdown(f'> *“{_cm_kq[:280]}”*')
                                             if _cm_sum:
                                                 st.markdown(f"**Analysis:** {_cm_sum[:250]}…" if len(_cm_sum)>250 else f"**Analysis:** {_cm_sum}")
+
+                            # ── CONFIDENCE PANEL ────────────────────────────────
+                            st.divider()
+                            _cr_expl   = _cr.get("confidence_explanation", "")
+                            _cr_r2     = _cr.get("confidence_rouge2")
+                            _cr_nsrc2  = _cr.get("confidence_n_sources", 0) or 0
+                            _cr_max_sc = _cr.get("confidence_max_score")
+                            _cr_st_num = _cr.get("confidence_synth_type") or 0
+                            _cr_nv     = len(_cr_iv_v)
+                            _cr_nd     = len(_cr_iv_d)
+                            _cr_nu     = len(_cr_iv_u)
+                            _cr_total_q = _cr_nv + _cr_nd + _cr_nu
+
+                            _cr_conf_hdr = f"📊 Confidence: {_cr_ci} {_cr_cl}"
+                            with st.expander(_cr_conf_hdr, expanded=False):
+                                # Overall rating banner
+                                st.markdown(f"**Overall: {_cr_ci} {_cr_cl}**")
+                                if _cr_expl:
+                                    st.markdown(_cr_expl)
+                                st.divider()
+
+                                # Signal 1 — Quote verification
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Quote verification**")
+                                with _cs2:
+                                    if _cr_total_q == 0:
+                                        st.markdown("⬜ No direct quotes")
+                                        st.caption("No quoted text in FinalAnswer.")
+                                    elif _cr_nu == 0 and _cr_nd == 0:
+                                        st.markdown(f"✅ {_cr_total_q}/{_cr_total_q} verified")
+                                        st.caption("All quoted passages confirmed in corpus.")
+                                    elif _cr_nu > 0:
+                                        st.markdown(f"🔴 {_cr_nv}/{_cr_total_q} verified — **{_cr_nu} not found**")
+                                        st.caption("One or more quotes not found anywhere in corpus.")
+                                    else:
+                                        st.markdown(f"🔀 {_cr_nv}/{_cr_total_q} verified — **{_cr_nd} displaced**")
+                                        st.caption("Quote in right document but wrong chunk.")
+                                st.divider()
+
+                                # Signal 2 — ROUGE corpus grounding
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Corpus grounding**")
+                                with _cs2:
+                                    if _cr_r1 is not None:
+                                        _r1_icon = "✅" if _cr_r1 >= 0.40 else ("⚠️" if _cr_r1 >= 0.25 else "🔴")
+                                        st.markdown(f"{_r1_icon} ROUGE-1: `{_cr_r1:.3f}`" +
+                                                    (f"  ·  ROUGE-2: `{_cr_r2:.3f}`" if _cr_r2 is not None else ""))
+                                        _r_thr = 0.45 if _cr_st_num in (1,2) else (None if _cr_st_num == 3 else 0.30)
+                                        if _r_thr is None:
+                                            st.caption("Type 3 (absence) — ROUGE threshold not applied.")
+                                        else:
+                                            st.caption(f"Threshold for this synthesis type: {_r_thr:.2f}")
+                                    else:
+                                        st.markdown("⬜ Not computed")
+                                st.divider()
+
+                                # Signal 3 — Reranker score ceiling
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Retrieval ceiling**")
+                                with _cs2:
+                                    if _cr_max_sc is not None:
+                                        _sc_icon = "✅" if _cr_max_sc >= 0.55 else ("⚠️" if _cr_max_sc >= 0.35 else "🔴")
+                                        st.markdown(f"{_sc_icon} Max reranker score: `{_cr_max_sc:.3f}`")
+                                        st.caption("Score ≥ 0.55 indicates strong retrieval signal.")
+                                    else:
+                                        st.markdown("⬜ Not available")
+                                st.divider()
+
+                                # Signal 4 — Spread / calibration
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Score spread**")
+                                with _cs2:
+                                    if _cr_spr is not None:
+                                        _spr_icon = "✅" if _cr_spr >= 0.20 else ("⚠️" if _cr_spr < 0.10 else "🟡")
+                                        st.markdown(f"{_spr_icon} Spread: `{_cr_spr:.3f}`")
+                                        if _cr_cw:
+                                            st.caption("⚠️ Calibration warning: scores are flat — retriever "
+                                                       "may be off-target for this query.")
+                                        else:
+                                            st.caption("Spread ≥ 0.20 = discriminating retrieval; "
+                                                       "< 0.10 = flat (suspect).")
+                                    else:
+                                        st.markdown("⬜ Not available")
+                                st.divider()
+
+                                # Signal 5 — Source diversity
+                                _cs1, _cs2 = st.columns([1, 2])
+                                with _cs1: st.caption("**Source diversity**")
+                                with _cs2:
+                                    _div_icon = "✅" if _cr_nsrc2 >= 3 else ("⚠️" if _cr_nsrc2 == 2 else "🔴")
+                                    st.markdown(f"{_div_icon} **{_cr_nsrc2}** distinct Lincoln speech(es) in top-5")
+                                    st.caption("≥ 3 distinct speeches = well-diversified retrieval.")
 
                     queries_to_run = []   # skip normal loop
                 else:
@@ -3396,8 +3505,13 @@ def main():
                             with st.expander(f"Full text & highlight — {_ma_key}", expanded=False):
                                 if _ma_hist:
                                     st.markdown(f"**Historical Context:** {_ma_hist}")
-                                # Use corpus_for_verify from session state if available
-                                _ma_corpus_ss = st.session_state.get(f"_corpus_{qr.get('id','')}")
+                                # Resolve corpus: prefer per-query cache (set during run),
+                                # fall back to shared corpus loaded from sidebar corpus_file.
+                                _shared_key_mc = f"_corpus_shared_{corpus_file}"
+                                _ma_corpus_ss = (
+                                    st.session_state.get(f"_corpus_{qr.get('id','')}")
+                                    or st.session_state.get(_shared_key_mc)
+                                )
                                 _ma_int_id = None
                                 try:
                                     _ma_int_id = int(_ma_text_id)

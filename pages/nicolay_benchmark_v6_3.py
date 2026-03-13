@@ -204,8 +204,24 @@ def _u12_analyze_reranker_scores(reranked_list):
     scores = [s for s in scores if s is not None]
     if not scores:
         return None
+
+    # n_distinct_sources: prefer source-string diversity when available;
+    # fall back to counting distinct text_id / doc_id values.
+    # The reranked_proxy built in compute_confidence_signals() carries
+    # Source="" (unavailable at that stage), so we use doc-ID diversity instead.
     sources = [r.get("Source", "") or r.get("source", "") for r in reranked_list[:5]]
-    n_distinct = len(set(s for s in sources if s))
+    n_distinct_by_source = len(set(s for s in sources if s))
+    if n_distinct_by_source == 0:
+        # Fall back to distinct doc IDs (text_id_num / Key Quote as proxy-uniqueness)
+        doc_ids = [r.get("doc_id") or r.get("text_id_num") or r.get("Key Quote", "")
+                   for r in reranked_list[:5]]
+        n_distinct = len(set(d for d in doc_ids if d))
+        # If still 0, the list length itself is the lower-bound (all entries distinct)
+        if n_distinct == 0:
+            n_distinct = len(reranked_list[:5])
+    else:
+        n_distinct = n_distinct_by_source
+
     max_s  = max(scores)
     min_s  = min(scores)
     spread = round(max_s - min_s, 4)
@@ -283,7 +299,7 @@ def compute_confidence_signals(qresult):
                     if mid == tid:
                         kq = mv.get("Key Quote", "") or ""
                         break
-        reranked_proxy.append({"Relevance Score": s, "Source": "", "Key Quote": kq})
+        reranked_proxy.append({"Relevance Score": s, "Source": "", "Key Quote": kq, "doc_id": tid})
 
     rouge_data    = _u12_compute_corpus_grounding(final_text, reranked_proxy) if final_text else None
     reranker_data = _u12_analyze_reranker_scores(reranked_proxy)
@@ -1573,10 +1589,13 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
     _hay_model_logged     = _extract_model_from_tag(_tag, "hay")     or str(HAY_MODEL)
     _nicolay_model_logged = _extract_model_from_tag(_tag, "nicolay") or str(NICOLAY_MODEL)
 
-    # Build record — do NOT include 'Timestamp' here; DataLogger adds it automatically.
-    # All values must be JSON-serializable primitives (str, int, float, bool) because
-    # pygsheets cannot write Python objects directly to cells.
+    # Build record — Timestamp MUST be the first key so DataLogger's automatic
+    # datetime.now() overwrites it in-place at column 0 (positional write).
+    # If Timestamp is absent or last, it appends at the end, shifting every
+    # data value one column to the left relative to the sheet headers.
+    # All values must be JSON-serializable primitives (str, int, float, bool).
     record = {
+        "Timestamp": "",        # DataLogger overwrites this with datetime.now()
         "QueryID": str(qresult.get("id", "")),
         "Query": str(qresult.get("query", "")),
         "Category": str(qresult.get("category", "")),
@@ -1911,7 +1930,9 @@ def run_pipeline_for_query(
     openai_api_key: str,
     cohere_api_key: str,
     corpus_file: str = "",
-    status_cb=None
+    status_cb=None,
+    hay_model: str = "",
+    nicolay_model: str = "",
 ) -> dict:
     """
     Run the full Nicolay pipeline for one benchmark query and return a complete
@@ -1935,6 +1956,13 @@ def run_pipeline_for_query(
         if status_cb:
             status_cb(msg)
 
+    # Resolve active model IDs: use explicitly passed values (from call site
+    # where selected_pair_key is in scope) or fall back to module globals.
+    if not hay_model:
+        hay_model = HAY_MODEL
+    if not nicolay_model:
+        nicolay_model = NICOLAY_MODEL
+
     qid = qdef["id"]
     query = qdef["query"]
     result = {
@@ -1945,7 +1973,7 @@ def run_pipeline_for_query(
         "ideal_docs_new": qdef["ideal_docs_new"],
         # HV-5: Model configuration tag — records exact pipeline state for this run.
         # Essential for multi-version comparison; retrofitting later requires re-running.
-        "model_config_tag": f"hay={HAY_MODEL}|nicolay={NICOLAY_MODEL}|reranker={COHERE_RERANK_MODEL}|k={RERANK_K}|colbert=disabled",
+        "model_config_tag": f"hay={hay_model}|nicolay={nicolay_model}|reranker={COHERE_RERANK_MODEL}|k={RERANK_K}|colbert=disabled",
     }
 
     # ── 1. RUN FULL PIPELINE (with retry) ────────────────────────────────────
@@ -2546,7 +2574,9 @@ def main():
                                 openai_api_key=openai_key,
                                 cohere_api_key=cohere_key,
                                 corpus_file=corpus_file,
-                                status_cb=lambda msg: _compare_status.info(msg)
+                                status_cb=lambda msg: _compare_status.info(msg),
+                                hay_model=_cp_cfg["hay"],
+                                nicolay_model=_cp_cfg["nicolay"],
                             )
                         _cp_qr["_pair_label"] = _cp_cfg["label"]
                         _compare_results[_cp_cfg["label"]] = _cp_qr
@@ -2613,7 +2643,9 @@ def main():
                             openai_api_key=openai_key,
                             cohere_api_key=cohere_key,
                             corpus_file=corpus_file,
-                            status_cb=lambda msg: status_box.info(msg)
+                            status_cb=lambda msg: status_box.info(msg),
+                            hay_model=MODEL_PAIRS[selected_pair_key]["hay"],
+                            nicolay_model=MODEL_PAIRS[selected_pair_key]["nicolay"],
                         )
                     results["queries"][q["id"]] = qresult
                     # Persist: Sheets first (durable on Cloud), then local file (dev fallback)
@@ -2774,7 +2806,14 @@ def main():
                                 _mv.get("Text ID", "")) == _rid:
                             _kq = _mv.get("Key Quote", "") or ""
                             break
-                _rp_for_rouge.append({"Relevance Score": _rs, "Source": "", "Key Quote": _kq})
+                # Carry doc_id so _u12_analyze_reranker_scores can count
+                # distinct documents when Source strings are unavailable.
+                _rp_for_rouge.append({
+                    "Relevance Score": _rs,
+                    "Source": "",
+                    "Key Quote": _kq,
+                    "doc_id": _rid,
+                })
 
             _rouge_live = _u12_compute_corpus_grounding(_final_for_rouge, _rp_for_rouge)
             _conf_r1 = (_rouge_live or {}).get("rouge1", _conf_r1_stored)

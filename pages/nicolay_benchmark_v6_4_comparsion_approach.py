@@ -266,13 +266,55 @@ def _u12_compute_overall_confidence(
             "Mixed signals — review source passages before relying on specific claims.")
 
 
-def compute_confidence_signals(qresult):
+def _count_distinct_sources_from_corpus(retrieved_ids, corpus):
+    """
+    Count distinct *speech-level* source documents among retrieved chunk IDs.
+
+    Chunks share the same source string when they come from the same speech
+    (e.g. chunks 412, 413, 414 all carry "Fourth Annual Message. December 6, 1864").
+    This is the correct diversity metric: 3 chunks from one speech = 1 distinct source.
+
+    Falls back to len(retrieved_ids) if corpus is unavailable.
+    """
+    if not corpus or not retrieved_ids:
+        return len(retrieved_ids)
+    sources = set()
+    for tid in retrieved_ids:
+        chunk = corpus.get(int(tid)) if isinstance(tid, (int, str)) else None
+        if chunk:
+            src_str = (chunk.get("source") or chunk.get("Source") or "").strip()
+            if src_str:
+                sources.add(src_str)
+    # If no source strings found (corpus keying issue), fall back to chunk count
+    return len(sources) if sources else len(retrieved_ids)
+
+
+def _count_distinct_sources_from_qv(qv_list):
+    """
+    Derive distinct speech-level source count from stored quote_verification results.
+    Each qv item carries cited_chunk_source from the verifier — strip chunk-level
+    metadata to get the speech title and count unique speeches.
+    Available without corpus I/O; used in display panel and as fallback.
+    """
+    sources = set()
+    for qv in qv_list:
+        src = (qv.get("cited_chunk_source") or "").strip()
+        if src:
+            # Normalize: "Source: Fourth Annual Message. December 6, 1864" → title only
+            src = src.replace("Source:", "").strip()
+            sources.add(src)
+    return len(sources) if sources else 0
+
+
+def compute_confidence_signals(qresult, corpus=None):
     """
     Compute all U12 confidence signals from a completed qresult dict.
     Returns a flat dict of confidence_* fields ready for storage in results/CSV/Sheets.
 
-    Note: ROUGE is computed against Key Quotes recovered from Match Analysis if available.
-    A richer recomputation with full chunk text is done in the display panel (Tab 1).
+    corpus: optional dict {int_id: chunk_dict} — when provided, enables accurate
+            speech-level source diversity counting (chunks from the same speech
+            counted once). Pass corpus_for_verify from run_pipeline_for_query.
+            If omitted, falls back to qv cited_chunk_source strings.
     """
     final_text   = qresult.get("nicolay_final_answer_text", "") or ""
     synth_raw    = qresult.get("nicolay_synthesis_assessment_raw", "") or ""
@@ -304,6 +346,14 @@ def compute_confidence_signals(qresult):
     rouge_data    = _u12_compute_corpus_grounding(final_text, reranked_proxy) if final_text else None
     reranker_data = _u12_analyze_reranker_scores(reranked_proxy)
 
+    # Distinct speech-level sources: corpus lookup > qv fallback > chunk count
+    if corpus:
+        n_distinct = _count_distinct_sources_from_corpus(retrieved_ids, corpus)
+    else:
+        n_distinct = _count_distinct_sources_from_qv(qv_list)
+        if n_distinct == 0:
+            n_distinct = (reranker_data or {}).get("n_distinct_sources") or len(retrieved_ids)
+
     rating, icon, explanation = _u12_compute_overall_confidence(
         verified, displaced, unverified, rouge_data, reranker_data, synth_type
     )
@@ -317,7 +367,7 @@ def compute_confidence_signals(qresult):
         "confidence_rouge2":        (rouge_data or {}).get("rouge2"),
         "confidence_calib_warning": (reranker_data or {}).get("calibration_warning", False),
         "confidence_spread":        (reranker_data or {}).get("spread"),
-        "confidence_n_sources":     (reranker_data or {}).get("n_distinct_sources"),
+        "confidence_n_sources":     n_distinct,
         "confidence_max_score":     (reranker_data or {}).get("max_score"),
     }
 
@@ -2258,7 +2308,7 @@ def run_pipeline_for_query(
     # richer recomputation runs in the Tab 1 display panel.
     status("📊 Computing confidence signals...")
     try:
-        conf = compute_confidence_signals(result)
+        conf = compute_confidence_signals(result, corpus=corpus_for_verify)
         result.update(conf)
     except Exception as _conf_err:
         result.update({
@@ -2898,8 +2948,11 @@ def main():
                 with _col_sa:
                     st.caption("**Retrieval quality**")
                 with _col_sb:
-                    if _conf_nsrc is not None:
-                        st.markdown(f"**{_conf_nsrc}** distinct Lincoln document(s) in top-5")
+                    # Recompute speech-level source diversity from quote verification results.
+                    # cited_chunk_source is stored per qv item; we count distinct speeches.
+                    _qv_sources = _count_distinct_sources_from_qv(_qv_list)
+                    _display_nsrc = _qv_sources if _qv_sources > 0 else (_conf_nsrc or 0)
+                    st.markdown(f"**{_display_nsrc}** distinct Lincoln speech(es) in top-5")
                     if _conf_spread is not None:
                         _spread_lbl = (
                             "Differentiated retrieval ✅" if _conf_spread >= 0.20
@@ -2950,6 +3003,8 @@ def main():
                 st.divider()
                 st.caption(
                     "Signals are automatically computed — not a guarantee of accuracy. "
+                    "'Distinct speeches' counts unique Lincoln documents at the speech level "
+                    "(multiple retrieved chunks from the same speech count as one). "
                     "Quote verification checks whether direct quotations appear in the Lincoln corpus. "
                     "ROUGE measures lexical overlap with Key Quotes from retrieved passages. "
                     "Always read source passages before relying on specific claims."

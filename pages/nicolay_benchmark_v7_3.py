@@ -3007,6 +3007,11 @@ def main():
                                     st.info("No quote verification data for this result.")
 
                             # ── MATCH ANALYSIS CARDS (full, with corpus highlight) ──
+                            # Note: NO sub-columns inside each match card.
+                            # We are already inside a top-level pair column (_cpc),
+                            # so one more column level is allowed but creating ANOTHER
+                            # level inside st.container() exceeds Streamlit's 2-deep limit.
+                            # Cards stack vertically; relevance + verification badges are HTML.
                             _cr_ma = (_cr.get("nicolay_output") or {}).get("Match Analysis", {})
                             if _cr_ma and isinstance(_cr_ma, dict):
                                 st.markdown("---")
@@ -3015,8 +3020,6 @@ def main():
                                               zip(_cr.get("retrieved_doc_ids",[]),
                                                   _cr.get("reranker_scores",[]))}
                                 import re as _cp_re2
-                                _cr_col_l, _cr_col_r = st.columns(2)
-                                _cr_col_map = {0: _cr_col_l, 1: _cr_col_r}
                                 for _cmi, (_cmk, _cmv) in enumerate(_cr_ma.items()):
                                     if not isinstance(_cmv, dict): continue
                                     _cm_tid  = str(_cmv.get("Text ID",""))
@@ -3033,7 +3036,7 @@ def main():
                                                      or q.get("match","") == _cmk), None)
                                     _cm_out  = (_cm_qv or {}).get("outcome","")
 
-                                    # Relevance badge
+                                    # Relevance badge (inline HTML, no sub-column needed)
                                     _cm_rt = (_cm_rel or "").lower()
                                     if "high" in _cm_rt:   _cm_bg,_cm_fg = "#d4edda","#155724"
                                     elif "medium" in _cm_rt or "moderate" in _cm_rt: _cm_bg,_cm_fg = "#fff3cd","#856404"
@@ -3041,80 +3044,81 @@ def main():
                                     else:                   _cm_bg,_cm_fg = "#e2e3e5","#383d41"
                                     _cm_rel_lbl = _cp_re2.split(r"[—,]", _cm_rel or "N/A")[0].strip()[:30]
                                     _cm_rel_badge = (
-                                        f'<span style="background:{_cm_bg};color:{_cm_fg};padding:4px 12px;'                                        f'border-radius:12px;font-size:0.85em;font-weight:700;'                                        f'display:inline-block;">{_cm_rel_lbl}</span>'
+                                        f'<span style="background:{_cm_bg};color:{_cm_fg};padding:2px 8px;'                                        f'border-radius:8px;font-size:0.8em;font-weight:700;margin-left:8px;'                                        f'display:inline-block;">{_cm_rel_lbl}</span>'
                                     )
 
-                                    # Verification badge (full text, matching main app)
+                                    # Verification badge (full descriptive text)
                                     if _cm_out == "verified":
-                                        _cm_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:600;">✅ Quote verified in corpus</span>'
+                                        _cm_vbadge = '<span style="color:#155724;font-size:0.85em;font-weight:600;">✅ Quote verified in corpus</span>'
                                     elif _cm_out in ("displacement","approximate_displacement"):
-                                        _cm_vbadge = '<span style="color:#664d03;background:#fff3cd;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🔀 Found in document, displaced chunk</span>'
+                                        _cm_vbadge = '<span style="color:#664d03;background:#fff3cd;padding:1px 6px;border-radius:4px;font-size:0.85em;font-weight:600;">🔀 Found in document, displaced chunk</span>'
                                     elif _cm_out == "approximate_quote":
-                                        _cm_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:500;">🟡 Approximate match confirmed</span>'
+                                        _cm_vbadge = '<span style="color:#155724;font-size:0.85em;font-weight:500;">🟡 Approximate match confirmed</span>'
                                     elif _cm_out == "fabrication":
-                                        _cm_vbadge = '<span style="color:#721c24;font-size:0.9em;font-weight:600;">⚠️ Not found in corpus</span>'
+                                        _cm_vbadge = '<span style="color:#721c24;font-size:0.85em;font-weight:600;">⚠️ Not found in corpus</span>'
                                     elif _cm_out == "source_mislabeled":
-                                        _cm_vbadge = '<span style="color:#495057;background:#e2e3e5;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🏷️ Text found — source attribution wrong</span>'
+                                        _cm_vbadge = '<span style="color:#495057;background:#e2e3e5;padding:1px 6px;border-radius:4px;font-size:0.85em;font-weight:600;">🏷️ Text found — source attribution wrong</span>'
                                     else:
-                                        _cm_vbadge = '<span style="color:#6c757d;font-size:0.9em;">⬜ Not verified</span>'
+                                        _cm_vbadge = '<span style="color:#6c757d;font-size:0.85em;">⬜ Not verified</span>'
 
-                                    with _cr_col_map[_cmi % 2]:
-                                        with st.container(border=True):
-                                            _cmh1, _cmh2 = st.columns([5,1])
-                                            with _cmh1:
-                                                st.markdown(f"**{_cmk}**")
-                                            with _cmh2:
-                                                st.markdown(f'<div style="text-align:right;">{_cm_rel_badge}</div>', unsafe_allow_html=True)
-                                            # Full untruncated source
-                                            st.markdown(f"**ID:** {_cm_tid}  ·  **Source:** {_cm_src}")
-                                            if _cm_sc is not None:
-                                                st.caption(f"Reranker score: {_cm_sc:.3f}")
-                                            if _cm_kq:
-                                                _cm_kq_disp = _cm_kq[:320] + ("…" if len(_cm_kq) > 320 else "")
-                                                st.markdown(f'> *"{_cm_kq_disp}"*')
-                                            if _cm_sum:
-                                                _cm_sum_disp = _cm_sum[:300] + ("…" if len(_cm_sum) > 300 else "")
-                                                st.markdown(f"**Nicolay's Analysis:** {_cm_sum_disp}")
-                                            st.markdown(_cm_vbadge, unsafe_allow_html=True)
+                                    with st.container(border=True):
+                                        # Title + relevance badge on same line via HTML
+                                        st.markdown(
+                                            f'**{_cmk}** {_cm_rel_badge}',
+                                            unsafe_allow_html=True
+                                        )
+                                        # Full untruncated source
+                                        st.markdown(f"**ID:** {_cm_tid}  ·  **Source:** {_cm_src}")
+                                        if _cm_sc is not None:
+                                            st.caption(f"Reranker score: {_cm_sc:.3f}")
+                                        if _cm_kq:
+                                            _cm_kq_disp = _cm_kq[:320] + ("…" if len(_cm_kq) > 320 else "")
+                                            st.markdown(f'> *"{_cm_kq_disp}"*')
+                                        if _cm_sum:
+                                            _cm_sum_disp = _cm_sum[:300] + ("…" if len(_cm_sum) > 300 else "")
+                                            st.markdown(f"**Nicolay's Analysis:** {_cm_sum_disp}")
+                                        st.markdown(_cm_vbadge, unsafe_allow_html=True)
 
-                                            # Full-text expander with corpus highlight
-                                            with st.expander(f"Full text & highlight — {_cmk}", expanded=False):
-                                                if _cm_hist:
-                                                    st.markdown(f"**Historical Context:** {_cm_hist}")
-                                                _cp_shared_key = f"_corpus_shared_{corpus_file}"
-                                                _cp_corpus_ss = (
-                                                    st.session_state.get(f"_corpus_{_cr.get('id','')}")
-                                                    or st.session_state.get(_cp_shared_key)
-                                                )
-                                                _cp_int_id = None
-                                                try:
-                                                    _cp_int_id = int(_cm_tid)
-                                                except (ValueError, TypeError):
-                                                    pass
-                                                _cp_chunk = None
-                                                if _cp_corpus_ss and _cp_int_id is not None:
-                                                    _cp_chunk = _cp_corpus_ss.get(_cp_int_id)
-                                                if _cp_chunk:
-                                                    _cp_ft = _cp_chunk.get("full_text","")
-                                                    if _cp_ft:
-                                                        _cp_html = _cp_ft.replace("\n","<br>")
-                                                        if _cm_kq and _cm_kq in _cp_ft:
-                                                            _cp_html = _cp_html.replace(_cm_kq, f"<mark>{_cm_kq}</mark>", 1)
-                                                        elif _cm_kq:
-                                                            _cp_segs = [p.strip() for p in _cm_kq.split("...") if p.strip()]
-                                                            for _cp_seg in _cp_segs:
-                                                                if len(_cp_seg) > 20 and _cp_seg in _cp_ft:
-                                                                    _cp_html = _cp_html.replace(_cp_seg, f"<mark>{_cp_seg}</mark>", 1)
-                                                                    break
-                                                        st.markdown("**Full Text with Highlighted Quote:**")
-                                                        st.markdown(
-                                                            f'<div style="font-size:0.95em;line-height:1.65;">{_cp_html}</div>',
-                                                            unsafe_allow_html=True
-                                                        )
-                                                    else:
-                                                        st.info("Full text not available for this chunk.")
+                                        # Full-text expander with corpus highlight
+                                        with st.expander(f"Full text & highlight — {_cmk}", expanded=False):
+                                            if _cm_hist:
+                                                st.markdown(f"**Historical Context:** {_cm_hist}")
+                                            # Corpus lookup: prefer shared cache (always available after
+                                            # sidebar load); fall back to per-query cache from pipeline run.
+                                            _cp_shared_key = f"_corpus_shared_{corpus_file}"
+                                            _cp_corpus_ss = (
+                                                st.session_state.get(_cp_shared_key)
+                                                or st.session_state.get(f"_corpus_{selected_query_id}")
+                                            )
+                                            _cp_int_id = None
+                                            try:
+                                                _cp_int_id = int(_cm_tid)
+                                            except (ValueError, TypeError):
+                                                pass
+                                            _cp_chunk = None
+                                            if _cp_corpus_ss and _cp_int_id is not None:
+                                                _cp_chunk = _cp_corpus_ss.get(_cp_int_id)
+                                            if _cp_chunk:
+                                                _cp_ft = _cp_chunk.get("full_text","")
+                                                if _cp_ft:
+                                                    _cp_html = _cp_ft.replace("\n","<br>")
+                                                    if _cm_kq and _cm_kq in _cp_ft:
+                                                        _cp_html = _cp_html.replace(_cm_kq, f"<mark>{_cm_kq}</mark>", 1)
+                                                    elif _cm_kq:
+                                                        _cp_segs = [p.strip() for p in _cm_kq.split("...") if p.strip()]
+                                                        for _cp_seg in _cp_segs:
+                                                            if len(_cp_seg) > 20 and _cp_seg in _cp_ft:
+                                                                _cp_html = _cp_html.replace(_cp_seg, f"<mark>{_cp_seg}</mark>", 1)
+                                                                break
+                                                    st.markdown("**Full Text with Highlighted Quote:**")
+                                                    st.markdown(
+                                                        f'<div style="font-size:0.95em;line-height:1.65;">{_cp_html}</div>',
+                                                        unsafe_allow_html=True
+                                                    )
                                                 else:
-                                                    st.info("Corpus not cached — re-run the query to enable full-text display.")
+                                                    st.info("Full text not available for this chunk.")
+                                            else:
+                                                st.info("Corpus not loaded — check corpus path in sidebar.")
 
                             # ── RAW JSON OUTPUT ───────────────────────────────
                             with st.expander("🔬 Raw JSON — Nicolay output", expanded=False):
@@ -3393,8 +3397,8 @@ def main():
             # outcomes are "fabrication" or missing, re-run verification.
             _shared_key_qv = f"_corpus_shared_{corpus_file}"
             _corpus_for_rev = (
-                st.session_state.get(f"_corpus_{selected_query_id}")
-                or st.session_state.get(_shared_key_qv)
+                st.session_state.get(_shared_key_qv)
+                or st.session_state.get(f"_corpus_{selected_query_id}")
             )
             _all_fabricated = bool(_qv_list) and all(
                 q.get("outcome") in ("fabrication", "too_short") for q in _qv_list
@@ -3790,12 +3794,13 @@ def main():
                             with st.expander(f"Full text & highlight — {_ma_key}", expanded=False):
                                 if _ma_hist:
                                     st.markdown(f"**Historical Context:** {_ma_hist}")
-                                # Resolve corpus: prefer per-query cache (set during run),
-                                # fall back to shared corpus loaded from sidebar corpus_file.
+                                # Resolve corpus: shared key is always populated at sidebar load,
+                                # so prefer it; fall back to per-query key from pipeline run.
                                 _shared_key_mc = f"_corpus_shared_{corpus_file}"
+                                _ma_qr_id = qr.get("id", selected_query_id) or selected_query_id
                                 _ma_corpus_ss = (
-                                    st.session_state.get(f"_corpus_{qr.get('id','')}")
-                                    or st.session_state.get(_shared_key_mc)
+                                    st.session_state.get(_shared_key_mc)
+                                    or st.session_state.get(f"_corpus_{_ma_qr_id}")
                                 )
                                 _ma_int_id = None
                                 try:

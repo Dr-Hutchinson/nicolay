@@ -804,6 +804,36 @@ def load_corpus(path: str) -> dict:
     return corpus
 
 
+def _get_or_load_corpus(corpus_file: str) -> dict:
+    """
+    Get the shared corpus dict from session_state, loading it on demand if absent.
+
+    This is the single authoritative corpus-access function for all display code.
+    It mirrors how the main app works: load eagerly, keep in memory, never gate
+    display on a prior pipeline run.
+
+    Returns {int_id: chunk_dict} or {} if corpus_file is not found/loadable.
+    """
+    _key = f"_corpus_shared_{corpus_file}"
+    cached = st.session_state.get(_key)
+    if cached:
+        return cached
+    if not corpus_file or not Path(corpus_file).exists():
+        return {}
+    try:
+        _raw = load_corpus_any(corpus_file)
+        _d: dict = {}
+        for _item in _raw:
+            _tid = _item.get("text_id", "")
+            _m = re.search(r"(\d+)", str(_tid))
+            if _m:
+                _d[int(_m.group(1))] = _item
+        st.session_state[_key] = _d
+        return _d
+    except Exception:
+        return {}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HAY API CALL
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2476,22 +2506,54 @@ def main():
         cohere_key = _get_secret("cohere_api_key", "COHERE_API_KEY")
 
         # Auto-detect corpus across common repo layouts (root, Data/, data/)
+        # Glob-based so it works regardless of case or Cloud working directory.
         _base = "lincoln_speech_corpus_repaired_1"
         _candidates = [
             f"Data/{_base}.json", f"data/{_base}.json", f"{_base}.json",
             f"Data/{_base}.msgpack", f"data/{_base}.msgpack", f"{_base}.msgpack",
         ]
-        _corpus_default = next((p for p in _candidates if Path(p).exists()), f"Data/{_base}.msgpack")
+        # Also search via glob in case capitalisation differs on Cloud
+        import glob as _glob
+        _glob_hits = (
+            _glob.glob(f"**/{_base}.json",    recursive=True) +
+            _glob.glob(f"**/{_base}.msgpack", recursive=True)
+        )
+        _all_candidates = _candidates + [p for p in _glob_hits if p not in _candidates]
+        _corpus_default = next((p for p in _all_candidates if Path(p).exists()), f"Data/{_base}.msgpack")
         corpus_file = st.text_input("Corpus path (JSON or MSGPACK)", value=_corpus_default)
-        if corpus_file and not Path(corpus_file).exists():
-            st.error(f"⚠️ Corpus file not found: {corpus_file}")
-        elif corpus_file and Path(corpus_file).exists():
-            # Load corpus once into a shared session-state key so match card
-            # full-text expanders and quote verification work even when results
-            # are restored from a prior-session checkpoint (no pipeline run).
-            # Always re-check: if key exists but is empty (failed last load), retry.
-            _shared_key = f"_corpus_shared_{corpus_file}"
-            _corpus_shared_current = st.session_state.get(_shared_key)
+
+        # ── Corpus path debug expander (always visible) ──────────────────────
+        with st.expander("🗂️ Corpus path debug", expanded=not Path(corpus_file).exists()):
+            import os as _os_dbg
+            st.caption(f"**cwd:** `{_os_dbg.getcwd()}`")
+            st.caption(f"**corpus_file value:** `{corpus_file}`")
+            st.caption(f"**Path(corpus_file).exists():** `{Path(corpus_file).exists()}`")
+            _dbg_found = [p for p in _all_candidates if Path(p).exists()]
+            if _dbg_found:
+                st.caption("**Candidate paths found on disk:**")
+                for _dp in _dbg_found:
+                    st.caption(f"  • `{_dp}` ({Path(_dp).stat().st_size // 1024} KB)")
+            else:
+                st.warning("No candidate corpus file found on disk. Check repo structure.")
+                # Show top-level directory listing to diagnose Cloud layout
+                try:
+                    _top = sorted(_os_dbg.listdir("."))
+                    st.caption("**Top-level directory listing:**")
+                    st.code("\n".join(_top))
+                    # Check one level deeper for Data/ or data/
+                    for _sub in ("Data", "data", "pages"):
+                        if _os_dbg.path.isdir(_sub):
+                            _sub_files = sorted(_os_dbg.listdir(_sub))
+                            st.caption(f"**{_sub}/ contents:**")
+                            st.code("\n".join(_sub_files))
+                except Exception as _le:
+                    st.caption(f"Directory listing failed: {_le}")
+
+        # ── Corpus load ───────────────────────────────────────────────────────
+        _shared_key = f"_corpus_shared_{corpus_file}"
+        _corpus_shared_current = st.session_state.get(_shared_key)
+
+        if Path(corpus_file).exists():
             if not _corpus_shared_current:
                 try:
                     _raw_shared = load_corpus_any(corpus_file)
@@ -2512,7 +2574,14 @@ def main():
             elif _corpus_size > 0:
                 st.warning(f"⚠️ Corpus loaded but only {_corpus_size} chunks — expected ~772. Check file.")
             else:
-                st.error("❌ Corpus loaded 0 chunks — quote verification will show all quotes as fabricated. Check corpus path.")
+                st.error("❌ Corpus loaded 0 chunks — check corpus path.")
+        else:
+            if _corpus_shared_current:
+                # Corpus was loaded in a prior run under a path that has since changed
+                _corpus_size = len(_corpus_shared_current)
+                st.caption(f"✅ Corpus in memory from prior load — {_corpus_size} chunks (path may have changed)")
+            else:
+                st.error(f"❌ Corpus file not found: `{corpus_file}` — full-text display will be unavailable.")
         st.warning(
             "**Pipeline corpus note:** The benchmark script loads the corpus above "
             "for metrics and quote verification. But `run_rag_pipeline()` loads its "
@@ -3083,21 +3152,16 @@ def main():
                                         with st.expander(f"Full text & highlight — {_cmk}", expanded=False):
                                             if _cm_hist:
                                                 st.markdown(f"**Historical Context:** {_cm_hist}")
-                                            # Corpus lookup: prefer shared cache (always available after
-                                            # sidebar load); fall back to per-query cache from pipeline run.
-                                            _cp_shared_key = f"_corpus_shared_{corpus_file}"
-                                            _cp_corpus_ss = (
-                                                st.session_state.get(_cp_shared_key)
-                                                or st.session_state.get(f"_corpus_{selected_query_id}")
-                                            )
+                                            # _get_or_load_corpus() tries session_state first,
+                                            # then loads from disk on demand — no prior pipeline
+                                            # run required.  Returns {} if file not found.
+                                            _cp_corpus_ss = _get_or_load_corpus(corpus_file)
                                             _cp_int_id = None
                                             try:
                                                 _cp_int_id = int(_cm_tid)
                                             except (ValueError, TypeError):
                                                 pass
-                                            _cp_chunk = None
-                                            if _cp_corpus_ss and _cp_int_id is not None:
-                                                _cp_chunk = _cp_corpus_ss.get(_cp_int_id)
+                                            _cp_chunk = _cp_corpus_ss.get(_cp_int_id) if _cp_int_id is not None else None
                                             if _cp_chunk:
                                                 _cp_ft = _cp_chunk.get("full_text","")
                                                 if _cp_ft:
@@ -3117,8 +3181,14 @@ def main():
                                                     )
                                                 else:
                                                     st.info("Full text not available for this chunk.")
+                                            elif not _cp_corpus_ss:
+                                                st.warning(
+                                                    f"⚠️ Corpus not loaded — "
+                                                    f"`{corpus_file}` not found on disk. "
+                                                    f"Check path in sidebar debug expander."
+                                                )
                                             else:
-                                                st.info("Corpus not loaded — check corpus path in sidebar.")
+                                                st.info(f"Chunk {_cm_tid} not found in corpus ({len(_cp_corpus_ss)} chunks loaded).")
 
                             # ── RAW JSON OUTPUT ───────────────────────────────
                             with st.expander("🔬 Raw JSON — Nicolay output", expanded=False):
@@ -3395,11 +3465,8 @@ def main():
             # (common for checkpoint-loaded results from a prior session).
             # If corpus is now available in shared session state and all stored
             # outcomes are "fabrication" or missing, re-run verification.
-            _shared_key_qv = f"_corpus_shared_{corpus_file}"
-            _corpus_for_rev = (
-                st.session_state.get(_shared_key_qv)
-                or st.session_state.get(f"_corpus_{selected_query_id}")
-            )
+            # _get_or_load_corpus() handles session_state + on-demand disk load.
+            _corpus_for_rev = _get_or_load_corpus(corpus_file)
             _all_fabricated = bool(_qv_list) and all(
                 q.get("outcome") in ("fabrication", "too_short") for q in _qv_list
             )
@@ -3794,22 +3861,15 @@ def main():
                             with st.expander(f"Full text & highlight — {_ma_key}", expanded=False):
                                 if _ma_hist:
                                     st.markdown(f"**Historical Context:** {_ma_hist}")
-                                # Resolve corpus: shared key is always populated at sidebar load,
-                                # so prefer it; fall back to per-query key from pipeline run.
-                                _shared_key_mc = f"_corpus_shared_{corpus_file}"
-                                _ma_qr_id = qr.get("id", selected_query_id) or selected_query_id
-                                _ma_corpus_ss = (
-                                    st.session_state.get(_shared_key_mc)
-                                    or st.session_state.get(f"_corpus_{_ma_qr_id}")
-                                )
+                                # _get_or_load_corpus() loads on demand if not already cached —
+                                # no prior pipeline run required.
+                                _ma_corpus_ss = _get_or_load_corpus(corpus_file)
                                 _ma_int_id = None
                                 try:
                                     _ma_int_id = int(_ma_text_id)
                                 except (ValueError, TypeError):
                                     pass
-                                _ma_chunk = None
-                                if _ma_corpus_ss and _ma_int_id is not None:
-                                    _ma_chunk = _ma_corpus_ss.get(_ma_int_id)
+                                _ma_chunk = _ma_corpus_ss.get(_ma_int_id) if _ma_int_id is not None else None
                                 if _ma_chunk:
                                     _ma_ft = _ma_chunk.get("full_text", "")
                                     if _ma_ft:
@@ -3830,8 +3890,14 @@ def main():
                                         )
                                     else:
                                         st.info("Full text not available for this chunk.")
+                                elif not _ma_corpus_ss:
+                                    st.warning(
+                                        f"⚠️ Corpus not loaded — "
+                                        f"`{corpus_file}` not found on disk. "
+                                        f"Check path in sidebar debug expander."
+                                    )
                                 else:
-                                    st.info("Corpus not cached for this session. Re-run the query to enable full-text display.")
+                                    st.info(f"Chunk {_ma_text_id} not found in corpus ({len(_ma_corpus_ss)} chunks loaded).")
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 2: METRICS

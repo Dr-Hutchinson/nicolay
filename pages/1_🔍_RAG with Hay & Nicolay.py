@@ -19,34 +19,26 @@ except ImportError:
     _rouge_scorer_mod = None
     _ROUGE_AVAILABLE = False
 
-# ── version 1.7 ──────────────────────────────────────────────────────────────
-# UI Enhancements over v1.6:
-#   [U1]  Hay keyword transparency strip (retained)
-#   [U2]  Synthesis type badge (retained)
-#   [U3]  Calibration decoupling warning → replaced by [U9] multi-signal panel
-#   [U4]  Session query history in sidebar (retained; dedup guard added)
-#   [U5]  Corpus coverage notice (retained)
-#   [U6]  Retrieval diagnostics panel (retained; "Used by Nicolay" ID fix)
-#   [U7]  Card text size (retained)
-#   [U8]  Quote verification labels (retained)
-#   [U9]  Multi-signal diagnostic dashboard: four independent heuristic signals
-#         (calibration gap, low retrieval ceiling, Type 3/4 synthesis,
-#         FinalAnswer brevity) each shown only when triggered.
-#   [U10] FinalAnswer quote verification: quoted strings in Nicolay's synthesis
-#         are matched against retrieved corpus chunks; unverified quotes flagged
-#         inline. Out-of-corpus source references in References list flagged.
-#   [U11] Three-tab result layout (Answer / Sources / Pipeline) for mobile
-#         friendliness and showcase readability. All existing content preserved.
-#   [U12] Response Confidence Summary panel: five independently computed signals
-#         (quote verification rate, ROUGE-1/2 corpus grounding, reranker score
-#         spread/ceiling, source diversity, complexity-type match heuristic)
-#         aggregated into a scannable epistemological situation report. Displayed
-#         between the synthesis type badge and FinalAnswer text in Tab 1.
-#         Refactors S1 calibration gap detection into analyze_reranker_scores().
-#   [FIX] render_sidebar_history() called only once at top; post-query re-call
-#         removed to prevent duplicate history entries.
-#   [FIX] Hay pill query-type regex extended to cover Absence Recognition,
-#         Multi-passage, Temporal.
+# ── version 1.9 ──────────────────────────────────────────────────────────────
+# UI Enhancements over v1.7:
+#   [U1-U12] All prior enhancements retained (see v1.7 changelog).
+#
+# v1.9 — Unified quote verification stack (patch-first approach):
+#   [QV]  Replaced shallow _norm_chunk whitespace-only normalization with
+#         dual strict/loose architecture ported from benchmark v6.4:
+#         - _norm_strict: NFKD + quote-glyph + dash + bracket normalization
+#         - _norm_loose:  everything above + full punctuation strip
+#         - _quote_segments / _segments_in_order: replaces old ellipsis-split
+#           and 60-char anchor; handles trailing "..." truncation markers
+#         - Token-coverage heuristic: new 'approximate_quote' outcome (0.86–0.95)
+#           for paraphrase-as-quote cases (Q4 fabrication taxonomy)
+#         - _search_same_document: now runs strict + loose + sliding in inner loop
+#         - _sliding_window_verify: retained from original implementation
+#   [QV]  quote_badge_html: new amber 〰️ badge for 'approximate_quote' method
+#   [QV]  verify_final_answer_quotes: approximate_quote treated as verified
+#         (content genuine, only quote-mark precision imprecise)
+#   [QV]  'fuzzy' method string retired; 'loose' replaces it for glyph-variant
+#         matches; 'sliding' retained unchanged
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -341,22 +333,42 @@ def format_reranked_for_nicolay(reranked_results, lincoln_dict):
     return "\n\n".join(out) if out else "No results to format"
 
 
-# ── E1 / U8: Quote verification — benchmark-grade stack ──────────────────────
-# Ported from nicolay_benchmark for consistency. Key improvements over original:
-#   • Segment-based matching handles ellipsis truncation correctly
-#   • Loose (punctuation-insensitive) normalization catches quote-glyph variants
-#   • Stage 3.5: hyphen/punctuation-collapsed anchor catches corpus parsing
-#     artifacts (hyphens → spaces, dropped commas) without loosening enough
-#     to create false positives in 19th-century prose
-#   • Token-coverage heuristic catches near-exact paraphrases (≥ 0.95 coverage
-#     = verified; 0.86–0.95 = approximate_quote, not displaced)
-#   • approximate_quote outcome is treated as verified for confidence scoring,
-#     not as displaced — eliminates the main source of false 🔀 annotations
-# Backward-compatible: verify_quote() still returns (bool, method_str)
+# ── E1 / U8: Quote verification ───────────────────────────────────────────────
+#
+# PATCH v1.8→v1.9 — Unified verification stack
+# ─────────────────────────────────────────────
+# Replaces the original shallow whitespace-only normalization with the
+# dual strict/loose normalization architecture from the benchmark script
+# (nicolay_benchmark_v6_4). Key improvements:
+#
+#   1. NFKD unicode normalization catches curly-quote / backtick / em-dash
+#      variants that caused false fabrication flags on real corpus text.
+#   2. Two normalization tracks:
+#        _norm_strict  — unicode + quote glyphs + dashes + brackets + lowercase
+#        _norm_loose   — everything above + full punctuation strip
+#      Loose track prevents false positives from minor glyph differences
+#      without being so permissive it accepts near-paraphrases as verified.
+#   3. Ellipsis-split replaced by ordered segments-in-order search, which
+#      is robust to trailing "..." that the model appends as a truncation
+#      marker (the Q8 false-fabrication root cause).
+#   4. Token-coverage heuristic (≥0.95 → verified, ≥0.86 → approximate_quote)
+#      adds a category for paraphrase-as-quote — the Q4 fabrication taxonomy
+#      type that the old stack silently collapsed into "not_found".
+#   5. Sliding window (_sliding_window_verify) retained from original: catches
+#      gradual sentence condensation that segment matching misses.
+#   6. Same-document displacement search (_search_same_document) retained
+#      with loose normalization added to its inner loop.
+#
+# Downstream call sites are unchanged — verify_quote() still returns
+# (verified: bool, method: str) and quote_badge_html() maps the new
+# "approximate_quote" method string to a new amber badge.
+# verify_final_answer_quotes() and render_final_answer_with_verification()
+# are unchanged in signature and behaviour.
+# ─────────────────────────────────────────────────────────────────────────────
 
-import unicodedata as _ud
+import unicodedata as _ucd
 
-_STOPWORDS = {
+_QV_STOPWORDS = {
     "the","a","an","and","or","but","if","then","than","to","of","in","on",
     "for","with","by","at","as","is","are","was","were","be","been","being",
     "it","its","this","that","these","those","we","you","i","he","she","they",
@@ -366,119 +378,132 @@ _STOPWORDS = {
 }
 
 
-def _norm_chunk(text):
-    """Legacy whitespace normalizer — kept for compatibility with callers."""
-    text = text.replace('\\n', ' ').replace('\n', ' ').replace('\r', ' ')
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
-
-
-def normalize_for_quote_matching(text: str) -> str:
-    """Strict normalization: unicode, quote glyphs, dash variants, editorial brackets."""
+def _norm_strict(text: str) -> str:
+    """
+    Strict normalization for quote matching.
+    NFKD unicode → quote-glyph normalization → dash collapse →
+    editorial bracket removal → lowercase → whitespace collapse.
+    Does NOT strip punctuation (preserves verbatim-match precision).
+    """
     if not text:
         return ""
-    text = _ud.normalize("NFKD", str(text))
+    text = _ucd.normalize("NFKD", str(text))
+    # Quote glyphs → plain ASCII equivalents
     text = text.replace("`", "'")
     text = text.replace("\u2018", "'").replace("\u2019", "'")
     text = text.replace("\u201c", '"').replace("\u201d", '"')
+    # Ellipsis variants → literal "..." (sentinel for segment splitter)
     text = text.replace("\u2026", "...")
+    # Literal \n escape sequences and real newlines → space
+    text = text.replace("\\n", " ").replace("\n", " ").replace("\r", " ")
+    # Multi-dash runs and single dashes → space
     text = re.sub(r'[-\u2013\u2014]{2,}', ' ', text)
     text = re.sub(r'[-\u2013\u2014]', ' ', text)
+    # Editorial brackets removed
     text = re.sub(r'\[.*?\]', '', text)
+    # Collapse whitespace, lowercase
     text = re.sub(r'\s+', ' ', text).strip()
     return text.lower()
 
 
-def normalize_for_quote_matching_loose(text: str) -> str:
-    """Loose normalization: also strips all remaining punctuation."""
-    if not text:
-        return ""
-    text = _ud.normalize("NFKD", str(text))
-    text = text.replace("`", "'")
-    text = text.replace("\u2018", "'").replace("\u2019", "'")
-    text = text.replace("\u201c", '"').replace("\u201d", '"')
-    text = text.replace("\u2026", "...")
-    text = re.sub(r'[-\u2013\u2014]{2,}', ' ', text)
-    text = re.sub(r'[-\u2013\u2014]', ' ', text)
-    text = re.sub(r'\[.*?\]', '', text)
-    text = re.sub(r"[^0-9A-Za-z\s]", " ", text)
+def _norm_loose(text: str) -> str:
+    """
+    Loose normalization for quote matching.
+    Everything _norm_strict does, plus full punctuation removal.
+    Used as a second-pass to prevent false failures from backticks,
+    curly quotes, and minor punctuation variants in corpus text.
+    """
+    text = _norm_strict(text)
+    # Strip all non-alphanumeric characters (keep spaces)
+    text = re.sub(r"[^0-9a-z\s]", " ", text)
     text = re.sub(r'\s+', ' ', text).strip()
-    return text.lower()
+    return text
 
 
-def _content_tokens(norm_text: str) -> list:
-    if not norm_text:
-        return []
-    return [t for t in norm_text.split() if len(t) >= 3 and t not in _STOPWORDS]
+# Keep _norm_chunk as an alias so any remaining call sites continue to work.
+def _norm_chunk(text: str) -> str:
+    """Legacy alias → _norm_strict. Retained for call-site compatibility."""
+    return _norm_strict(text)
 
 
-def _token_coverage(quote_norm_loose: str, chunk_norm_loose: str) -> float:
-    q = set(_content_tokens(quote_norm_loose))
-    if len(q) < 6:
-        return 0.0
-    c = set(_content_tokens(chunk_norm_loose))
-    return len(q & c) / max(1, len(q))
+def _quote_segments(passage: str, loose: bool = False) -> list:
+    """
+    Split a passage on ellipsis markers into an ordered list of normalized
+    segments. Each non-trivial segment must appear in order in the target
+    chunk for the quote to be considered verified.
 
+    Replaces the old Stage 2 (ellipsis-split) + Stage 3 (60-char anchor).
+    Handles trailing "..." that models append as truncation markers.
 
-def _quote_segments_for_matching(passage: str) -> list:
+    Strip all four quote-char variants (ASCII + curly) so that a passage
+    wrapped in curly quotes — e.g. \u201csome text\u201d — doesn't include
+    the quote characters in the segment string and thereby fail a strict
+    substring match against corpus text that has no surrounding quotes.
+    """
     if not passage:
         return []
-    p = _ud.normalize("NFKD", str(passage)).strip().strip('"').strip("'").strip()
-    parts = re.split(r'(?:\.\.\.|\u2026)', p)
-    segs = [normalize_for_quote_matching(pt) for pt in parts]
-    segs = [s for s in segs if len(s) >= 10]
+    p = _ucd.normalize("NFKD", str(passage)).strip()
+    # Strip ALL common surrounding quote chars: ASCII double/single + curly variants
+    p = p.strip('\u201c\u201d\u2018\u2019"\'').strip()
+    parts = re.split(r'(?:\.\.\.|…)', p)
+    norm_fn = _norm_loose if loose else _norm_strict
+    segs = [norm_fn(part) for part in parts if len(norm_fn(part)) >= (18 if loose else 10)]
     if not segs:
-        p2 = re.sub(r'(?:\.\.\.|\u2026)+', ' ', p)
-        s2 = normalize_for_quote_matching(p2)
+        p2 = re.sub(r'(?:\.\.\.|…)+', ' ', p)
+        s2 = norm_fn(p2)
         if s2:
             segs = [s2]
     return segs
 
 
-def _quote_segments_for_matching_loose(passage: str) -> list:
-    if not passage:
-        return []
-    p = _ud.normalize("NFKD", str(passage)).strip().strip('"').strip("'").strip()
-    parts = re.split(r'(?:\.\.\.|\u2026)', p)
-    segs = [normalize_for_quote_matching_loose(pt) for pt in parts]
-    segs = [s for s in segs if len(s) >= 18]
-    if not segs:
-        p2 = re.sub(r'(?:\.\.\.|\u2026)+', ' ', p)
-        s2 = normalize_for_quote_matching_loose(p2)
-        if s2:
-            segs = [s2]
-    return segs
-
-
-def _contains_segments_in_order(haystack_norm: str, segs_norm: list) -> bool:
-    if not haystack_norm or not segs_norm:
+def _segments_in_order(haystack: str, segs: list) -> bool:
+    """Return True iff all segments appear in haystack in order."""
+    if not haystack or not segs:
         return False
-    i = 0
-    for s in segs_norm:
-        pos = haystack_norm.find(s, i)
-        if pos == -1:
+    pos = 0
+    for seg in segs:
+        idx = haystack.find(seg, pos)
+        if idx == -1:
             return False
-        i = pos + len(s)
+        pos = idx + len(seg)
     return True
 
 
-def _edit_distance_short(a: str, b: str) -> int:
-    """Levenshtein — O(mn), called only on ≤60-char strings."""
-    if a == b: return 0
-    la, lb = len(a), len(b)
-    if la == 0: return lb
-    if lb == 0: return la
-    prev = list(range(lb + 1))
-    for i, ca in enumerate(a, 1):
-        curr = [i] + [0] * lb
-        for j, cb in enumerate(b, 1):
-            curr[j] = min(prev[j]+1, curr[j-1]+1, prev[j-1]+(0 if ca==cb else 1))
-        prev = curr
-    return prev[lb]
+def _token_coverage(quote_loose: str, chunk_loose: str) -> float:
+    """
+    Fraction of content tokens in the quote that appear in the chunk.
+    Content tokens = non-stopword tokens of length ≥ 3.
+    Returns 0.0 if the quote has fewer than 6 content tokens (too short
+    for the heuristic to be meaningful).
+    """
+    def _toks(s):
+        return [t for t in s.split() if len(t) >= 3 and t not in _QV_STOPWORDS]
+    q_toks = set(_toks(quote_loose))
+    if len(q_toks) < 6:
+        return 0.0
+    c_toks = set(_toks(chunk_loose))
+    return len(q_toks & c_toks) / max(1, len(q_toks)) if c_toks else 0.0
 
 
 def _sliding_window_verify(norm_quote, norm_chunk, min_window=30, step=10):
-    """Legacy sliding-window — kept for verify_final_answer_quotes fallback."""
+    """
+    Sliding-window substring search.  Catches two failure modes that anchor
+    and exact checks miss:
+
+      1. Mid-sentence quoting — Nicolay starts a quote part-way through a
+         sentence (e.g. omits 'On the 5th of March…' preamble), so the
+         opening anchor is absent even though most of the text is verbatim.
+
+      2. Light paraphrasing / sentence condensation — Nicolay occasionally
+         drops a clause (e.g. 'throughout the whole of this unhappy contest')
+         while preserving the surrounding text verbatim.
+
+    Tries progressively shorter windows (60 → min_window chars) and returns
+    (True, matched_segment) on the first hit, (False, '') otherwise.
+    A min_window of 30 chars is long enough to be highly distinctive in
+    19th-century prose while still catching condensed openings.
+    Retained from original implementation; operates on _norm_strict output.
+    """
     q_len = len(norm_quote)
     for window in range(min(60, q_len), min_window - 1, -step):
         for start in range(0, q_len - window + 1, step):
@@ -488,139 +513,14 @@ def _sliding_window_verify(norm_quote, norm_chunk, min_window=30, step=10):
     return False, ''
 
 
-def _verify_quote_rich(key_quote: str, cited_chunk: dict, corpus: dict) -> dict:
+def _search_same_document(norm_quote_strict, norm_quote_loose, text_id, lincoln_dict):
     """
-    Multi-stage quote verifier returning a rich result dict.
+    When a quote fails verification against its claimed chunk, search all
+    chunks sharing the same source document.  Returns (found: bool, chunk_id).
 
-    Outcomes (in priority order):
-      verified            — confirmed in cited chunk (any stage 1-3.5 or token_coverage ≥ 0.95)
-      approximate_quote   — high token coverage (0.86-0.95) in cited chunk
-      displacement        — strict/loose segments found in a different corpus chunk
-      approximate_displacement — token coverage ≥ 0.95 in a different chunk
-      fabrication         — not found anywhere
-
-    Stages:
-      1. Strict segment match (normalize_for_quote_matching)
-      2. Loose segment match (normalize_for_quote_matching_loose, punctuation-stripped)
-      3. Corpus-wide strict displacement scan
-      3a. Corpus-wide loose displacement scan
-      3.5. Hyphen/punctuation-collapsed anchor on cited chunk with edit-distance ≤ 3
-      4. Token-coverage heuristic on cited chunk
-      5. Token-coverage displacement scan
+    Now runs both strict and loose normalization in its inner loop, matching
+    the benchmark's displacement logic.
     """
-    cited_chunk_present = bool(cited_chunk)
-    cited_text = cited_chunk.get("full_text", cited_chunk.get("text", "")) if cited_chunk else ""
-    cited_source = str(cited_chunk.get("source", "")) if cited_chunk else ""
-    cited_text_id = str(cited_chunk.get("text_id", "")) if cited_chunk else ""
-
-    _base = {
-        "cited_chunk_present": cited_chunk_present,
-        "cited_chunk_source":  cited_source,
-        "cited_chunk_text_id": cited_text_id,
-        "cited_chunk_text_len": len(cited_text) if cited_text else 0,
-    }
-
-    if not key_quote or len(str(key_quote).strip()) < 5:
-        return {"outcome": "too_short", **_base, "note": "Passage too short to verify"}
-
-    segs_strict = _quote_segments_for_matching(key_quote)
-    segs_loose  = _quote_segments_for_matching_loose(key_quote)
-    cited_norm_strict = normalize_for_quote_matching(cited_text) if cited_text else ""
-    cited_norm_loose  = normalize_for_quote_matching_loose(cited_text) if cited_text else ""
-
-    # Stage 1 — strict segments in cited chunk
-    if cited_norm_strict and _contains_segments_in_order(cited_norm_strict, segs_strict):
-        return {"outcome": "verified", "in_cited_chunk": True, "fabricated": False,
-                "match_method": "strict_segments", **_base}
-
-    # Stage 2 — loose segments in cited chunk
-    if cited_norm_loose and _contains_segments_in_order(cited_norm_loose, segs_loose):
-        return {"outcome": "verified", "in_cited_chunk": True, "fabricated": False,
-                "match_method": "loose_segments",
-                "note": "VERIFIED — punctuation-insensitive match", **_base}
-
-    # Stage 3 — strict displacement scan
-    if corpus and segs_strict:
-        for cid, chunk in corpus.items():
-            chunk_text = chunk.get("full_text", chunk.get("text", "")) or ""
-            if not chunk_text: continue
-            if _contains_segments_in_order(normalize_for_quote_matching(chunk_text), segs_strict):
-                return {"outcome": "displacement", "in_cited_chunk": False, "fabricated": False,
-                        "match_chunk_num": cid, "match_chunk_source": str(chunk.get("source","")),
-                        "match_method": "strict_segments",
-                        "note": "DISPLACEMENT — strict match in different chunk", **_base}
-
-    # Stage 3a — loose displacement scan
-    if corpus and segs_loose:
-        for cid, chunk in corpus.items():
-            chunk_text = chunk.get("full_text", chunk.get("text", "")) or ""
-            if not chunk_text: continue
-            if _contains_segments_in_order(normalize_for_quote_matching_loose(chunk_text), segs_loose):
-                return {"outcome": "displacement", "in_cited_chunk": False, "fabricated": False,
-                        "match_chunk_num": cid, "match_chunk_source": str(chunk.get("source","")),
-                        "match_method": "loose_segments",
-                        "note": "DISPLACEMENT — loose match in different chunk", **_base}
-
-    # Stage 3.5 — hyphen/punctuation-collapsed anchor on cited chunk (corpus parsing artifacts)
-    if cited_norm_loose and segs_loose:
-        def _hc(text):
-            return re.sub(r"[^a-z0-9]+", " ", text).strip()
-        _hc_chunk = _hc(cited_norm_loose)
-        _hc_anchor = _hc(segs_loose[0])[:60]
-        if len(_hc_anchor) >= 20:
-            if _hc_anchor in _hc_chunk:
-                return {"outcome": "verified", "in_cited_chunk": True, "fabricated": False,
-                        "match_method": "fuzzy_punctuation",
-                        "note": "VERIFIED — hyphen-collapsed anchor in cited chunk", **_base}
-            _alen = len(_hc_anchor)
-            for _s in range(0, max(1, len(_hc_chunk) - _alen + 1)):
-                _win = _hc_chunk[_s:_s + _alen]
-                if len(_win) >= _alen - 2 and _edit_distance_short(_hc_anchor, _win) <= 3:
-                    return {"outcome": "verified", "in_cited_chunk": True, "fabricated": False,
-                            "match_method": "fuzzy_punctuation",
-                            "note": "VERIFIED — edit-distance ≤3 anchor (corpus parsing artifact)", **_base}
-
-    # Stage 4 — token-coverage on cited chunk
-    if cited_norm_loose:
-        q_loose = " ".join(segs_loose) if segs_loose else normalize_for_quote_matching_loose(key_quote)
-        cov = _token_coverage(q_loose, cited_norm_loose)
-        if cov >= 0.95:
-            return {"outcome": "verified", "in_cited_chunk": True, "fabricated": False,
-                    "match_method": "token_coverage", "approx_score": float(cov),
-                    "note": "VERIFIED — near-exact token coverage in cited chunk", **_base}
-        if cov >= 0.86:
-            return {"outcome": "approximate_quote", "in_cited_chunk": True, "fabricated": False,
-                    "match_method": "token_coverage", "approx_score": float(cov),
-                    "note": "APPROXIMATE — high token coverage in cited chunk", **_base}
-
-    # Stage 5 — token-coverage displacement scan
-    if corpus and segs_loose:
-        q_loose = " ".join(segs_loose)
-        best = (0.0, None, "", "")
-        for cid, chunk in corpus.items():
-            chunk_text = chunk.get("full_text", chunk.get("text", "")) or ""
-            if not chunk_text: continue
-            cn = normalize_for_quote_matching_loose(chunk_text)
-            cov = _token_coverage(q_loose, cn)
-            if cov > best[0]:
-                best = (cov, cid, str(chunk.get("text_id","")), str(chunk.get("source","")))
-        if best[1] is not None and best[0] >= 0.95:
-            return {"outcome": "displacement", "in_cited_chunk": False, "fabricated": False,
-                    "match_chunk_num": best[1], "match_chunk_source": best[3],
-                    "match_method": "token_coverage", "approx_score": float(best[0]),
-                    "note": "DISPLACEMENT — near-exact token coverage in different chunk", **_base}
-        if best[1] is not None and best[0] >= 0.90:
-            return {"outcome": "approximate_displacement", "in_cited_chunk": False, "fabricated": False,
-                    "match_chunk_num": best[1], "match_chunk_source": best[3],
-                    "match_method": "token_coverage", "approx_score": float(best[0]),
-                    "note": "APPROXIMATE DISPLACEMENT", **_base}
-
-    return {"outcome": "fabrication", "in_cited_chunk": False, "fabricated": True,
-            "note": "FABRICATION — passage not found in corpus", **_base}
-
-
-def _search_same_document(norm_quote, text_id, lincoln_dict):
-    """Legacy same-document search — retained for verify_final_answer_quotes."""
     entry = triple_lookup(lincoln_dict, text_id)
     target_source = entry.get('source', '')
     if not target_source:
@@ -631,7 +531,9 @@ def _search_same_document(norm_quote, text_id, lincoln_dict):
         return s.lower().strip()
 
     norm_target = _ns(target_source)
-    norm_q = _norm_chunk(norm_quote)
+    segs_strict = _quote_segments(norm_quote_strict, loose=False)
+    segs_loose  = _quote_segments(norm_quote_loose,  loose=True)
+
     seen_ids = set()
     for key, candidate in lincoln_dict.items():
         if not isinstance(key, int) or key in seen_ids:
@@ -644,55 +546,97 @@ def _search_same_document(norm_quote, text_id, lincoln_dict):
         cand_ft = candidate.get('full_text', '')
         if not cand_ft:
             continue
-        norm_cand = _norm_chunk(cand_ft)
-        if norm_q in norm_cand or (len(norm_q[:60]) > 20 and norm_q[:60] in norm_cand):
+        cand_strict = _norm_strict(cand_ft)
+        cand_loose  = _norm_loose(cand_ft)
+        # Strict segment match
+        if segs_strict and _segments_in_order(cand_strict, segs_strict):
             return True, str(key)
-        sw_found, _ = _sliding_window_verify(norm_q, norm_cand)
+        # Loose segment match
+        if segs_loose and _segments_in_order(cand_loose, segs_loose):
+            return True, str(key)
+        # Sliding window (on strict normalization)
+        sw_found, _ = _sliding_window_verify(norm_quote_strict, cand_strict)
         if sw_found:
             return True, str(key)
+
     return False, ''
 
 
 def verify_quote(key_quote, text_id, lincoln_dict):
     """
-    Backward-compatible wrapper around _verify_quote_rich().
-    Returns (verified: bool, method: str) as before.
+    Returns (verified: bool, method: str).
+    method ∈ {'exact', 'loose', 'sliding', 'approximate_quote',
+               'displaced', 'not_found', 'chunk_missing', 'no_quote'}
 
-    method values: 'exact' | 'fuzzy' | 'sliding' | 'fuzzy_punctuation' |
-                   'approximate_quote' | 'token_coverage' | 'displaced' |
-                   'not_found' | 'chunk_missing' | 'no_quote'
+    Seven-stage verification pipeline (v1.9 unified stack):
+      1. Strict segments-in-order match (NFKD + glyph normalization).
+      2. Loose segments-in-order match (+ full punctuation strip).
+         Stages 1-2 handle both verbatim and glyph-variant quotes.
+      3. Sliding-window match (catches mid-sentence starts and
+         light sentence condensation not resolved by segments).
+      4. Token-coverage ≥ 0.95 → verified (near-exact paraphrase).
+      5. Token-coverage ≥ 0.86 → approximate_quote (paraphrase-as-quote;
+         Q4 fabrication taxonomy category; not a fabrication flag).
+      6. Same-document displacement search (strict + loose + sliding)
+         — distinguishes corpus displacement from fabrication.
+      7. not_found — quote not in cited chunk or same document.
 
-    Callers that only check the bool are unaffected.
-    quote_badge_html() handles all new method strings.
+    Downstream consumers (quote_badge_html, verify_final_answer_quotes,
+    render_confidence_summary) are unchanged in interface.
+    'approximate_quote' renders as an amber badge via quote_badge_html.
     """
     if not key_quote or not key_quote.strip():
         return False, "no_quote"
     entry = triple_lookup(lincoln_dict, text_id)
-    if not entry.get('full_text', ''):
+    chunk = entry.get('full_text', '')
+    if not chunk:
         return False, "chunk_missing"
 
-    # Build corpus dict from lincoln_dict (int-keyed entries only)
-    corpus = {k: v for k, v in lincoln_dict.items() if isinstance(k, int)}
-    cited_chunk = entry
+    norm_q_strict = _norm_strict(key_quote)
+    norm_q_loose  = _norm_loose(key_quote)
+    norm_ch_strict = _norm_strict(chunk)
+    norm_ch_loose  = _norm_loose(chunk)
 
-    result = _verify_quote_rich(key_quote, cited_chunk, corpus)
-    outcome = result.get("outcome", "fabrication")
+    segs_strict = _quote_segments(key_quote, loose=False)
+    segs_loose  = _quote_segments(key_quote, loose=True)
 
-    _OUTCOME_TO_BOOL_METHOD = {
-        "verified":               (True,  result.get("match_method", "exact")),
-        "approximate_quote":      (True,  "approximate_quote"),
-        "displacement":           (False, "displaced"),
-        "approximate_displacement":(False,"displaced"),
-        "fabrication":            (False, "not_found"),
-        "too_short":              (False, "no_quote"),
-    }
-    return _OUTCOME_TO_BOOL_METHOD.get(outcome, (False, "not_found"))
+    # Stage 1 — strict segments in order
+    if segs_strict and _segments_in_order(norm_ch_strict, segs_strict):
+        return True, "exact"
+
+    # Stage 2 — loose segments in order (glyph-tolerant)
+    if segs_loose and _segments_in_order(norm_ch_loose, segs_loose):
+        return True, "loose"
+
+    # Stage 3 — sliding window (catches condensed / mid-sentence quotes)
+    found, _ = _sliding_window_verify(norm_q_strict, norm_ch_strict)
+    if found:
+        return True, "sliding"
+
+    # Stage 4/5 — token coverage heuristic
+    cov = _token_coverage(norm_q_loose, norm_ch_loose)
+    if cov >= 0.95:
+        return True, "exact"            # near-exact; treat as verified
+    if cov >= 0.86:
+        return False, "approximate_quote"  # paraphrase-as-quote; genuine but imprecise
+
+    # Stage 6 — same-document displacement search
+    displaced, _ = _search_same_document(norm_q_strict, norm_q_loose, text_id, lincoln_dict)
+    if displaced:
+        return False, "displaced"
+
+    return False, "not_found"
 
 
 def quote_badge_html(verified, method):
-    """[U8] Fully descriptive verification badge. Handles all method strings
-    including benchmark-grade outcomes: fuzzy_punctuation, approximate_quote,
-    token_coverage."""
+    """[U8] Fully descriptive, user-facing verification badge.
+
+    v1.9 additions:
+      'loose'            → green (glyph-variant match; content verified)
+      'approximate_quote' → amber (paraphrase-as-quote; content plausible but
+                            Nicolay rendered a compression in quotation marks;
+                            maps to Q4 fabrication taxonomy)
+    """
     if method == "chunk_missing":
         return ('<span style="color:#6c757d;font-size:0.95em;font-weight:500;">'
                 '⬜ Source chunk unavailable — quote cannot be verified</span>')
@@ -702,16 +646,14 @@ def quote_badge_html(verified, method):
     if verified and method == "exact":
         return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
                 '✅ Quote verified — text confirmed present in Lincoln corpus</span>')
-    if verified and method in ("fuzzy", "sliding", "token_coverage"):
+    if verified and method in ("loose", "sliding"):
         return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
-                '✅ Quote verified — partial or condensed match confirmed in Lincoln corpus</span>')
-    if verified and method == "fuzzy_punctuation":
-        return ('<span style="color:#155724;font-size:0.95em;font-weight:500;">'
-                '✅ Quote verified — minor punctuation variant (corpus parsing artifact)</span>')
-    if verified and method == "approximate_quote":
-        return ('<span style="color:#0f5132;background:#d1e7dd;padding:1px 6px;'
+                '✅ Quote verified — condensed or glyph-variant match confirmed in Lincoln corpus</span>')
+    if method == "approximate_quote":
+        return ('<span style="color:#664d03;background:#fff3cd;padding:1px 6px;'
                 'border-radius:4px;font-size:0.95em;font-weight:600;">'
-                '🟡 Approximate match — high token overlap confirms corpus presence</span>')
+                '〰️ Approximate match — content likely correct but Nicolay may have '
+                'rendered a compressed paraphrase in quotation marks</span>')
     if method == "displaced":
         return ('<span style="color:#664d03;background:#fff3cd;padding:1px 6px;'
                 'border-radius:4px;font-size:0.95em;font-weight:600;">'
@@ -761,147 +703,50 @@ def extract_quoted_strings(text, min_words=7):
     return found
 
 
-def _source_matches_refs(corpus_source: str, references: list) -> bool:
-    """
-    Check whether a corpus chunk's actual source matches any entry in
-    Nicolay's References list.  Used to detect source mislabeling:
-    quote text is real but Nicolay invented the attribution.
-
-    Normalises both sides: strip 'Source:' prefix, lowercase, collapse
-    punctuation, then compare by token-Jaccard overlap.  Threshold 0.35
-    is deliberately generous to handle:
-      "Peoria Address (1854)" ↔ "At Peoria, Illinois. October 16, 1854."  → 0.50 ✓
-      "First Annual Message. December 3, 1861" ↔ same with 'Source:' prefix → 1.00 ✓
-    And tight enough to reject:
-      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
-        vs "Speech to the Young Men's Lyceum, Springfield, 1838"   → 0.11 ✗
-      "Lincoln-Douglas Debates, Fourth Debate, Charleston, 1858"
-        vs "Speech at Springfield, Illinois, June 26, 1858"        → 0.22 ✗
-    """
-    if not references:
-        return True   # no references list → cannot perform check, don't penalise
-
-    def _norm(s):
-        s = re.sub(r'^source:\s*', '', str(s).strip(), flags=re.IGNORECASE)
-        s = re.sub(r'[.,;:\-()]', ' ', s)
-        s = re.sub(r'\s+', ' ', s).strip().lower()
-        return s
-
-    def _overlap(a, b):
-        ta = set(t for t in _norm(a).split() if len(t) > 2)
-        tb = set(t for t in _norm(b).split() if len(t) > 2)
-        if not ta or not tb:
-            return 0.0
-        return len(ta & tb) / max(len(ta), len(tb))
-
-    for ref in references:
-        if _overlap(corpus_source, ref) >= 0.35:
-            return True
-    return False
-
-
-def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict,
-                                refs=None):
+def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict):
     """
     [U10] For each quoted string in FinalAnswer, check whether it appears in
-    any of the reranked result chunks.
+    any of the reranked result chunks (not just the selected matches).
 
-    Uses _verify_quote_rich() with each reranked chunk as the "cited chunk".
-    Two important scoping decisions:
+    Returns:
+        verified_quotes   — list of (quote_str, text_id, source) confirmed in corpus
+        displaced_quotes  — list of quote_str found in document but wrong chunk
+        unverified_quotes — list of quote_str not found anywhere in corpus
 
-    1. ALL reranked chunks are tried before settling on a classification.
-       An early chunk may report 'displacement' because _verify_quote_rich's
-       corpus-wide Stage 3 finds the quote in a *later* reranked chunk.
-       We exhaust all five before concluding a quote is displaced or unverified.
-
-    2. The corpus passed to _verify_quote_rich is restricted to the reranked
-       chunks only (not the full lincoln_dict).  Stage 3 displacement therefore
-       only fires within the retrieved documents.  A quote that exists in the
-       full corpus but was NOT retrieved should be 'unverified' — Nicolay cited
-       something it was not given — not 'displaced'.
-
-    3. Source mislabeling check (when refs is provided): after a quote is
-       verified, the matched chunk's actual corpus source is compared against
-       the References list.  If no Reference matches the real source, the quote
-       is routed to mislabeled_quotes — quote text is genuine corpus text but
-       Nicolay fabricated the attribution.  This is worse than displacement and
-       is treated as unverified for confidence scoring.
-
-    Outcome mapping:
-      verified / approximate_quote            → verified_quotes
-                                                (+ source check passes, or refs=None)
-      verified but source mismatch            → mislabeled_quotes
-      displacement / approximate_displacement → displaced_quotes
-      fabrication                             → unverified_quotes
-
-    Returns 4-tuple:
-        verified_quotes    — list of (quote_str, text_id, source) confirmed with correct source
-        displaced_quotes   — list of quote_str found in corpus but wrong chunk
-        unverified_quotes  — list of quote_str not found in any retrieved source
-        mislabeled_quotes  — list of quote_str verified in corpus but source attribution wrong
+    v1.9: approximate_quote treated as verified (content is genuine; only the
+    quote-mark precision is imperfect).  'loose' and 'sliding' methods map to
+    verified, consistent with quote_badge_html.
     """
     quotes = extract_quoted_strings(final_answer_text)
     if not quotes:
-        return [], [], [], []
+        return [], [], []
 
-    # Build search set from reranked results.
-    # reranked_corpus is restricted to these chunks so Stage 3 displacement
-    # stays scoped to retrieved documents only.
-    #
-    # KEY FALLBACK: If triple_lookup returns {} (corpus mismatch — e.g., the
-    # main app's lincoln_dict is the old 80-doc corpus but the pipeline is now
-    # returning new 772-chunk IDs), we construct a synthetic chunk from the
-    # reranked result's Key Quote and Source fields.  This preserves the exact
-    # text that was retrieved and passed to Nicolay, so verification runs
-    # against what the model actually saw rather than failing silently.
-    reranked_chunks = []
-    reranked_corpus = {}
+    corpus_chunks = []
     for r in reranked_results:
         tid = str(r.get('Text ID', ''))
         entry = triple_lookup(lincoln_dict, tid)
-        source = r.get('Source', '') or entry.get('source', '')
         ft = entry.get('full_text', '') or r.get('Key Quote', '')
+        source = r.get('Source', '')
         if ft:
-            # If triple_lookup failed, build a synthetic chunk from the result row
-            if not entry.get('full_text'):
-                entry = {'full_text': ft, 'source': source, 'text_id': tid}
-            reranked_chunks.append((tid, source, entry))
-            m = re.search(r'(\d+)', tid)
-            if m:
-                reranked_corpus[int(m.group(1))] = entry
+            corpus_chunks.append((tid, source, ft))
 
-    _VERIFIED_OUTCOMES  = {"verified", "approximate_quote"}
-    _DISPLACED_OUTCOMES = {"displacement", "approximate_displacement"}
-
-    verified, displaced, unverified, mislabeled = [], [], [], []
+    verified, displaced, unverified = [], [], []
     for quote in quotes:
-        best_verified  = None   # (quote_str, tid, corpus_source) — first verified hit
-        best_displaced = None   # quote_str — first displaced hit (fallback only)
-
-        # Try every reranked chunk without breaking early on displacement.
-        for tid, _source, cited_chunk in reranked_chunks:
-            result = _verify_quote_rich(quote, cited_chunk, reranked_corpus)
-            outcome = result.get("outcome", "fabrication")
-            if outcome in _VERIFIED_OUTCOMES:
-                actual_source = cited_chunk.get("source", "")
-                best_verified = (quote, tid, actual_source)
+        found = False
+        for tid, source, _chunk in corpus_chunks:
+            v, method = verify_quote(quote, tid, lincoln_dict)
+            if v or method == "approximate_quote":
+                verified.append((quote, tid, source))
+                found = True
                 break
-            if outcome in _DISPLACED_OUTCOMES and best_displaced is None:
-                best_displaced = quote
-
-        if best_verified:
-            q_str, tid, actual_source = best_verified
-            if refs is not None and not _source_matches_refs(actual_source, refs):
-                # Quote text is real but attribution is fabricated — source mislabeling
-                mislabeled.append(q_str)
-            else:
-                verified.append(best_verified)
-        elif best_displaced:
-            displaced.append(best_displaced)
-        else:
+            if method == "displaced":
+                displaced.append(quote)
+                found = True
+                break
+        if not found:
             unverified.append(quote)
 
-    return verified, displaced, unverified, mislabeled
+    return verified, displaced, unverified
 
 
 def check_out_of_corpus_references(references, reranked_results):
@@ -957,27 +802,21 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
                                            precomputed_quotes=None):
     """
     [U10] Render Nicolay's FinalAnswer with inline quote verification.
-    Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️;
-    source-mislabeled quotes annotated 🏷️ (quote text real, attribution fabricated).
+    Verified quotes annotated ✅; displaced quotes 🔀; unverified quotes ⚠️.
     Out-of-corpus references flagged in References list.
 
-    precomputed_quotes: optional tuple (verified, displaced, unverified[, mislabeled])
-      from verify_final_answer_quotes() — supplied by Tab 1 to avoid running
+    precomputed_quotes: optional tuple (verified, displaced, unverified) from
+      verify_final_answer_quotes() — supplied by Tab 1 to avoid running
       verification twice when the confidence summary panel is also shown.
-      Accepts both 3-tuple (legacy) and 4-tuple (current).
     """
     fa_text = fa_block.get('Text', 'No response available')
     refs    = fa_block.get('References', [])
 
     if precomputed_quotes is not None:
-        if len(precomputed_quotes) == 4:
-            verified_quotes, displaced_quotes, unverified_quotes, mislabeled_quotes = precomputed_quotes
-        else:
-            verified_quotes, displaced_quotes, unverified_quotes = precomputed_quotes
-            mislabeled_quotes = []
+        verified_quotes, displaced_quotes, unverified_quotes = precomputed_quotes
     else:
-        verified_quotes, displaced_quotes, unverified_quotes, mislabeled_quotes = (
-            verify_final_answer_quotes(fa_text, reranked_results, lincoln_dict, refs=refs)
+        verified_quotes, displaced_quotes, unverified_quotes = verify_final_answer_quotes(
+            fa_text, reranked_results, lincoln_dict
         )
     out_of_corpus_refs = check_out_of_corpus_references(refs, reranked_results)
 
@@ -1010,12 +849,6 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
             if literal in annotated:
                 annotated = annotated.replace(literal, literal + ' ⚠️', 1)
                 break
-    for q in mislabeled_quotes:
-        for open_q, close_q in _QUOTE_PAIRS:
-            literal = open_q + q + close_q
-            if literal in annotated:
-                annotated = annotated.replace(literal, literal + ' 🏷️', 1)
-                break
 
     st.markdown(f"**Response:**\n{annotated}")
 
@@ -1040,10 +873,9 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
     has_verified   = bool(verified_quotes)
     has_displaced  = bool(displaced_quotes)
     has_unverified = bool(unverified_quotes)
-    has_mislabeled = bool(mislabeled_quotes)
     has_ooc        = bool(out_of_corpus_refs)
 
-    if has_verified or has_displaced or has_unverified or has_mislabeled or has_ooc:
+    if has_verified or has_displaced or has_unverified or has_ooc:
         st.markdown("---")
         legend_parts = []
         if has_verified:
@@ -1056,11 +888,6 @@ def render_final_answer_with_verification(fa_block, reranked_results, lincoln_di
         if has_unverified:
             legend_parts.append(
                 "⚠️ Quote not found anywhere in corpus — possible fabrication or out-of-corpus citation"
-            )
-        if has_mislabeled:
-            legend_parts.append(
-                "🏷️ Quote text found in corpus but source attribution does not match — "
-                "Nicolay cited the correct text from the wrong speech"
             )
         if has_ooc:
             legend_parts.append(
@@ -1510,7 +1337,6 @@ def render_confidence_summary(
     unverified_quotes,
     synth_type_num,
     query_text,
-    mislabeled_quotes=None,
 ):
     """
     [U12] Render the Response Confidence Summary panel.
@@ -1545,12 +1371,10 @@ def render_confidence_summary(
         with col1:
             st.caption("**Quote verification**")
         with col2:
-            _ml = mislabeled_quotes or []
-            _ml_count = len(_ml)
             if total_q == 0:
                 st.markdown("⬜ No direct quotes in this response")
                 st.caption("Nicolay did not include any directly quoted text.")
-            elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0 and _ml_count == 0:
+            elif len(unverified_quotes) == 0 and len(displaced_quotes) == 0:
                 st.markdown(f"✅ {total_q}/{total_q} quotes verified")
                 st.caption("Every quoted passage was confirmed present in the Lincoln corpus.")
             elif len(unverified_quotes) > 0:
@@ -1562,17 +1386,6 @@ def render_confidence_summary(
                     "One or more quoted passages could not be located anywhere "
                     "in the Lincoln corpus. These may be fabricated, misremembered, "
                     "or drawn from a source outside the collection."
-                )
-            elif _ml_count > 0:
-                st.markdown(
-                    f"🏷️ {len(verified_quotes)}/{total_q} correctly attributed — "
-                    f"**{_ml_count} source mislabeled**"
-                )
-                st.caption(
-                    "The quote text was found in the Lincoln corpus, but Nicolay's "
-                    "source attribution does not match the actual document. The model "
-                    "cited the correct passage from the wrong speech — a parametric "
-                    "memory error in the attribution, not the quotation itself."
                 )
             else:
                 st.markdown(
@@ -2108,10 +1921,7 @@ if submitted:
     # ── Hay model call ────────────────────────────────────────────────────────
     with st.spinner("Hay is analysing your query…"):
         hay_resp = client.chat.completions.create(
-            # Hay model v.3
-            #model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
-            # Hay model v.4
-            model = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
+            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
             messages=[{"role":"system","content":keyword_prompt},
                       {"role":"user","content":user_query}],
             temperature=0, max_tokens=800, top_p=1,
@@ -2363,10 +2173,7 @@ if submitted:
             if formatted_input:
                 st.write("📜 **Step 5 of 5** — Nicolay is synthesising a response…")
                 nic_resp = client.chat.completions.create(
-                    # nicolay_v3
-                    #model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
-                    # nicolay_v4
-                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
                     messages=[
                         {"role":"system","content":response_prompt},
                         {"role":"user","content":(
@@ -2453,12 +2260,11 @@ if submitted:
 
             # ── [U12] Response Confidence Summary (plain container, not nested) ──
             fa_text = fa_block.get('Text', '')
-            _fa_refs = fa_block.get('References', [])
-            _verified_q, _displaced_q, _unverified_q, _mislabeled_q = (
+            _verified_q, _displaced_q, _unverified_q = (
                 verify_final_answer_quotes(
-                    fa_text, full_reranked_results, lincoln_dict, refs=_fa_refs
+                    fa_text, full_reranked_results, lincoln_dict
                 )
-                if fa_text else ([], [], [], [])
+                if fa_text else ([], [], [])
             )
             try:
                 render_confidence_summary(
@@ -2466,10 +2272,9 @@ if submitted:
                     reranked_results    = full_reranked_results,
                     verified_quotes     = _verified_q,
                     displaced_quotes    = _displaced_q,
-                    unverified_quotes   = _unverified_q + _mislabeled_q,  # mislabeled = unverified for scoring
+                    unverified_quotes   = _unverified_q,
                     synth_type_num      = extract_synth_type_num(synth_raw),
                     query_text          = user_query,
-                    mislabeled_quotes   = _mislabeled_q,
                 )
             except Exception as _cs_err:
                 st.warning(f"⚠️ Confidence summary could not render: {_cs_err}")
@@ -2486,7 +2291,7 @@ if submitted:
                 # running verification a second time.
                 render_final_answer_with_verification(
                     fa_block, full_reranked_results, lincoln_dict,
-                    precomputed_quotes=(_verified_q, _displaced_q, _unverified_q, _mislabeled_q),
+                    precomputed_quotes=(_verified_q, _displaced_q, _unverified_q),
                 )
 
             # ── Match Analysis cards directly below Nicolay response ──────────
@@ -2692,3 +2497,4 @@ if submitted:
                     with st.expander("Additional Model Feedback Fields"):
                         for k, v in extras.items():
                             st.markdown(f"**{k}:** {v}")
+

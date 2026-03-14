@@ -742,19 +742,30 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
 
     verified, displaced, unverified = [], [], []
     for quote in quotes:
+        # Two-pass approach: try every reranked chunk for a direct match first,
+        # then fall back to displacement/unverified only if no chunk verifies it.
+        # This prevents rank-1 chunk triggering a corpus-wide displacement scan
+        # that short-circuits the loop before the correct chunk is even tried —
+        # which previously caused prose quotes to show 🔀 even when the quote
+        # was present and correctly retrieved in a lower-ranked chunk.
+        best_displacement = None
         found = False
+
         for tid, source, _chunk in corpus_chunks:
             v, method = verify_quote(quote, tid, lincoln_dict)
             if v or method == "approximate_quote":
                 verified.append((quote, tid, source))
                 found = True
                 break
-            if method == "displacement":
-                displaced.append(quote)
-                found = True
-                break
+            if method == "displacement" and best_displacement is None:
+                # Record first displacement seen but keep trying remaining chunks
+                best_displacement = (quote, tid, source)
+
         if not found:
-            unverified.append(quote)
+            if best_displacement is not None:
+                displaced.append(best_displacement[0])
+            else:
+                unverified.append(quote)
 
     return verified, displaced, unverified
 

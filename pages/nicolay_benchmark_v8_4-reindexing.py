@@ -8,6 +8,20 @@ BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
+v8.4 changes:
+  - Fix A: Live run tab FinalAnswer — approximate_quote now gets its own 🟡 inline marker
+    and legend entry, separate from displacement (🔀). Previously it was incorrectly grouped
+    with displacement/approximate_displacement. Compare panel already handled this correctly
+    (grouped with verified ✅); live run now matches the intended semantic distinction:
+    🟡 = confirmed in corpus but not verbatim strict, 🔀 = found but in wrong chunk.
+  - Fix B: Live run tab Match Analysis cards — added source_mislabeled badge branch:
+    🏷️ "Text found — source attribution wrong". Previously fell through to ⬜ Not verified.
+    Compare panel already had this branch; live run now matches.
+  - Fix C: Both debug tables (live run + compare panel) — displacement icon changed from
+    ⚠️ to 🔀, matching the Match Analysis card badge. ⚠️ is now reserved exclusively for
+    fabrication (not found in corpus), making the icon vocabulary consistent across all
+    three UI elements in every panel.
+
 v8.3 changes:
   - Full corpus-verified remap of ideal_docs_new for all 25 benchmark questions.
   - Root cause: prior ideal_docs_new were assigned against an intermediate corpus
@@ -3124,7 +3138,7 @@ def main():
                                 if _cr_qvl:
                                     _cp_qv_icons = {
                                         "verified": "✅", "approximate_quote": "🟡",
-                                        "displacement": "⚠️", "approximate_displacement": "🟠",
+                                        "displacement": "🔀", "approximate_displacement": "🟠",
                                         "fabrication": "🚨", "source_mislabeled": "🏷️",
                                         "too_short": "—",
                                     }
@@ -3778,14 +3792,17 @@ def main():
             with st.expander("✍️ Nicolay Output", expanded=True):
                 final_text = get_final_answer_text(qr.get("nicolay_output", {}))
                 _qv_for_inline = qr.get("quote_verification", [])
-                # Reconstruct verified/displaced/unverified/mislabeled lists from stored qv results
-                # so we can annotate the FinalAnswer text without re-running verification.
+                # Reconstruct outcome lists from stored qv results so we can annotate
+                # FinalAnswer text without re-running verification.
+                # approximate_quote is a confirmed corpus match (just not strict) — give it
+                # its own 🟡 marker rather than conflating with displacement (🔀).
                 _iv_verified   = [(q.get("cited_passage",""), q.get("cited_chunk_text_id",""), q.get("cited_chunk_source",""))
                                    for q in _qv_for_inline if q.get("outcome") == "verified"]
+                _iv_approx     = [q.get("cited_passage","")
+                                   for q in _qv_for_inline if q.get("outcome") == "approximate_quote"]
                 _iv_displaced  = [q.get("cited_passage","")
                                    for q in _qv_for_inline
-                                   if q.get("outcome") in ("displacement", "approximate_displacement", "approximate_quote")
-                                   and q.get("outcome") != "verified"]
+                                   if q.get("outcome") in ("displacement", "approximate_displacement")]
                 _iv_unverified = [q.get("cited_passage","")
                                    for q in _qv_for_inline if q.get("outcome") == "fabrication"]
                 _iv_mislabeled = [q.get("cited_passage","")
@@ -3805,6 +3822,13 @@ def main():
                         _lit = _oq + _iq + _cq
                         if _lit in _annotated_fa:
                             _annotated_fa = _annotated_fa.replace(_lit, _lit + " ✅", 1)
+                            break
+                for _iq in _iv_approx:
+                    if not _iq: continue
+                    for _oq, _cq in _QUOTE_PAIRS_IV:
+                        _lit = _oq + _iq + _cq
+                        if _lit in _annotated_fa:
+                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🟡", 1)
                             break
                 for _iq in _iv_displaced:
                     if not _iq: continue
@@ -3832,12 +3856,14 @@ def main():
                 st.markdown(_annotated_fa)
                 # Legend
                 _iv_has_v = bool(_iv_verified)
+                _iv_has_a = bool(_iv_approx)
                 _iv_has_d = bool(_iv_displaced)
                 _iv_has_u = bool(_iv_unverified)
                 _iv_has_m = bool(_iv_mislabeled)
-                if _iv_has_v or _iv_has_d or _iv_has_u or _iv_has_m:
+                if _iv_has_v or _iv_has_a or _iv_has_d or _iv_has_u or _iv_has_m:
                     _iv_legend = []
                     if _iv_has_v: _iv_legend.append("✅ verified against corpus")
+                    if _iv_has_a: _iv_legend.append("🟡 approximate match confirmed")
                     if _iv_has_d: _iv_legend.append("🔀 found in document, displaced chunk")
                     if _iv_has_u: _iv_legend.append("⚠️ not found — possible fabrication")
                     if _iv_has_m: _iv_legend.append("🏷️ text verified but source attribution wrong")
@@ -3847,7 +3873,7 @@ def main():
             # Quote verification
             with st.expander("🔎 Quote Verification", expanded=False):
                 for qv_item in qr.get("quote_verification", []):
-                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "⚠️", "approximate_displacement": "🟠", "fabrication": "🚨", "source_mislabeled": "🏷️", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
+                    icon = {"verified": "✅", "approximate_quote": "🟡", "displacement": "🔀", "approximate_displacement": "🟠", "fabrication": "🚨", "source_mislabeled": "🏷️", "too_short": "—"}.get(qv_item.get("outcome", ""), "?")
                     st.markdown(f"{icon} **{qv_item.get('match', '')}** ({qv_item.get('text_id', '')}) — *{qv_item.get('outcome', '')}*")
                     if qv_item.get("cited_passage"):
                         st.caption(f"\"{str(qv_item['cited_passage'])[:150]}...\"")
@@ -3931,6 +3957,8 @@ def main():
                         _ma_vbadge = '<span style="color:#155724;font-size:0.9em;font-weight:500;">🟡 Approximate match confirmed</span>'
                     elif _ma_outcome == "fabrication":
                         _ma_vbadge = '<span style="color:#721c24;font-size:0.9em;font-weight:600;">⚠️ Not found in corpus</span>'
+                    elif _ma_outcome == "source_mislabeled":
+                        _ma_vbadge = '<span style="color:#495057;background:#e2e3e5;padding:1px 6px;border-radius:4px;font-size:0.9em;font-weight:600;">🏷️ Text found — source attribution wrong</span>'
                     else:
                         _ma_vbadge = '<span style="color:#6c757d;font-size:0.9em;">⬜ Not verified</span>'
 

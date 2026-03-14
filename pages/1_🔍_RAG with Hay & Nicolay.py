@@ -407,7 +407,13 @@ def _norm_strict(text: str) -> str:
     text = re.sub(r'\[.*?\]', '', text)
     # Collapse whitespace, lowercase
     text = re.sub(r'\s+', ' ', text).strip()
-    return text.lower()
+    text = text.lower()
+    # Strip quote-delimiter characters at word boundaries so that typographic
+    # variation between corpus and model output (e.g. corpus backtick→" vs
+    # Nicolay curly-single→') never downgrades a verbatim quote to approximate.
+    # Word-internal apostrophes (possessives, contractions) are preserved.
+    text = re.sub(r'(?<!\w)["\']|["\'](?!\w)', '', text)
+    return text
 
 
 def _norm_loose(text: str) -> str:
@@ -570,7 +576,7 @@ def verify_quote(key_quote, text_id, lincoln_dict):
     """
     Returns (verified: bool, method: str).
     method ∈ {'exact', 'loose', 'sliding', 'approximate_quote',
-               'displaced', 'not_found', 'chunk_missing', 'no_quote'}
+               'displacement', 'fabrication', 'chunk_missing', 'no_quote'}
 
     Seven-stage verification pipeline (v1.9 unified stack):
       1. Strict segments-in-order match (NFKD + glyph normalization).
@@ -627,9 +633,9 @@ def verify_quote(key_quote, text_id, lincoln_dict):
     # Stage 6 — same-document displacement search
     displaced, _ = _search_same_document(norm_q_strict, norm_q_loose, text_id, lincoln_dict)
     if displaced:
-        return False, "displaced"
+        return False, "displacement"
 
-    return False, "not_found"
+    return False, "fabrication"
 
 
 def quote_badge_html(verified, method):
@@ -658,7 +664,7 @@ def quote_badge_html(verified, method):
                 'border-radius:4px;font-size:0.95em;font-weight:600;">'
                 '〰️ Approximate match — content likely correct but Nicolay may have '
                 'rendered a compressed paraphrase in quotation marks</span>')
-    if method == "displaced":
+    if method == "displacement":
         return ('<span style="color:#664d03;background:#fff3cd;padding:1px 6px;'
                 'border-radius:4px;font-size:0.95em;font-weight:600;">'
                 '🔀 Quote found in document but assigned to wrong chunk — '
@@ -743,7 +749,7 @@ def verify_final_answer_quotes(final_answer_text, reranked_results, lincoln_dict
                 verified.append((quote, tid, source))
                 found = True
                 break
-            if method == "displaced":
+            if method == "displacement":
                 displaced.append(quote)
                 found = True
                 break

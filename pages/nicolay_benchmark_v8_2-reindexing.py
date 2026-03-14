@@ -1078,7 +1078,13 @@ def normalize_for_quote_matching(text: str) -> str:
     text = re.sub(r'\[.*?\]', '', text)
     # Collapse whitespace, lowercase
     text = re.sub(r'\s+', ' ', text).strip()
-    return text.lower()
+    text = text.lower()
+    # Strip quote-delimiter characters at word boundaries so that typographic
+    # variation between corpus and model output (e.g. corpus backtick→" vs
+    # Nicolay curly-single→') never downgrades a verbatim quote to approximate.
+    # Word-internal apostrophes (possessives, contractions) are preserved.
+    text = re.sub(r'(?<!\w)["\']|["\'](?!\w)', '', text)
+    return text
 
 
 # Stopwords for token-coverage heuristic

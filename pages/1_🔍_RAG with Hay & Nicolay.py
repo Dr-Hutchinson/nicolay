@@ -388,6 +388,10 @@ def _norm_strict(text: str) -> str:
     if not text:
         return ""
     text = _ucd.normalize("NFKD", str(text))
+    # LaTeX-style double-backtick/double-apostrophe quoting (19th-century typesetting
+    # convention present in Lincoln corpus) → plain ASCII double quotes.
+    # Must run BEFORE single-backtick replacement so `` and '' are caught as pairs.
+    text = text.replace("``", '"').replace("''", '"')
     # Quote glyphs → plain ASCII equivalents
     text = text.replace("`", "'")
     text = text.replace("\u2018", "'").replace("\u2019", "'")

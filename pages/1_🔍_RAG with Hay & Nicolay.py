@@ -1741,7 +1741,7 @@ def render_sidebar_history():
         # ── U5: Corpus coverage notice ────────────────────────────────────────
         st.markdown("### 📚 Corpus Coverage")
         st.markdown(
-            "The Lincoln corpus contains **772 chunks** from major speeches, "
+            "The Lincoln corpus contains **886 chunks** from major speeches, "
             "messages to Congress, and the Lincoln-Douglas Debates.\n\n"
             "**Known gaps** (queries on these will have limited retrieval):\n"
             "- Last Public Address (Apr 11, 1865) — *absent*\n"

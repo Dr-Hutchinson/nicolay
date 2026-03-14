@@ -97,11 +97,11 @@ def _df_from_json_bytes(blob: bytes) -> pd.DataFrame:
 
 @st.cache_data(persist="disk")
 def load_lincoln_speech_corpus() -> pd.DataFrame:
-    """Loads the *repaired* Lincoln speech corpus (772 chunks) as a DataFrame.
+    """Loads the reindexed Lincoln speech corpus (886 chunks) as a DataFrame.
 
     Uses file-content-based caching so updating the underlying msgpack invalidates the cache.
     """
-    base = "lincoln_speech_corpus_repaired_1"
+    base = "lincoln_speech_corpus_reindex_keep"
     path = _find_first_existing([
         f"data/{base}.msgpack", f"Data/{base}.msgpack", f"{base}.msgpack",
         f"data/{base}.json",    f"Data/{base}.json",    f"{base}.json",

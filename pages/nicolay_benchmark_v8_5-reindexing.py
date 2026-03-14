@@ -8,6 +8,25 @@ BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
+v8.5 changes:
+  - Fix D: FinalAnswer annotation — added _extract_fa_quotes() and _annotate_final_answer()
+    helper functions (after get_final_answer_text). The old inline annotation loops in both
+    the live run tab and compare panel are replaced by calls to _annotate_final_answer().
+    Root cause of missing badges: the old loop searched for DELIMITER + full_cited_passage +
+    DELIMITER, but Nicolay's FinalAnswer commonly uses truncated inline quotes (e.g. FA writes
+    'many persons born in foreign countries...' while cited_passage starts 'There is reason
+    to believe that many persons...'). The new helper uses a two-pass strategy:
+      Pass 1 — exact: existing full-passage match (fast path, unchanged behaviour).
+      Pass 2 — substring: extracts all quoted strings from the FA, then checks bidirectional
+               substring containment (case/punct-normalised) against each cited_passage.
+               Annotates the FA-quoted fragment with the appropriate emoji.
+    Both the live run tab and compare panel now call _annotate_final_answer().
+  - Fix E: Added 🧠 Nicolay Chain-of-Thought expander in both the live run tab (after Match
+    Analysis cards) and the compare panel (after Raw JSON expanders). Renders User Query
+    Analysis, Initial Answer Review, Meta Analysis, and Model Feedback sections in readable
+    key-value form, plus FinalAnswer raw text. Match Analysis is already rendered above in
+    the card layout and is excluded from this expander to avoid duplication.
+
 v8.4 changes:
   - Fix A: Live run tab FinalAnswer — approximate_quote now gets its own 🟡 inline marker
     and legend entry, separate from displacement (🔀). Previously it was incorrectly grouped
@@ -1108,6 +1127,80 @@ def get_final_answer_text(nicolay_output: dict) -> str:
     if isinstance(fa, dict):
         return fa.get("Text", fa.get("text", str(fa)))
     return str(fa) if fa else ""
+
+
+def _extract_fa_quotes(text: str, min_len: int = 15) -> list[tuple]:
+    """
+    Extract all quoted strings from FinalAnswer text.
+    Returns list of (quoted_text, open_delim, close_delim) tuples.
+    Checks curly-double, straight-double, curly-single, straight-single quote styles.
+    """
+    QPAIRS = [('\u201c', '\u201d'), ('"', '"'), ('\u2018', '\u2019'), ("'", "'")]
+    results = []
+    for oq, cq in QPAIRS:
+        pattern = re.escape(oq) + r'(.{' + str(min_len) + r',?})' + re.escape(cq)
+        for m in re.finditer(pattern, text):
+            results.append((m.group(1), oq, cq))
+    return results
+
+
+def _annotate_final_answer(final_text: str, qv_results: list[tuple]) -> str:
+    """
+    Annotate FinalAnswer prose with inline verification emoji markers.
+
+    qv_results: list of (cited_passage, emoji) pairs derived from quote_verification records.
+
+    Two-pass strategy per passage:
+      Pass 1 — exact: look for OPEN + full cited_passage + CLOSE in the FA text.
+                       This matches when Nicolay reproduces the full corpus sentence verbatim.
+      Pass 2 — substring: extract all quoted strings from the FA, then check whether
+                       any FA-quoted string is a substring of cited_passage OR vice versa
+                       (bidirectional, case/punctuation-normalised).
+                       This matches when Nicolay quotes a fragment of a longer corpus passage,
+                       which is the common case (e.g. FA starts mid-sentence while
+                       cited_passage begins "There is reason to believe that...").
+
+    Returns annotated copy of final_text.
+    """
+    QPAIRS = [('\u201c', '\u201d'), ('"', '"'), ('\u2018', '\u2019'), ("'", "'")]
+    annotated = final_text
+
+    for cited_passage, emoji in qv_results:
+        if not cited_passage:
+            continue
+        matched = False
+
+        # ── Pass 1: full cited_passage match ──────────────────────────────
+        for oq, cq in QPAIRS:
+            lit = oq + cited_passage + cq
+            if lit in annotated:
+                annotated = annotated.replace(lit, lit + " " + emoji, 1)
+                matched = True
+                break
+
+        if matched:
+            continue
+
+        # ── Pass 2: bidirectional substring match against FA-quoted strings ─
+        fa_quotes = _extract_fa_quotes(annotated)
+        cp_norm = cited_passage.lower().strip('.,;:!? \u201c\u201d\u2018\u2019"\'')
+        best: tuple | None = None
+        for fa_text, oq, cq in fa_quotes:
+            fa_norm = fa_text.lower().strip('.,;:!? \u201c\u201d\u2018\u2019"\'')
+            if len(fa_norm) < 15:
+                continue
+            if fa_norm in cp_norm or cp_norm in fa_norm:
+                overlap = min(len(fa_norm), len(cp_norm))
+                if best is None or overlap > best[0]:
+                    best = (overlap, fa_text, oq, cq)
+
+        if best:
+            _, fa_text, oq, cq = best
+            lit = oq + fa_text + cq
+            if lit in annotated:
+                annotated = annotated.replace(lit, lit + " " + emoji, 1)
+
+    return annotated
 
 
 def get_synthesis_assessment(nicolay_output: dict) -> str:
@@ -3094,32 +3187,16 @@ def main():
                                           if q.get("outcome") == "fabrication"]
                             _cr_iv_ml = [q.get("cited_passage","") for q in _cr_qvl
                                           if q.get("outcome") == "source_mislabeled"]
-                            _QPAIRS   = [('“','”'),('"','"'),('‘','’'),("'","'")]
-                            _cr_annot = _cr_fa
-                            for _iq, _, __ in _cr_iv_v:
-                                if not _iq: continue
-                                for _oq, _cq in _QPAIRS:
-                                    _lit = _oq + _iq + _cq
-                                    if _lit in _cr_annot:
-                                        _cr_annot = _cr_annot.replace(_lit, _lit + " ✅", 1); break
-                            for _iq in _cr_iv_d:
-                                if not _iq: continue
-                                for _oq, _cq in _QPAIRS:
-                                    _lit = _oq + _iq + _cq
-                                    if _lit in _cr_annot:
-                                        _cr_annot = _cr_annot.replace(_lit, _lit + " 🔀", 1); break
-                            for _iq in _cr_iv_u:
-                                if not _iq: continue
-                                for _oq, _cq in _QPAIRS:
-                                    _lit = _oq + _iq + _cq
-                                    if _lit in _cr_annot:
-                                        _cr_annot = _cr_annot.replace(_lit, _lit + " ⚠️", 1); break
-                            for _iq in _cr_iv_ml:
-                                if not _iq: continue
-                                for _oq, _cq in _QPAIRS:
-                                    _lit = _oq + _iq + _cq
-                                    if _lit in _cr_annot:
-                                        _cr_annot = _cr_annot.replace(_lit, _lit + " 🏷️", 1); break
+                            # Use _annotate_final_answer() for bidirectional substring
+                            # matching — handles Nicolay quoting a fragment of a longer
+                            # corpus sentence as well as verbatim full passages.
+                            _cr_qv_pairs = (
+                                [(_iq, "✅") for _iq, _, __ in _cr_iv_v] +
+                                [(_iq, "🔀") for _iq in _cr_iv_d] +
+                                [(_iq, "⚠️") for _iq in _cr_iv_u] +
+                                [(_iq, "🏷️") for _iq in _cr_iv_ml]
+                            )
+                            _cr_annot = _annotate_final_answer(_cr_fa, _cr_qv_pairs)
 
                             # FinalAnswer with inline verification markers
                             with st.expander("✍️ FinalAnswer", expanded=True):
@@ -3302,6 +3379,34 @@ def main():
                                     st.json(_cr_hay_raw)
                                 else:
                                     st.info("hay_output not stored in this result.")
+
+                            # ── NICOLAY CHAIN-OF-THOUGHT ──────────────────────
+                            # Renders all Nicolay reasoning sections in readable form.
+                            _cr_cot = _cr.get("nicolay_output") or {}
+                            if _cr_cot:
+                                with st.expander("🧠 Nicolay Chain-of-Thought", expanded=False):
+                                    _CR_COT_SECTIONS = [
+                                        ("User Query Analysis",  "🔍 User Query Analysis"),
+                                        ("Initial Answer Review", "📋 Initial Answer Review"),
+                                        ("Meta Analysis",         "🧩 Meta Analysis"),
+                                        ("Model Feedback",        "💬 Model Feedback"),
+                                    ]
+                                    for _cr_sk, _cr_sl in _CR_COT_SECTIONS:
+                                        _cr_sv = _cr_cot.get(_cr_sk)
+                                        if not _cr_sv:
+                                            continue
+                                        st.markdown(f"**{_cr_sl}**")
+                                        if isinstance(_cr_sv, dict):
+                                            for _k, _v in _cr_sv.items():
+                                                if _v:
+                                                    st.markdown(f"*{str(_k).replace('_',' ').title()}:* {_v}")
+                                        elif isinstance(_cr_sv, str):
+                                            st.markdown(_cr_sv)
+                                        st.divider()
+                                    _cr_fa_raw = get_final_answer_text(_cr_cot)
+                                    if _cr_fa_raw:
+                                        st.markdown("**✍️ FinalAnswer (raw)**")
+                                        st.markdown(_cr_fa_raw)
 
                             # ── CONFIDENCE PANEL ────────────────────────────────
                             st.divider()
@@ -3808,49 +3913,18 @@ def main():
                 _iv_mislabeled = [q.get("cited_passage","")
                                    for q in _qv_for_inline if q.get("outcome") == "source_mislabeled"]
 
-                # Annotate FinalAnswer text with inline emoji markers
-                _QUOTE_PAIRS_IV = [
-                    ('\u201c', '\u201d'),
-                    ('"',      '"'     ),
-                    ('\u2018', '\u2019'),
-                    ("'",      "'"     ),
-                ]
-                _annotated_fa = final_text
-                for _iq, _itid, _isrc in _iv_verified:
-                    if not _iq: continue
-                    for _oq, _cq in _QUOTE_PAIRS_IV:
-                        _lit = _oq + _iq + _cq
-                        if _lit in _annotated_fa:
-                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " ✅", 1)
-                            break
-                for _iq in _iv_approx:
-                    if not _iq: continue
-                    for _oq, _cq in _QUOTE_PAIRS_IV:
-                        _lit = _oq + _iq + _cq
-                        if _lit in _annotated_fa:
-                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🟡", 1)
-                            break
-                for _iq in _iv_displaced:
-                    if not _iq: continue
-                    for _oq, _cq in _QUOTE_PAIRS_IV:
-                        _lit = _oq + _iq + _cq
-                        if _lit in _annotated_fa:
-                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🔀", 1)
-                            break
-                for _iq in _iv_unverified:
-                    if not _iq: continue
-                    for _oq, _cq in _QUOTE_PAIRS_IV:
-                        _lit = _oq + _iq + _cq
-                        if _lit in _annotated_fa:
-                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " ⚠️", 1)
-                            break
-                for _iq in _iv_mislabeled:
-                    if not _iq: continue
-                    for _oq, _cq in _QUOTE_PAIRS_IV:
-                        _lit = _oq + _iq + _cq
-                        if _lit in _annotated_fa:
-                            _annotated_fa = _annotated_fa.replace(_lit, _lit + " 🏷️", 1)
-                            break
+                # Annotate FinalAnswer text with inline emoji markers.
+                # Uses _annotate_final_answer() which tries full-passage match first,
+                # then a bidirectional substring match for cases where Nicolay quotes
+                # a fragment of the corpus sentence rather than the full cited_passage.
+                _qv_pairs = (
+                    [(_iq, "✅") for _iq, _, __ in _iv_verified] +
+                    [(_iq, "🟡") for _iq in _iv_approx] +
+                    [(_iq, "🔀") for _iq in _iv_displaced] +
+                    [(_iq, "⚠️") for _iq in _iv_unverified] +
+                    [(_iq, "🏷️") for _iq in _iv_mislabeled]
+                )
+                _annotated_fa = _annotate_final_answer(final_text, _qv_pairs)
 
                 st.markdown("**Final Answer:**")
                 st.markdown(_annotated_fa)
@@ -4029,6 +4103,39 @@ def main():
                                     )
                                 else:
                                     st.info(f"Chunk {_ma_text_id} not found in corpus ({len(_ma_corpus_ss)} chunks loaded).")
+
+            # ── Nicolay Chain-of-Thought ────────────────────────────────────────────────────────────────────
+            # Renders all Nicolay reasoning sections in readable form.
+            # Sections: User Query Analysis, Initial Answer Review, Meta Analysis,
+            #           FinalAnswer (text only), Model Feedback.
+            # Match Analysis is already rendered above in the card layout.
+            _cot_output = qr.get("nicolay_output") or {}
+            if _cot_output:
+                with st.expander("🧠 Nicolay Chain-of-Thought", expanded=False):
+                    _COT_SECTIONS = [
+                        ("User Query Analysis",  "🔍 User Query Analysis"),
+                        ("Initial Answer Review", "📋 Initial Answer Review"),
+                        ("Meta Analysis",         "🧩 Meta Analysis"),
+                        ("Model Feedback",        "💬 Model Feedback"),
+                    ]
+                    for _sect_key, _sect_label in _COT_SECTIONS:
+                        _sect_val = _cot_output.get(_sect_key)
+                        if not _sect_val:
+                            continue
+                        st.markdown(f"**{_sect_label}**")
+                        if isinstance(_sect_val, dict):
+                            for _sk, _sv in _sect_val.items():
+                                if _sv:
+                                    _sk_disp = str(_sk).replace("_", " ").title()
+                                    st.markdown(f"*{_sk_disp}:* {_sv}")
+                        elif isinstance(_sect_val, str):
+                            st.markdown(_sect_val)
+                        st.divider()
+                    # FinalAnswer text (without badges — raw Nicolay text for reference)
+                    _cot_fa = get_final_answer_text(_cot_output)
+                    if _cot_fa:
+                        st.markdown("**✍️ FinalAnswer (raw)**")
+                        st.markdown(_cot_fa)
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 2: METRICS

@@ -2388,6 +2388,12 @@ def run_pipeline_for_query(
     status_cb     : optional callable(str) for progress UI updates
     """
     from modules.rag_pipeline import run_rag_pipeline
+    import inspect as _inspect, modules.rag_pipeline as _rp_mod
+    st.info(
+        f"🔬 **Pipeline debug** — "
+        f"file: `{_inspect.getfile(_rp_mod)}` · "
+        f"has `hay_model` param: `{'hay_model' in _inspect.signature(_rp_mod.run_rag_pipeline).parameters}`"
+    )
 
     def status(msg):
         if status_cb:

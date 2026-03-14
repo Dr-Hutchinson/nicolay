@@ -8,6 +8,22 @@ BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
+v8.6 changes:
+  - Fix F: _extract_fa_quotes() regex bug — two errors corrected:
+    (1) Quantifier: r'{min_len,?}' was parsed by Python as "exactly min_len-1
+        or min_len chars" (i.e. {14} or {15}), not "min_len or more, lazy".
+        Correct form is r'{min_len,}?' — note comma BEFORE the ?. This caused
+        the function to return zero matches for any straight-quote FA text,
+        making Pass 2 of _annotate_final_answer() dead code in practice.
+    (2) Same-delimiter pairs (straight ' or "): added word-boundary guards
+        (?<!\w) before open and (?!\w) after close to prevent possessives and
+        contractions (e.g. "Lincoln's") from being treated as open-quote marks.
+        Without this, the greedy/lazy match starting at "Lincoln'" would span
+        to an unrelated close quote, producing spurious extractions.
+    Combined effect: _extract_fa_quotes now correctly extracts 'tens of
+    thousands...' and 'have evaded...the fact' from the Q3 FinalAnswer,
+    enabling _annotate_final_answer Pass 2 to fire ✅ badges on both quotes.
+
 v8.5 changes:
   - Fix D: FinalAnswer annotation — added _extract_fa_quotes() and _annotate_final_answer()
     helper functions (after get_final_answer_text). The old inline annotation loops in both
@@ -1134,11 +1150,30 @@ def _extract_fa_quotes(text: str, min_len: int = 15) -> list[tuple]:
     Extract all quoted strings from FinalAnswer text.
     Returns list of (quoted_text, open_delim, close_delim) tuples.
     Checks curly-double, straight-double, curly-single, straight-single quote styles.
+
+    Two sub-cases:
+    - Different open/close delimiters (curly pairs): straightforward span match.
+    - Same open/close delimiter (straight ' or "): use word-boundary lookbehind/
+      lookahead ((?<!\\w) / (?!\\w)) to exclude possessives and contractions
+      (e.g. "Lincoln's" must not be treated as an open quote).
+
+    Quantifier note: r'{min_len,}?' is "min_len or more, lazy" — stops at the
+    first valid close after the minimum length. The incorrect form r'{min_len,?}'
+    means "exactly min_len-1 or min_len" and matches nothing useful.
     """
     QPAIRS = [('\u201c', '\u201d'), ('"', '"'), ('\u2018', '\u2019'), ("'", "'")]
     results = []
     for oq, cq in QPAIRS:
-        pattern = re.escape(oq) + r'(.{' + str(min_len) + r',?})' + re.escape(cq)
+        if oq == cq:
+            # Same delimiter: word-boundary guards prevent matching possessives.
+            pattern = (r'(?<!\w)' + re.escape(oq)
+                       + r'(.{' + str(min_len) + r',}?)'
+                       + re.escape(cq) + r'(?!\w)')
+        else:
+            # Different delimiters: no ambiguity with possessives.
+            pattern = (re.escape(oq)
+                       + r'(.{' + str(min_len) + r',}?)'
+                       + re.escape(cq))
         for m in re.finditer(pattern, text):
             results.append((m.group(1), oq, cq))
     return results

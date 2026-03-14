@@ -2390,12 +2390,13 @@ def run_pipeline_for_query(
     import sys as _sys
     _sys.modules.pop("modules.rag_pipeline", None)
     from modules.rag_pipeline import run_rag_pipeline
-    import inspect as _inspect, modules.rag_pipeline as _rp_mod
-    st.info(
-        f"🔬 **Pipeline debug** — "
-        f"file: `{_inspect.getfile(_rp_mod)}` · "
-        f"has `hay_model` param: `{'hay_model' in _inspect.signature(_rp_mod.run_rag_pipeline).parameters}`"
-    )
+    # ── Debug display (comment back in to verify module loading) ──────────────
+    # import inspect as _inspect, modules.rag_pipeline as _rp_mod
+    # st.info(
+    #     f"🔬 **Pipeline debug** — "
+    #     f"file: `{_inspect.getfile(_rp_mod)}` · "
+    #     f"has `hay_model` param: `{'hay_model' in _inspect.signature(_rp_mod.run_rag_pipeline).parameters}`"
+    # )
 
     def status(msg):
         if status_cb:

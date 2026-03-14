@@ -9,13 +9,12 @@ System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
 v8.7 changes:
-  - Model pair threading: run_pipeline_for_query() now passes hay_model and
-    nicolay_model through to run_rag_pipeline(). Combined with the matching
-    fix in rag_pipeline.py (new parameters with H4N4 defaults), the benchmark
-    UI's model-pair selector (H3N3 / H4N3 / H4N4) now actually controls which
-    fine-tuned models execute. Previously the selector mutated module globals
-    that were never read by run_rag_pipeline(), making all three UI options
-    produce H4N4 results silently.
+  - Model pair threading fix: added hay_model=hay_model and nicolay_model=nicolay_model
+    to the run_rag_pipeline() call in run_pipeline_for_query(). The benchmark's MODEL_PAIRS
+    selector and run_pipeline_for_query() signature already had model parameters correctly
+    wired — the gap was only this call site omitting them. Combined with the matching
+    rag_pipeline.py parameter addition, the H3N3/H4N3/H4N4 sidebar selector now controls
+    which fine-tuned models actually execute.
 
 v8.6 changes:
   - Fix F: _extract_fa_quotes() regex bug — two errors corrected:

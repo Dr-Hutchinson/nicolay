@@ -136,18 +136,10 @@ def run_rag_pipeline(
             corpus_terms = []
 
         # Prepare Lincoln index
-        # Embeddings arrive from the new parquet as np.ndarray — no string parsing needed.
-        # Legacy string format ("[ 0.123, ... ]") is still handled for backward compatibility.
         lincoln_index_df["embedding"] = lincoln_index_df["embedding"].apply(
-            lambda x: list(map(float, x.strip("[]").split(","))) if isinstance(x, str)
-                      else (x.tolist() if hasattr(x, "tolist") else list(x) if x is not None else [])
+            lambda x: list(map(float, x.strip("[]").split(","))) if isinstance(x, str) else []
         )
-        # full_text is pre-populated in the new parquet. Only extract from combined
-        # as a fallback for rows where full_text is missing or entirely empty.
-        if "full_text" not in lincoln_index_df.columns or lincoln_index_df["full_text"].eq("").all():
-            lincoln_index_df["full_text"] = lincoln_index_df["combined"].apply(extract_full_text)
-        else:
-            lincoln_index_df["full_text"] = lincoln_index_df["full_text"].fillna("").astype(str)
+        lincoln_index_df["full_text"] = lincoln_index_df["combined"].apply(extract_full_text)
 
         def get_source_and_summary(text_id_str):
             entry = lincoln_dict.get(text_id_str, {})

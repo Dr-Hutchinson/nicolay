@@ -2387,6 +2387,8 @@ def run_pipeline_for_query(
                     is also pointing at the wrong file and must be fixed there too.
     status_cb     : optional callable(str) for progress UI updates
     """
+    import sys as _sys
+    _sys.modules.pop("modules.rag_pipeline", None)
     from modules.rag_pipeline import run_rag_pipeline
     import inspect as _inspect, modules.rag_pipeline as _rp_mod
     st.info(

@@ -88,38 +88,13 @@ def prepare_documents_for_reranking(combined_df, user_query, lincoln_dict=None):
                 )
                 full_text = str(row.get(quote_field, "")).strip()
 
-            # Source lookup — required so Nicolay can attribute quotes correctly.
-            # Reads from the corpus entry (same lookup path as full_text above).
-            # Falls back to the row's own 'source' column, then to a placeholder
-            # that is still explicit ("Source unknown") rather than blank.
-            source = None
-            if lincoln_dict is not None:
-                text_id_norm, text_id_num = _normalize_text_id(text_id)
-                corpus_entry_src = None
-                for k in (text_id, text_id_norm, str(text_id_num) if text_id_num is not None else None, text_id_num):
-                    if k is None:
-                        continue
-                    if k in lincoln_dict:
-                        corpus_entry_src = lincoln_dict.get(k)
-                        break
-                if isinstance(corpus_entry_src, dict):
-                    source = corpus_entry_src.get("source", None)
-
-            if not source:
-                source = str(row.get("source", "")).strip() or None
-            if not source:
-                source = "[Source unknown]"
-
             # YAML format: Cohere rerank-v4.0 documentation recommends YAML strings
             # for structured data. This lets Cohere attend to full_text as the primary
             # relevance signal while treating summary as supporting context, rather than
             # scoring a flat pipe-delimited string where field boundaries are invisible.
-            # Source is included so it round-trips through Cohere and is available in
-            # reranked_df for format_reranked_results_for_model_input().
             doc_dict = {
                 "search_type": search_type,
                 "text_id": text_id,
-                "source": source,
                 "summary": summary,
                 "full_text": full_text,
             }
@@ -181,7 +156,6 @@ def rerank_results(query, documents, cohere_client, model='rerank-v4.0-pro', top
 
                 search_type = str(doc_parsed.get("search_type", "Unknown")).strip()
                 text_id = str(doc_parsed.get("text_id", "Unknown")).strip()
-                source = str(doc_parsed.get("source", "")).strip()
                 summary = str(doc_parsed.get("summary", "")).strip()
                 full_text = str(doc_parsed.get("full_text", "")).strip()
 
@@ -189,7 +163,6 @@ def rerank_results(query, documents, cohere_client, model='rerank-v4.0-pro', top
                     'Rank': rank,
                     'Search Type': search_type,
                     'Text ID': text_id,
-                    'Source': source,            # Round-tripped from YAML; populated by Fix 1
                     'Summary': summary,
                     'Key Quote': full_text,   # 'Key Quote' column retained for downstream
                                               # compatibility; now contains full chunk text.
@@ -239,9 +212,9 @@ def format_reranked_results_for_model_input(reranked_results, max_results=5, lin
             # Resolve full chunk text from corpus if lincoln_dict is available (dev log #50).
             # Falls back to the key quote window if lookup fails or lincoln_dict is not provided.
             full_text = None
-            corpus_entry = None
             if lincoln_dict is not None:
                 text_id_norm, text_id_num = _normalize_text_id(text_id)
+                corpus_entry = None
 
                 for k in (text_id, text_id_norm, str(text_id_num) if text_id_num is not None else None, text_id_num):
                     if k is None:
@@ -261,32 +234,10 @@ def format_reranked_results_for_model_input(reranked_results, max_results=5, lin
                 text_field_label = "Full Text (select the most relevant passage to quote directly)"
                 text_field_value = result.get('Key Quote', 'No quote')
 
-            # Source field: primary source is the reranked_df 'Source' column (populated by
-            # Fix 1/2). Defensive fallback: corpus lookup. Final fallback: explicit placeholder.
-            # Never leave blank — an empty Source forces Nicolay to infer from context,
-            # causing source mislabeling (documented failure mode, v6.0 / v8.5).
-            source_str = str(result.get('Source', '')).strip()
-            if not source_str and isinstance(corpus_entry, dict):
-                source_str = str(corpus_entry.get("source", "")).strip()
-            if not source_str and lincoln_dict is not None:
-                # Last-resort lookup if corpus_entry wasn't resolved above
-                text_id_norm, text_id_num = _normalize_text_id(text_id)
-                for k in (text_id, text_id_norm, str(text_id_num) if text_id_num is not None else None, text_id_num):
-                    if k is None:
-                        continue
-                    e = lincoln_dict.get(k)
-                    if isinstance(e, dict):
-                        source_str = str(e.get("source", "")).strip()
-                        if source_str:
-                            break
-            if not source_str:
-                source_str = "[Source unknown]"
-
             formatted_entry = (
                 f"Match {idx}: "
                 f"Search Type - {result.get('Search Type', 'Unknown')}, "
                 f"Text ID - {text_id}, "
-                f"Source - {source_str}, "
                 f"Summary (curatorial description only — not quotable corpus text) - {result.get('Summary', 'No summary')}, "
                 f"{text_field_label} - {text_field_value}, "
                 f"Relevance Score - {result.get('Relevance Score', 0.0):.2f}"

@@ -80,13 +80,7 @@ def run_rag_pipeline(
     gc=None,
     openai_api_key=None,
     cohere_api_key=None,
-    top_n_results=5,
-    # Model selection — defaults preserve current behaviour (Hay v4 / Nicolay v4).
-    # Pass explicit model IDs to run H3N3, H4N3, or any other pair without
-    # modifying this file. The benchmark passes these from MODEL_PAIRS via
-    # run_pipeline_for_query(); the main Streamlit app can omit them entirely.
-    hay_model: str = "ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
-    nicolay_model: str = "ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
+    top_n_results=5
 ):
     try:
         # 1. Load Prompts
@@ -169,7 +163,10 @@ def run_rag_pipeline(
             {"role": "user", "content": user_query}
         ]
         response = openai_client.chat.completions.create(
-            model=hay_model,
+            # Hay v.3 model
+            #model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v3:DEcb9s4u",
+            # Hay v. 4 model
+            model="ft:gpt-4.1-mini-2025-04-14:personal:hays-v4:DI4PJ4Zt",
             messages=messages_for_model,
             temperature=0,
             max_tokens=800  # Increased for v3 query_assessment field
@@ -321,7 +318,12 @@ def run_rag_pipeline(
                 ]
 
                 second_model_response = openai_client.chat.completions.create(
-                    model=nicolay_model,
+                    # Nicolay v.3
+                    #model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v3:DEccNnWt",
+
+                    # Nicolay v.4
+                    model="ft:gpt-4.1-mini-2025-04-14:personal:nicolay-v4:DIPD9hh5",
+
                     messages=nicolay_messages,
                     temperature=0,
                     max_tokens=4000  # Increased for v3: k=5 matches + longer Type 4/5 FinalAnswers

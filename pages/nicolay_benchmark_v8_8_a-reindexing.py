@@ -8,6 +8,26 @@ BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
+v8.8 changes:
+  - Q6 RETIRED: Preliminary Emancipation Proclamation absent from corpus — question
+    unanswerable as written. Replaced with blocked stub preserving run-numbering
+    continuity. Prior ideal_docs (219/220/227/228) were a First Inaugural / Fugitive
+    Slave Law mismapping unrelated to EP content. Replacement question TBD post-benchmark.
+    Runnable questions: 23 (RC-2 also blocked).
+  - S-4 ideal_docs_new corrected: Jonesboro chunks [624/626/628] replaced with confirmed
+    Galesburg (5th Debate) chunks [714/715]. Corpus audit (Gemini, 2026-03-14) confirmed
+    624/626/628 are 3rd Debate (Jonesboro) — mismatch with S-4 query framing referencing
+    "debates with Douglas" Declaration defense. 714: "The Judge has alluded to the
+    Declaration of Independence..."; 715: "entire records of the world from the date of
+    the Declaration...". ideal_docs_count updated 6→5.
+  - NOTE: Q7 and Q8 were audited and confirmed correct — 482-486 Second Inaugural IDs
+    were already in place from v8.3. Gemini FAIL finding on those was a template
+    artifact (the audit prompt listed stale IDs as examples, not actuals).
+  - DESIGN NOTE (logged for future work): BENCHMARK_QUERIES list should be extracted
+    into a standalone module (e.g., benchmark_questions.py) to separate question
+    definitions from pipeline/UI code, enabling easier revision without touching the
+    main script.
+
 v8.7 changes:
   - Model pair threading fix: added hay_model=hay_model and nicolay_model=nicolay_model
     to the run_rag_pipeline() call in run_pipeline_for_query(). The benchmark's MODEL_PAIRS
@@ -649,14 +669,21 @@ BENCHMARK_QUERIES = [
     },
     {
         "id": "Q6", "group": "core",
-        "query": "How did Lincoln explain his administration's approach to the Fugitive Slave Law?",
+        "query": "RETIRED — How did Lincoln's justification for emancipation shift between the Preliminary and Final Emancipation Proclamation?",
         "category": "analysis",
         "expected_hay_type": "A", "expected_nicolay_type": "T1",
-        # [219] 1st Inaugural — Fugitive Slave Law provision/reclaiming; [220] safeguards of liberty;
-        # [227] constitutional rights of minority; [228] Constitution silent on slavery in territories
-        "ideal_docs_new": [219, 220, 227, 228], "ideal_docs_original": [33, 34, 35, 36], "ideal_docs_count": 4,
-        "critical_missing_evidence": None,
-        "watchlist": ["Run 0 calibration decoupling case: P@5=0 yet rubric 3.25 — retain for article evidence"],
+        # RETIRED 2026-03-14: Preliminary Emancipation Proclamation (Sep 22, 1862) is absent from
+        # the corpus — only the Final EP (Jan 1, 1863, chunks 327-331) is present. The question
+        # is unanswerable from the corpus as constituted. Prior ideal_docs (219/220/227/228) were
+        # a First Inaugural / Fugitive Slave Law mismapping unrelated to EP content.
+        # Retained as a stub to preserve run numbering continuity. Do not run.
+        "ideal_docs_new": [], "ideal_docs_original": [33, 34, 35, 36], "ideal_docs_count": 0,
+        "critical_missing_evidence": "RETIRED — Preliminary Emancipation Proclamation (Sep 22, 1862) absent from corpus. Final EP only (chunks 327-331). Question unanswerable. Do not run.",
+        "watchlist": [
+            "RETIRED — do not run",
+            "Prior Run 0 calibration decoupling case (P@5=0, rubric 3.25) was measuring confabulation against wrong ideal docs",
+            "Replacement question TBD after benchmark concludes",
+        ],
     },
     {
         "id": "R1", "group": "core",
@@ -827,14 +854,20 @@ BENCHMARK_QUERIES = [
         "expected_hay_type": "E", "expected_nicolay_type": "T4",
         # Peoria: [44/45] Declaration passages (pre-war anchor)
         # Gettysburg: [481] "Four score and seven years ago" — wartime reinterpretation capstone
-        # Galesburg 5th Debate: [624/626/628] Lincoln's extended Declaration defense vs. Douglas
-        "ideal_docs_new": [44, 45, 481, 624, 626, 628], "ideal_docs_original": None, "ideal_docs_count": 6,
+        # Galesburg 5th Debate: [714/715] Lincoln's extended Declaration defense vs. Douglas
+        # CORRECTED 2026-03-14: Prior IDs [624/626/628] were Jonesboro (3rd Debate), not Galesburg (5th Debate).
+        # Corpus audit (Gemini, 2026-03-14) confirmed 714/715 are the correct Galesburg Declaration chunks.
+        # 714: "The Judge has alluded to the Declaration of Independence, and insisted that negroes are not included..."
+        # 715: "I believe the entire records of the world, from the date of the Declaration of Independence up to
+        #       within three years ago, may be searched in vain for one single affirmation..."
+        "ideal_docs_new": [44, 45, 481, 714, 715], "ideal_docs_original": None, "ideal_docs_count": 5,
         "critical_missing_evidence": None,
         "watchlist": [
             "Peoria Declaration passages: docs 44/45 (pre-war anchor)",
-            "Galesburg 5th Debate (docs 624-628): richest for Lincoln's extended Declaration defense vs. Douglas",
+            "Galesburg 5th Debate (docs 714/715): Lincoln's extended Declaration defense vs. Douglas — corrected from prior Jonesboro mismapping",
             "Doc 481 (Gettysburg): wartime reinterpretation capstone — single chunk",
             "HD discriminator: Garry Wills / Declaration-as-reinterpretation thesis standard in literature",
+            "RC-3 retains chunk 624 (Jonesboro/3rd Debate) — correct for that question's natural-rights framing",
         ],
     },
     {
@@ -854,6 +887,7 @@ BENCHMARK_QUERIES = [
         ],
     },
     # ── Race and Citizenship (4 runnable + 1 blocked) ────────────────────────
+    # NOTE: Q6 also retired (v8.8) — 23 total runnable questions (down from 24)
     {
         "id": "Q13", "group": "core",
         "query": "How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
@@ -2090,6 +2124,11 @@ def log_query_to_sheets(benchmark_logger, qresult: dict):
         "QuotesDisplaced": int(qresult.get("quotes_displaced_count", 0) or 0),
         "QuotesApproxDisplaced": int(qresult.get("quotes_approx_displaced_count", 0) or 0),
         "QuotesFabricated": int(qresult.get("quotes_fabricated_count", 0) or 0),
+        # v8.8: source_mislabeled outcome — parametric laundering detection (quote text verified
+        # but source attribution doesn't match corpus chunk). Computed in run_pipeline_for_query()
+        # step 6 but was previously omitted from Sheets log. Required for H3N3/H4N4/H4N3
+        # comparison on the parametric laundering dimension.
+        "QuotesMislabeled": int(qresult.get("quotes_mislabeled_count", 0) or 0),
         # BLEU/ROUGE
         "BleuMaxRetrieved": float(qresult.get("bleu_max_retrieved", 0) or 0),
         "BleuAvgRetrieved": float(qresult.get("bleu_avg_retrieved", 0) or 0),
@@ -2157,6 +2196,7 @@ def init_benchmark_sheet_headers(gc_client):
         "NicolaySynthesisAssessmentRaw",
         "SchemaComplete", "FinalAnswerWordCount", "FinalAnswerText",
         "QuotesVerified", "QuotesApprox", "QuotesDisplaced", "QuotesApproxDisplaced", "QuotesFabricated",
+        "QuotesMislabeled",  # v8.8: source_mislabeled outcome — parametric laundering detection
         "BleuMaxRetrieved", "BleuAvgRetrieved",
         "Rouge1MaxRetrieved", "Rouge1AvgRetrieved",
         "Rouge1MaxIdeal", "Rouge1AvgIdeal",
@@ -2907,7 +2947,7 @@ def main():
                                 "NicolayTypeExpected": "", "NicolayTypeGot": "", "NicolayTypeCorrect": "",
                                 "NicolaySynthesisAssessmentRaw": "",
                                 "SchemaComplete": "", "FinalAnswerWordCount": 0,
-                                "QuotesVerified": 0, "QuotesApprox": 0, "QuotesDisplaced": 0, "QuotesApproxDisplaced": 0, "QuotesFabricated": 0,
+                                "QuotesVerified": 0, "QuotesApprox": 0, "QuotesDisplaced": 0, "QuotesApproxDisplaced": 0, "QuotesFabricated": 0, "QuotesMislabeled": 0,
                                 "BleuMaxRetrieved": 0.0, "BleuAvgRetrieved": 0.0,
                                 "Rouge1MaxRetrieved": 0.0, "Rouge1AvgRetrieved": 0.0,
                                 "Rouge1MaxIdeal": 0.0, "Rouge1AvgIdeal": 0.0,
@@ -4327,7 +4367,7 @@ def main():
     # ═══════════════════════════════════════════════════════════════════════
     with tab_summary:
         completed = results.get("queries", {})
-        st.markdown(f"**{len(completed)} / 25 queries completed**")
+        st.markdown(f"**{len(completed)} / 23 queries completed** *(Q6 retired; RC-2 blocked)*")
 
         if completed:
             rows = []
@@ -4347,6 +4387,7 @@ def main():
                     "Displaced": qd.get("quotes_displaced_count", ""),
                     "ApproxDisp": qd.get("quotes_approx_displaced_count", ""),
                     "Fabr.": qd.get("quotes_fabricated_count", ""),
+                    "Mislbl.": qd.get("quotes_mislabeled_count", ""),
                     "Rubric": qd.get("rubric_total", "—"),
                 })
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

@@ -2,7 +2,7 @@ import numpy as np
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
 
-def get_embedding(text, client, model="text-embedding-ada-002"):
+def get_embedding(text, client, model="text-embedding-3-small"):
     text = text.replace("\n", " ")
     response = client.embeddings.create(input=[text], model=model)
     return np.array(response.data[0].embedding)

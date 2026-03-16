@@ -35,7 +35,7 @@ from modules.prompt_loader import load_prompts
 from modules.keyword_search import search_with_dynamic_weights_expanded
 from modules.semantic_search import (
     search_text,
-    build_corpus_matrix,
+    compare_segments_with_query_parallel
 )
 from modules.reranking import (
     prepare_documents_for_reranking,
@@ -163,11 +163,6 @@ def run_rag_pipeline(
             *lincoln_index_df["text_id"].apply(get_source_and_summary)
         )
 
-        # Pre-normalise corpus embeddings into a unit-vector matrix for
-        # vectorised cosine similarity.  Built once per pipeline call and
-        # passed into search_text() so the fast matrix-multiply path is used.
-        corpus_matrix, corpus_row_index = build_corpus_matrix(lincoln_index_df)
-
         # 4. Call Hay Model
         messages_for_model = [
             {"role": "system", "content": keyword_prompt},
@@ -233,12 +228,22 @@ def run_rag_pipeline(
                 lincoln_index_df,
                 user_query + initial_answer,
                 client=openai_client,
-                n=top_n_results,
-                corpus_matrix=corpus_matrix,
-                row_index=corpus_row_index,
+                n=top_n_results
             )
 
             if not semantic_results.empty:
+                top_segments = []
+                for idx, row in semantic_results.iterrows():
+                    segments = segment_text(row["full_text"], segment_size=300)
+                    segment_scores = compare_segments_with_query_parallel(
+                        segments,
+                        user_query_embedding,
+                        openai_client
+                    )
+                    best_segment = max(segment_scores, key=lambda x: x[1]) if segment_scores else ("", 0)
+                    top_segments.append(best_segment[0])
+
+                semantic_results["TopSegment"] = top_segments
                 if "Unnamed: 0" in semantic_results.columns:
                     semantic_results.rename(columns={"Unnamed: 0": "text_id"}, inplace=True)
                 semantic_matches_df = semantic_results

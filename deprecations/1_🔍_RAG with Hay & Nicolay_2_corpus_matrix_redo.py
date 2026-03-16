@@ -261,49 +261,15 @@ def cosine_similarity(v1, v2):
     return float(np.dot(v1, v2) / (n1 * n2)) if n1 and n2 else 0.0
 
 
-def _build_corpus_matrix(df, embedding_col="embedding"):
-    """Pre-normalise corpus embeddings to unit vectors for fast matrix-multiply search.
-    Returns (corpus_matrix_normalized, row_index).  Call once after the index is
-    loaded and cache the result in st.session_state.
-    """
-    embeddings = np.stack(df[embedding_col].values)           # (n, 1536)
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)                 # guard against zero-norm
-    return embeddings / norms, list(df.index)
-
-
 def search_text_local(df, query, n=5):
-    """Semantic search over pre-loaded parquet embeddings.
-
-    Uses the pre-built corpus matrix in st.session_state for a single
-    matrix-multiply similarity computation (no per-row API calls, no df mutation).
-    Falls back to the original .apply() path if the matrix is not cached yet.
-    """
+    """Semantic search over pre-loaded parquet embeddings — no per-row API calls."""
     emb = get_embedding(query)
-
-    corpus_matrix = st.session_state.get("_corpus_matrix")
-    row_index     = st.session_state.get("_corpus_row_index")
-
-    if corpus_matrix is not None and row_index is not None:
-        # Vectorised path: one BLAS matrix multiply
-        norm = np.linalg.norm(emb)
-        query_norm = emb / norm if norm > 0 else emb
-        sims = corpus_matrix @ query_norm                     # shape (n_chunks,)
-        top_idx    = np.argsort(sims)[::-1][:n]
-        top_df_idx = [row_index[i] for i in top_idx]
-        top = df.loc[top_df_idx].copy()
-        top["similarities"] = sims[top_idx]
-    else:
-        # Fallback: row-by-row (original behaviour, df not mutated)
-        sims_arr = np.array([
-            cosine_similarity(np.array(x), emb)
-            if isinstance(x, (list, np.ndarray)) else 0.0
-            for x in df["embedding"].values
-        ])
-        top_idx = np.argsort(sims_arr)[::-1][:n]
-        top = df.iloc[top_idx].copy()
-        top["similarities"] = sims_arr[top_idx]
-
+    df  = df.copy()
+    df["similarities"] = df['embedding'].apply(
+        lambda x: cosine_similarity(np.array(x), emb)
+        if isinstance(x, (list, np.ndarray)) else 0.0
+    )
+    top = df.sort_values("similarities", ascending=False).head(n).copy()
     top["UserQuery"] = query
     return top, emb
 
@@ -1956,12 +1922,6 @@ if submitted:
 
     lincoln_index_df = lincoln_index_df.copy()
     lincoln_index_df["embedding"] = lincoln_index_df["embedding"].apply(_parse_emb)
-
-    # Build the pre-normalised unit-vector matrix for vectorised semantic search.
-    # Stored in session_state so search_text_local() can use the fast path.
-    corpus_matrix, corpus_row_index = _build_corpus_matrix(lincoln_index_df)
-    st.session_state["_corpus_matrix"]     = corpus_matrix
-    st.session_state["_corpus_row_index"]  = corpus_row_index
 
     def get_src_sum(tid):
         e = lincoln_dict.get(tid, {})

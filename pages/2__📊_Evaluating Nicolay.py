@@ -27,4 +27,4 @@ with col5:
 
 st.header("Evaluating Nicolay")
 
-st.subheader("Coming Fall 2025")
+st.subheader("Coming Spring 2026!")

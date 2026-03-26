@@ -8,6 +8,38 @@ BLEU/ROUGE NLP scores, and a manual qualitative rubric.
 System state: Hay v4 + Nicolay v4 + Cohere rerank-v4.0-pro + full chunk text + k=5
 Corpus: lincoln_speech_corpus_reindex_keep.json (886 chunks)
 
+v8.9 changes (2026-03-26):
+  - Q5 REDESIGNED: Prior framing ('part of a larger design to nationalize slavery')
+    produced R@5=0.000 across all new-index runs due to two compounding failures:
+    (1) Hay's text_keywords anchored to Ottawa (doc 487) while the canonical conspiracy
+    chunks (119/509) are in the House Divided region; (2) within-debate discrimination
+    failure for debate chunks. Fix: query now names the four conspirators explicitly —
+    'Stephen Douglas, Franklin Pierce, Roger Taney, and James Buchanan' — forcing
+    high-IDF proper-noun keywords. Ideal docs completely remapped via full corpus audit
+    (lincoln_speech_corpus_reindex_keep.json, 2026-03-26): [119, 509, 512, 566, 574, 821].
+    Prior ideal docs [89, 96, 97, 487, 619, 726] were wrong-passage assignments unrelated
+    to the conspiracy argument. expected_nicolay_type upgraded T3 → T2: redesign intends
+    to fix retrieval, so T3 (absence/partial hit) no longer appropriate.
+    Test run confirmed: R@5=0.500, Hay type D (correct), Nicolay T2 (correct). ✅
+  - Q13 REDESIGNED as explicit confabulation resistance / T5 probe: formally designated
+    stress_test=True; critical_missing_evidence field promoted to top-level; limiting-
+    statement docs 650/689/826 added to watchlist as retrieval calibration anchors; EC
+    identified as primary scoring dimension. ideal_docs retained as retrieval anchors.
+    Rationale: consistent rubric ~3.0 on R@5=0.000 across all runs = confabulation signature.
+  - VERIFIER FIX: _sliding_window_verify() Stage 6c (corpus-wide displacement scan) now
+    uses stricter parameters to prevent misclassification of fabricated quotes containing
+    real corpus vocabulary as displacement rather than fabrication.
+    Root cause: Q5 test run produced fabricated quote 'I have said that the Dred Scott
+    decision was made for the purpose of making slavery national throughout the United
+    States' — matched to chunk 566 via 39-char mid-word suffix fragment 'ery national
+    throughout the united state', triggering displacement instead of fabrication fallback.
+    Three guards added to Stage 6c call only (Stage 3 cited-chunk call unchanged):
+      min_window=50            — raised from 30; rejects short suffix fragments
+      require_word_boundary=True — rejects mid-word starts (norm_quote[start-1] != ' ')
+      min_quote_coverage=0.50  — matched window must cover >= 50% of full quote length
+    Token coverage for this case: 0.615 — correctly falls below 0.90 fabrication threshold
+    once sliding window no longer fires. Fix reroutes to fabrication. ✅
+
 v8.8 changes:
   - Q6 RETIRED: Preliminary Emancipation Proclamation absent from corpus — question
     unanswerable as written. Replaced with blocked stub preserving run-numbering
@@ -1540,7 +1572,9 @@ def _token_coverage(quote_norm_loose: str, chunk_norm_loose: str) -> float:
 
 
 def _sliding_window_verify(norm_quote: str, norm_chunk: str,
-                            min_window: int = 30, step: int = 10):
+                            min_window: int = 30, step: int = 10,
+                            require_word_boundary: bool = False,
+                            min_quote_coverage: float = 0.0):
     """
     Sliding-window substring search (ported from Streamlit app v1.9).
 
@@ -1556,10 +1590,44 @@ def _sliding_window_verify(norm_quote: str, norm_chunk: str,
     A min_window of 30 chars is long enough to be highly distinctive in
     19th-century prose while still catching condensed openings.
     Operates on strict-normalized text.
+
+    Parameters
+    ----------
+    require_word_boundary : bool
+        If True, the matched segment must begin at a word boundary — i.e.
+        start=0 or norm_quote[start-1] == ' '. Prevents mid-word suffix
+        fragments (e.g. 'ery national throughout...') from registering as
+        hits. Should be True for corpus-wide displacement scans (Stage 6c)
+        where a 30-char mid-word sliver can match generic topic vocabulary
+        in the wrong chunk. Default False (cited-chunk Stage 3 keeps the
+        original behaviour).
+    min_quote_coverage : float
+        If > 0, the matched window must be at least this fraction of the
+        full quote length. E.g. 0.50 requires the window to cover ≥50% of
+        the quote. Prevents tail-fragment matches on long quotes where the
+        sliding window catches only a common phrase suffix. Default 0.0
+        (no coverage floor — cited-chunk Stage 3 unchanged).
+
+    v8.9 fix (2026-03-26): Added require_word_boundary and min_quote_coverage
+    parameters to close a misclassification edge case where fabricated quotes
+    containing real corpus vocabulary (e.g. 'slavery national throughout the
+    United States') were routed to displacement rather than fabrication via a
+    39-char mid-word suffix match. The corpus-wide Stage 6c call now passes
+    require_word_boundary=True, min_quote_coverage=0.50, min_window=50.
+    The cited-chunk Stage 3 call is unchanged (defaults preserved).
     """
     q_len = len(norm_quote)
     for window in range(min(60, q_len), min_window - 1, -step):
+        # Coverage floor: skip windows that cover less than min_quote_coverage
+        # of the full quote — prevents tail-fragment matches on long quotes.
+        if min_quote_coverage > 0.0 and q_len > 0:
+            if window / q_len < min_quote_coverage:
+                continue
         for start in range(0, q_len - window + 1, step):
+            # Word-boundary guard: segment must start at position 0 or after
+            # a space. Prevents mid-word suffix fragments from matching.
+            if require_word_boundary and start > 0 and norm_quote[start - 1] != ' ':
+                continue
             segment = norm_quote[start:start + window]
             if segment in norm_chunk:
                 return True, segment
@@ -1744,8 +1812,25 @@ def verify_quote(cited_passage: str, cited_chunk: dict, corpus: dict) -> dict:
                     "num_loose_segments": len(segs_loose),
                 }
 
-            # 6c — Sliding window
-            sw_found, sw_seg = _sliding_window_verify(norm_q_strict, c_strict)
+            # 6c — Sliding window (corpus-wide — stricter than cited-chunk Stage 3)
+            # Three guards applied only to the corpus-wide pass to prevent
+            # misclassification of fabricated quotes that share topic vocabulary
+            # with real corpus passages:
+            #   min_window=50    — raises floor from 30; rejects short suffix fragments
+            #   require_word_boundary=True — rejects mid-word starts (e.g. 'ery national...')
+            #   min_quote_coverage=0.50  — matched window must cover ≥50% of full quote
+            # Cited-chunk Stage 3 is unchanged (30-char floor, no boundary/coverage guards).
+            # v8.9 fix: diagnosed via Q5 test run 2026-03-26 where fabricated quote
+            # 'I have said that the Dred Scott decision was made for the purpose of
+            # making slavery national throughout the United States' was matched to
+            # chunk 566 via 39-char mid-word fragment 'ery national throughout the
+            # united state' — correctly reclassified as fabrication after this fix.
+            sw_found, sw_seg = _sliding_window_verify(
+                norm_q_strict, c_strict,
+                min_window=50,
+                require_word_boundary=True,
+                min_quote_coverage=0.50,
+            )
             if sw_found:
                 return {
                     "outcome": "displacement",

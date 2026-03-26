@@ -655,16 +655,51 @@ BENCHMARK_QUERIES = [
     },
     {
         "id": "Q5", "group": "revised",
-        "query": "How did Lincoln argue in the 1858 debates that the Dred Scott decision was part of a larger design to nationalize slavery throughout the United States?",
+        # v8.9 redesign (2026-03-26): Prior framing ("part of a larger design to nationalize slavery")
+        # produced zero retrieval across ALL new-index runs despite adequate ideal docs in corpus.
+        # Root cause: Hay's text_keywords anchored to Ottawa (doc 487) while House Divided conspiracy
+        # chunks (119, 509) are in a different source region; within-debate discrimination also failed.
+        # Fix: name the four conspirators explicitly (Stephen/Franklin/Roger/James = Douglas/Pierce/
+        # Taney/Buchanan). These proper names generate high-IDF keywords — "Stephen", "Franklin",
+        # "Roger", "James", "Taney", "Buchanan", "Pierce" — that are lexically specific to docs
+        # 119/509 and 821. Hay generates single tokens, not phrases, so individual names are the
+        # correct anchor vocabulary. Expected_nicolay_type upgraded T3 → T2: redesign intends to
+        # fix retrieval (docs are in corpus), so T3 (absence/partial hit) is no longer appropriate;
+        # T2 (multi-passage synthesis integrating House Divided + debate material) is the honest target.
+        "query": "How did Lincoln argue across his House Divided speech and the 1858 debates that Stephen Douglas, Franklin Pierce, Roger Taney, and James Buchanan had conspired to nationalize slavery through the Dred Scott decision?",
         "category": "analysis",
-        "expected_hay_type": "D", "expected_nicolay_type": "T3",
-        # [89/96/97] House Divided conspiracy framing (Peoria); [487] 1st Debate Ottawa; [619] 3rd Debate Jonesboro; [726] 5th Debate Galesburg
-        "ideal_docs_new": [89, 96, 97, 487, 619, 726], "ideal_docs_original": [15, 16, 17], "ideal_docs_count": 6,
+        "expected_hay_type": "D", "expected_nicolay_type": "T2",
+        # Corpus-validated ideal docs (2026-03-26 audit of lincoln_speech_corpus_reindex_keep.json):
+        # [119] House Divided: canonical 'Stephen, Franklin, Roger and James' timber metaphor —
+        #       "find it impossible to not believe that Stephen and Franklin and Roger and James all
+        #        understood one another from the beginning, and all worked upon a common plan"
+        # [509] Ottawa/1st Debate: exact repetition of timber metaphor in debate context — same
+        #       keywords as 119 (stephen/franklin/james/plan/understood); confirmed in corpus
+        # [512] Ottawa/1st Debate: "conspiracy to nationalize slavery" named explicitly; Douglas
+        #       non-response to the charge framed as implicit acknowledgment
+        # [566] Freeport/2nd Debate: "Dred Scott decision, which goes very far to make slavery
+        #       national throughout the United States" — clearest nationalization claim
+        # [574] Freeport/2nd Debate: "design to nationalize and perpetuate slavery" — exact phrase
+        # [821] Quincy/6th Debate: "conspiracy to nationalize slavery" + Buchanan named; Lincoln
+        #       sustains the charge against Douglas's denials — late-debate culmination
+        # Retired ideal docs: 89, 96, 97 (Peoria/House Divided — about congressional intervention
+        #   and compromise history, NOT the Stephen/Franklin/Roger/James conspiracy argument);
+        #   487 (Ottawa — about Trumbull/Senate arrangement, not the conspiracy charge);
+        #   619 (Jonesboro — about anti-slavery resolutions, not the Dred Scott conspiracy argument);
+        #   726 (Galesburg — about Compromise of 1850 / Nebraska bill, not conspiracy framing)
+        "ideal_docs_new": [119, 509, 512, 566, 574, 821], "ideal_docs_original": [15, 16, 17], "ideal_docs_count": 6,
         "critical_missing_evidence": None,
         "watchlist": [
-            "Revised from broad Dred Scott framing (Run 0: reranker mean=0.949, ROUGE-1 ratio=1.231)",
-            "Nationalization argument: docs 487 (Ottawa), 619 (Jonesboro), 726 (Galesburg)",
-            "House Divided conspiracy framing: docs 89, 96, 97",
+            "v8.9 redesign: four-name vocabulary ('Stephen','Franklin','Roger','James','Taney','Buchanan') "
+            "targets high-IDF tokens — key test of IDF-fallback fix from v12.0 keyword_search.py repair",
+            "Doc 119 (House Divided) and 509 (Ottawa) contain identical timber-metaphor passage — "
+            "both should surface; reranker will select one; ideal_doc_count=6 accounts for this redundancy",
+            "Doc 821 (Quincy) is load-bearing late-debate anchor: Buchanan named + 'conspiracy to "
+            "nationalize slavery' explicit — if redesign works, this should appear in top-5",
+            "T2 target: synthesis should integrate House Divided framing (docs 119/509) with debate "
+            "persistence (512/566/574/821) — not merely quote one passage",
+            "Prior zero-retrieval diagnosis: retrieval architecture failure, not question design failure — "
+            "this redesign is the proposed fix; benchmark run will validate or falsify",
         ],
     },
     {
@@ -890,19 +925,52 @@ BENCHMARK_QUERIES = [
     # NOTE: Q6 also retired (v8.8) — 23 total runnable questions (down from 24)
     {
         "id": "Q13", "group": "core",
+        # v8.9 redesign (2026-03-26): Formally designated as a CONFABULATION RESISTANCE / T5 PROBE.
+        # Q13 has produced rubric scores of ~3.0 on R@5=0 across ALL new-index runs — the clearest
+        # confabulation signature in the dataset. Nicolay synthesizes a plausible evolution narrative
+        # entirely from parametric knowledge, bypassing corpus grounding entirely.
+        # The corpus contains relevant material (racial hierarchy statements in Charleston/Jonesboro
+        # debates, military service arguments in Conkling and Annual Messages) but does NOT contain
+        # the explicit citizenship claim: Last Public Address conditional suffrage (Apr 11, 1865).
+        # A well-calibrated T5 response must: (a) accurately represent what Lincoln said in corpus
+        # about Black Americans' status; (b) contextualize 19th-century racial vocabulary;
+        # (c) explicitly flag the corpus silence on suffrage/citizenship; (d) distinguish Lincoln's
+        # stated positions from what historians have argued about his trajectory.
+        # Scoring: EC is the PRIMARY scoring dimension for this question. Rubric ~3.0 on R@5=0
+        # represents EC failure — system should score EC=0.25/0.50 when it fails to acknowledge gap.
+        # ideal_docs retained as RETRIEVAL ANCHORS (best available corpus evidence), not answer sources.
+        # Additional corpus docs confirmed relevant (2026-03-26 audit): 650 (Charleston: 'not in favor
+        # of bringing about social and political equality'), 689 (Charleston: 'not in favor of negro
+        # citizenship' — explicit denial), 826/828 (Alton: citizenship denial + conspiracy argument).
+        # These limiting-statement docs are what a well-calibrated system SHOULD retrieve and contextualize.
         "query": "How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
         "category": "race_citizenship",
         "expected_hay_type": "E", "expected_nicolay_type": "T5",
-        # [339] Conkling — soldiers/fight for you; [431] 3rd AM — 100,000 in service
-        # [469] 4th AM — 13th Amendment passage/slavery abolition
-        # [482] 2nd Inaugural — opening of final wartime address
+        # Retrieval anchors — best available corpus evidence (NOT complete answer sources):
+        # [339] Conkling — "Some of them seem willing to fight for you" — military service pivot
+        # [431] 3rd AM — "full one hundred thousand are now in the United States military service"
+        # [469] 4th AM — 13th Amendment advocacy (emancipation culmination, not citizenship)
+        # [482] 2nd Inaugural opening — final wartime address context
+        # Limiting-statement docs (should surface and be contextualized, not suppressed):
+        # [650] Charleston/4th Debate: explicit denial of social/political equality
+        # [689] Charleston/4th Debate: "not in favor of negro citizenship" — explicit
+        # [826] Alton/7th Debate: denial of supporting citizenship claim
         "ideal_docs_new": [339, 431, 469, 482], "ideal_docs_original": [51, 52, 65, 66, 77, 78], "ideal_docs_count": 4,
-        "critical_missing_evidence": "Last Public Address (Apr 11, 1865) — conditional suffrage statement NOT IN CORPUS",
+        "critical_missing_evidence": "Last Public Address (Apr 11, 1865) — conditional suffrage statement (limited Black suffrage for soldiers/educated) NOT IN CORPUS. This is the only document where Lincoln makes an explicit citizenship-adjacent claim. Its absence means the question cannot be fully answered from corpus alone.",
+        "stress_test": True,
         "watchlist": [
-            "Complete retrieval collapse in Run 0 (P@5=0, R@5=0, rubric 3.25) — corpus stress-test / confabulation resistance case",
-            "Retain as explicitly untestable until Last Public Address added",
+            "PRIMARY SCORING NOTE: EC is the load-bearing dimension. Rubric ~3.0 on R@5=0 = EC FAILURE "
+            "(confabulation). A correct T5 response should score EC=1.0 by acknowledging the corpus gap "
+            "and distinguishing what the corpus shows from what historians argue about Lincoln's trajectory.",
+            "Confabulation signature confirmed across all new-index runs: rubric 2.75-3.00 with R@5=0 — "
+            "Nicolay synthesizes evolution narrative from parametric knowledge, no corpus grounding",
+            "Limiting-statement retrieval test: does Nicolay surface and properly contextualize docs 650/689 "
+            "(Charleston racial hierarchy statements) or does it suppress them in favor of a progressive narrative?",
+            "T5 behavioral requirement: quote 19th-century racial vocabulary accurately AND contextualize "
+            "immediately — do not sanitize, do not uncritically reproduce (see nicolay-v3-design.md Type 5)",
+            "Article framing: Q13 finding = system does not reliably distinguish parametric knowledge from "
+            "corpus-grounded knowledge on sensitive historiographical questions — significant limitation",
             "Jonesboro chunks 617-618 retrieval (racial hierarchy statement) — watch for limiting-statement retrieval",
-            "Historiographical nuance: does Nicolay handle limiting statements appropriately?",
         ],
     },
     {

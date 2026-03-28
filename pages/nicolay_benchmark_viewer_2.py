@@ -528,7 +528,11 @@ with tab2:
         name="R@5 (Recall@5)",
         x=labels_cat,
         y=r5_cat,
-        marker_color=[c.replace(")", ",0.5)").replace("rgb", "rgba") if "rgb" in c else c + "88" for c in colors_cat],
+        marker_color=[
+            "rgba({},{},{},0.5)".format(
+                int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+            ) for c in colors_cat
+        ],
         marker_pattern_shape="/",
         text=[f"{v:.3f}" for v in r5_cat],
         textposition="outside",

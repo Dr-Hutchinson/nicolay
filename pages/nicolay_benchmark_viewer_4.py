@@ -187,6 +187,97 @@ NAMED_QUESTIONS = {
 # Flat-reranker cases
 FLAT_RERANKER_QIDS = {"Q13", "Q5", "Q12", "Q7", "FR-2"}
 
+# Full query registry — text, category, expected types, ideal docs, named role
+QUERY_REGISTRY = [
+    {"id":"Q1",  "category":"factual_retrieval",    "hay":"A","nic":"T1",
+     "query":"Lincoln noted how many voters from Kansas and Nevada participated in the 1864 election",
+     "ideal_docs":[413,414], "missing":None,
+     "named":"Pipeline Resilience / R@5=1.00"},
+    {"id":"Q2",  "category":"factual_retrieval",    "hay":"D","nic":"T3",
+     "query":"How does Russia factor into Lincoln's speeches?",
+     "ideal_docs":[305,351,381], "missing":"Eduard de Stoeckl, Alaska purchase negotiations",
+     "named":None},
+    {"id":"Q3",  "category":"factual_retrieval",    "hay":"D","nic":"T2",
+     "query":"In what ways did Lincoln highlight the contributions of immigrants during the Civil War?",
+     "ideal_docs":[390,349,350], "missing":None,
+     "named":"CA Fabrication Exhibit (R4)"},
+    {"id":"Q4",  "category":"analysis",             "hay":"A","nic":"T2",
+     "query":"How did Lincoln incorporate allusions in his Second Inaugural Address?",
+     "ideal_docs":[419,420,421,422], "missing":None, "named":None},
+    {"id":"Q5",  "category":"analysis",             "hay":"D","nic":"T2",
+     "query":"How did Lincoln characterize the implications of major Supreme Court decisions before the Civil War?",
+     "ideal_docs":[88,95,101], "missing":None, "named":None},
+    {"id":"Q7",  "category":"comparative_analysis", "hay":"E","nic":"T4",
+     "query":"How did Lincoln's discussion of slavery evolve between his House Divided speech and his Second Inaugural Address?",
+     "ideal_docs":[88,95,101,419,420,421,422], "missing":"Lincoln-Douglas Debates — watch whether retrieved",
+     "named":"Embedding Model Exhibit / HD=1.00 Anchor"},
+    {"id":"Q8",  "category":"comparative_analysis", "hay":"D","nic":"T4",
+     "query":"How did Lincoln's justification for the Civil War evolve between his First Inaugural and Second Inaugural?",
+     "ideal_docs":[185,191,197,202,419,420,421,422], "missing":None, "named":None},
+    {"id":"Q9",  "category":"comparative_analysis", "hay":"D","nic":"T4",
+     "query":"How did Lincoln's views of African American soldiers change or remain the same over time?",
+     "ideal_docs":[288,295,367,374], "missing":"Executive orders on Black troop pay",
+     "named":None},
+    {"id":"Q10", "category":"synthesis",            "hay":"D","nic":"T4",
+     "query":"How did Lincoln develop the theme of divine providence throughout his wartime speeches?",
+     "ideal_docs":[298,418,419,420,421,422], "missing":"Thanksgiving proclamations (not in corpus)",
+     "named":None},
+    {"id":"Q11", "category":"synthesis",            "hay":"D","nic":"T5",
+     "query":"How did Lincoln consistently frame the relationship between liberty and law?",
+     "ideal_docs":[153,159,185,191,418,419], "missing":None,
+     "named":"HD Ceiling Floor / Synthesis Failure"},
+    {"id":"Q12", "category":"synthesis",            "hay":"D","nic":"T5",
+     "query":"What themes did Lincoln consistently employ when discussing the Constitution's relationship to slavery?",
+     "ideal_docs":[153,159,185,191], "missing":None, "named":None},
+    {"id":"Q13", "category":"race_citizenship",     "hay":"E","nic":"T5",
+     "query":"How did Lincoln's views on African American citizenship and racial equality evolve across his speeches?",
+     "ideal_docs":[288,295,367,374,413,414,419], "missing":"Last Public Address Apr 11 1865 — NOT IN CORPUS",
+     "named":"Parametric Laundering Canonical Case"},
+    {"id":"R1",  "category":"analysis",             "hay":"D","nic":"T3",
+     "query":"How did Lincoln justify the naval blockade of Confederate ports?",
+     "ideal_docs":[218,272,300,345,359], "missing":"Trent Affair — NOT IN CORPUS", "named":None},
+    {"id":"R2",  "category":"comparative_analysis", "hay":"D","nic":"T4",
+     "query":"How did Lincoln describe U.S. relations with Great Britain during the Civil War?",
+     "ideal_docs":[242,243,247,300,301,345,346,388], "missing":"Trent Affair — NOT IN CORPUS", "named":None},
+    {"id":"R3",  "category":"factual_retrieval",    "hay":"A","nic":"T1",
+     "query":"How did Lincoln report on the financial condition of the Post Office Department during the war?",
+     "ideal_docs":[311,312,364,365,401], "missing":None, "named":None},
+    {"id":"AN-5","category":"analysis",             "hay":"A","nic":"T2",
+     "query":"How did Lincoln develop the labor-capital argument in his First Annual Message?",
+     "ideal_docs":[279,280,281], "missing":None, "named":None},
+    {"id":"CA-5","category":"comparative_analysis", "hay":"E","nic":"T3",
+     "query":"How did Lincoln's tone toward the South differ between his First and Second Inaugural Addresses?",
+     "ideal_docs":[193,195,420,421,422], "missing":None,
+     "named":"Displaced Quote (R0/R1) / Upgrade"},
+    {"id":"CA-6","category":"comparative_analysis", "hay":"D","nic":"T3",
+     "query":"How did Lincoln justify the suspension of habeas corpus during the Civil War?",
+     "ideal_docs":[214,219,221,380], "missing":None, "named":None},
+    {"id":"FR-2","category":"factual_retrieval",    "hay":"D","nic":"T3",
+     "query":"How did Lincoln address wartime taxation, debt, and civic obligation in his Annual Messages?",
+     "ideal_docs":[249,309,310,393,395], "missing":None,
+     "named":"Flat-Reranker Pattern"},
+    {"id":"S-4", "category":"synthesis",            "hay":"E","nic":"T4",
+     "query":"How did Lincoln use the Declaration of Independence as a rhetorical framework across his career?",
+     "ideal_docs":[44,45,418,624,626,628], "missing":None,
+     "named":"Calibration Decoupling Exhibit"},
+    {"id":"S-5", "category":"synthesis",            "hay":"D","nic":"T4",
+     "query":"How did Lincoln frame self-government as a test of democratic viability?",
+     "ideal_docs":[46,47,48,239,418], "missing":None, "named":None},
+    {"id":"RC-3","category":"race_citizenship",     "hay":"E","nic":"T3",
+     "query":"How did Lincoln distinguish between natural rights and political equality in 1858?",
+     "ideal_docs":[41,481,550,624,679], "missing":None,
+     "named":"HD Upgrade Mechanism (T3→T4)"},
+    {"id":"RC-4","category":"race_citizenship",     "hay":"D","nic":"T3",
+     "query":"How did Lincoln link emancipation, Black military service, and the future status of freed people?",
+     "ideal_docs":[293,295,372,374], "missing":None,
+     "named":"Zero-Variance Reproducibility"},
+    {"id":"RC-5","category":"race_citizenship",     "hay":"E","nic":"T4",
+     "query":"What did Lincoln leave unresolved about the future political status of freed people?",
+     "ideal_docs":[297,375,376,378,410,416], "missing":None, "named":None},
+]
+QUERY_REGISTRY_BY_ID = {q["id"]: q for q in QUERY_REGISTRY}
+
+
 # Color palette
 CAT_COLORS = {
     "comparative_analysis": "#4C78A8",
@@ -348,7 +439,8 @@ df_cat = pd.DataFrame(CATEGORY_RESULTS)
 # TAB LAYOUT
 # -----------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "🔎 Question Browser",
     "📊 Grand Summary",
     "📂 Category Performance",
     "🔥 Per-Query Heatmap",
@@ -358,6 +450,274 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 # ═════════════════════════════════════════════════════════════════════════════
+
+# =============================================================================
+# TAB 0: QUESTION BROWSER
+# =============================================================================
+
+with tab0:
+    st.header("Question Browser")
+    st.caption(
+        "Browse all 24 benchmark questions by category. Select a question to inspect "
+        "the full pipeline output for any individual run."
+    )
+
+    all_cats = ["All categories"] + sorted(set(q["category"] for q in QUERY_REGISTRY))
+    cat_labels = {
+        "All categories": "All categories",
+        "factual_retrieval":    "Factual Retrieval",
+        "analysis":             "Analysis",
+        "comparative_analysis": "Comparative Analysis",
+        "synthesis":            "Synthesis",
+        "race_citizenship":     "Race & Citizenship",
+    }
+    selected_cat = st.selectbox(
+        "Filter by category",
+        options=all_cats,
+        format_func=lambda c: cat_labels.get(c, c),
+    )
+
+    filtered_qs = [
+        q for q in QUERY_REGISTRY
+        if selected_cat == "All categories" or q["category"] == selected_cat
+    ]
+
+    def _q_label(q):
+        star = "★ " if q.get("named") else "  "
+        return f"{star}{q['id']}  —  {q['query'][:80]}{'…' if len(q['query'])>80 else ''}"
+
+    selected_q = st.selectbox(
+        "Select question",
+        options=filtered_qs,
+        format_func=_q_label,
+    )
+
+    if selected_q:
+        qid = selected_q["id"]
+        qmeta = QUERY_REGISTRY_BY_ID[qid]
+
+        named_badge = (
+            f"<span style='background:#b87333;color:#fff;padding:2px 8px;"
+            f"border-radius:10px;font-size:11px;margin-left:8px;'>"
+            f"★ {qmeta['named']}</span>"
+            if qmeta.get("named") else ""
+        )
+        cat_color = CAT_COLORS.get(qmeta["category"], "#888")
+
+        st.markdown(
+            f"<div style='border-left:4px solid {cat_color};padding:10px 16px;"
+            f"background:rgba(0,0,0,0.04);border-radius:0 8px 8px 0;margin-bottom:12px;'>"
+            f"<div style='font-size:18px;font-weight:700;'>{qid}{named_badge}</div>"
+            f"<div style='font-size:13px;color:#888;margin:2px 0 8px;'>"
+            f"{cat_labels.get(qmeta['category'], qmeta['category'])}</div>"
+            f"<div style='font-size:15px;font-style:italic;'>\"{qmeta['query']}\"</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
+        with meta_col1:
+            st.metric("Expected Hay Type", qmeta["hay"])
+        with meta_col2:
+            st.metric("Expected Nicolay Type", qmeta["nic"])
+        with meta_col3:
+            st.metric("Ideal Docs", len(qmeta["ideal_docs"]))
+        with meta_col4:
+            q_row = next((r for r in PER_QUERY_DATA if r["QID"] == qid), None)
+            if q_row:
+                st.metric("Mean Total (5 runs)", f"{q_row['Total']:.2f}")
+
+        if qmeta.get("missing"):
+            st.warning(f"**Corpus gap:** {qmeta['missing']}")
+
+        with st.expander("Ideal document IDs", expanded=False):
+            st.code(", ".join(str(d) for d in qmeta["ideal_docs"]))
+
+        if q_row:
+            st.markdown("---")
+            st.subheader("Aggregate Results (5-run mean)")
+            r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns(5)
+            for col, dim, label in zip(
+                [r_col1, r_col2, r_col3, r_col4, r_col5],
+                ["Total", "FA", "CA", "HD", "EC"],
+                ["Total", "Fact. Acc.", "Cite. Acc.", "Hist. Depth", "Epist. Cal."],
+            ):
+                col.metric(label, f"{q_row[dim]:.2f}", delta=f"+-{q_row['SD']:.3f}" if dim == "Total" else None)
+
+            run_scores = HEATMAP_DATA.get(qid, [])
+            if run_scores:
+                fig_mini = go.Figure(go.Heatmap(
+                    z=[run_scores],
+                    x=["Run 0","Run 1","Run 2","Run 3","Run 4"],
+                    y=[qid],
+                    colorscale=[[0,"#d73027"],[0.375,"#fc8d59"],[0.625,"#4575b4"],[1,"#1a6b3c"]],
+                    zmin=2.0, zmax=4.0,
+                    text=[[f"{v:.2f}" for v in run_scores]],
+                    texttemplate="%{text}",
+                    showscale=False,
+                ))
+                fig_mini.update_layout(
+                    height=100,
+                    margin=dict(l=60, r=20, t=10, b=30),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                )
+                st.plotly_chart(fig_mini, use_container_width=True)
+
+            ret_col1, ret_col2, ret_col3 = st.columns(3)
+            ret_col1.metric("R@5", f"{q_row['R@5']:.3f}")
+            ret_col2.metric("Keyword slots", f"{q_row['KW']:.1f} / 5")
+            ret_col3.metric("Semantic slots", f"{q_row['Sem']:.1f} / 5")
+            if qid in FLAT_RERANKER_QIDS:
+                st.warning(
+                    f"**Flat-reranker case** — spread: {q_row['Rerank']:.3f} (below 0.05 threshold). "
+                    "Confident retrieval in wrong semantic neighborhood."
+                )
+
+        st.markdown("---")
+        st.subheader("Individual Run Inspection")
+
+        if not using_live_data:
+            st.info(
+                "Load live data from GitHub (sidebar button) to inspect individual run outputs: "
+                "Hay InitialAnswer, QueryAssessment, NicolaySynthesisAssessmentRaw, "
+                "FinalAnswerText, retrieval composition, quote verification, and LLM rubric scores."
+            )
+        else:
+            run_df = loaded["runs"]
+            q_runs = run_df[run_df["QueryID"] == qid].copy()
+
+            if q_runs.empty:
+                st.warning(f"No rows found for {qid} in the loaded data.")
+            else:
+                run_nums = sorted(q_runs["run"].unique())
+                selected_run = st.selectbox(
+                    "Select run",
+                    options=run_nums,
+                    format_func=lambda r: f"Run {r}",
+                    key="browser_run_select",
+                )
+                row = q_runs[q_runs["run"] == selected_run].iloc[0]
+
+                def _get(col, default="—"):
+                    v = row.get(col, "")
+                    s = str(v).strip()
+                    return s if s not in ("", "nan") else default
+
+                pip_col1, pip_col2, pip_col3, pip_col4 = st.columns(4)
+                pip_col1.metric("Hay Type", f"{_get('HayTypeGot')} (exp {_get('HayTypeExpected')})")
+                pip_col2.metric("Nicolay Type", f"{_get('NicolayTypeGot')} (exp {_get('NicolayTypeExpected')})")
+                pip_col3.metric("R@5", _get("R@5"))
+                pip_col4.metric("RubricTotal", _get("RubricTotal"))
+
+                dim_cols = st.columns(4)
+                for dc, (col, lbl) in zip(dim_cols, [("FA","Fact. Acc."),("CA","Cite. Acc."),("HD","Hist. Depth"),("EC","Epist. Cal.")]):
+                    dc.metric(lbl, _get(col))
+
+                with st.expander("Hay Layer — InitialAnswer & QueryAssessment", expanded=True):
+                    hay_correct = _get("HayTypeCorrect")
+                    hay_color = "#2d6a4f" if hay_correct == "True" else "#c1121f"
+                    st.markdown(
+                        f"<div style='font-size:12px;color:{hay_color};font-weight:600;margin-bottom:6px;'>"
+                        f"Type: {_get('HayTypeGot')} (expected {_get('HayTypeExpected')}) — "
+                        f"{'Correct' if hay_correct=='True' else 'Incorrect'}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**InitialAnswer** *(seeds retrieval)*")
+                    st.markdown(
+                        f"<div style='background:#eef7ee;padding:10px;border-radius:6px;"
+                        f"font-size:13px;border-left:3px solid #52b788;'>{_get('InitialAnswer')}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**QueryAssessment** *(Hay self-assessment)*")
+                    st.markdown(
+                        f"<div style='background:#f8f4ef;padding:10px;border-radius:6px;"
+                        f"font-size:13px;border-left:3px solid #cca855;'>{_get('QueryAssessment')}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.metric("Keywords generated", _get("HayKeywordCount"))
+
+                with st.expander("Retrieval — Composition & Scoring", expanded=True):
+                    ret_a, ret_b, ret_c, ret_d = st.columns(4)
+                    ret_a.metric("KW slots", _get("KW"))
+                    ret_b.metric("Sem slots", _get("Sem"))
+                    rerank_val = _get("Rerank")
+                    ret_c.metric("Reranker spread", f"{float(rerank_val):.3f}" if rerank_val != "—" else "—")
+                    ret_d.metric("Precision@5", _get("PrecisionAt5"))
+                    st.markdown("**Retrieved doc IDs (all candidates)**")
+                    st.code(_get("RetrievedDocIDs"))
+                    st.markdown("**Top-5 retrieval path**")
+                    st.code(_get("RetrievalPathTop5"))
+                    hit_col, miss_col = st.columns(2)
+                    hit_col.markdown(f"Ideal docs hit: `{_get('IdealDocsHit')}`")
+                    miss_col.markdown(f"Ideal docs missed: `{_get('IdealDocsMissed')}`")
+
+                with st.expander("Nicolay Layer — Synthesis & Final Answer", expanded=True):
+                    nic_correct = _get("NicolayTypeCorrect")
+                    nic_color = "#2d6a4f" if nic_correct == "True" else "#c1121f"
+                    st.markdown(
+                        f"<div style='font-size:12px;color:{nic_color};font-weight:600;margin-bottom:6px;'>"
+                        f"Type: {_get('NicolayTypeGot')} (expected {_get('NicolayTypeExpected')}) — "
+                        f"{'Correct' if nic_correct=='True' else 'Incorrect'}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**NicolaySynthesisAssessmentRaw** *(chain-of-thought)*")
+                    st.markdown(
+                        f"<div style='background:#e8f0f8;padding:10px;border-radius:6px;"
+                        f"font-size:13px;border-left:3px solid #4c78a8;white-space:pre-wrap;'>"
+                        f"{_get('NicolaySynthesisAssessmentRaw')}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**FinalAnswerText** *(evaluated output)*")
+                    st.markdown(
+                        f"<div style='background:#f8f4ef;padding:10px;border-radius:6px;"
+                        f"font-size:14px;border-left:3px solid #b87333;'>"
+                        f"{_get('FinalAnswerText')}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(f"Word count: {_get('FinalAnswerWordCount')}")
+
+                with st.expander("Quote Verification", expanded=False):
+                    qv_cols_b = st.columns(5)
+                    for qvc, label, col in zip(
+                        qv_cols_b,
+                        ["Verified","Approx","Displaced","Fabricated","Mislabeled"],
+                        ["QuotesVerified","QuotesApprox","QuotesDisplaced","QuotesFabricated","QuotesMislabeled"],
+                    ):
+                        qvc.metric(label, _get(col, "0"))
+                    conf_c1, conf_c2, conf_c3 = st.columns(3)
+                    conf_c1.metric("Confidence Rating", _get("ConfidenceRating"))
+                    conf_c2.metric("ROUGE-1 max retrieved", _get("Rouge1MaxRetrieved"))
+                    conf_c3.metric("Calib. Warning", _get("ConfidenceCalibWarning"))
+
+                with st.expander("LLM Rubric Scores & Rationales", expanded=True):
+                    score_c = st.columns(5)
+                    for sc, (dim_col, label) in zip(score_c, [
+                        ("FA","Fact. Acc."),("CA","Cite. Acc."),
+                        ("HD","Hist. Depth"),("EC","Epist. Cal."),("RubricTotal","Total"),
+                    ]):
+                        sc.metric(label, _get(dim_col))
+
+                    for rat_col, label, bg in [
+                        ("RationaleFactualAccuracy",        "Factual Accuracy Rationale",        "#eef7ee"),
+                        ("RationaleCitationAccuracy",       "Citation Accuracy Rationale",       "#e8f0f8"),
+                        ("RationaleHistoriographicalDepth", "Historiographical Depth Rationale", "#f8f4ef"),
+                        ("RationaleEpistemicCalibration",   "Epistemic Calibration Rationale",   "#fef9ec"),
+                        ("RationaleHayDiagnostic",          "Hay Diagnostic",                    "#fff3cd"),
+                    ]:
+                        val = _get(rat_col)
+                        if val != "—":
+                            st.markdown(f"**{label}**")
+                            st.markdown(
+                                f"<div style='background:{bg};padding:8px;border-radius:6px;"
+                                f"font-size:13px;margin-bottom:6px;'>{val}</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                ev_notes = _get("EvaluatorNotes")
+                if ev_notes != "—":
+                    st.info(f"**Evaluator Notes:** {ev_notes}")
+
 # TAB 1: GRAND SUMMARY
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -1016,44 +1376,45 @@ with tab5:
         )
 
 # ═════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # TAB 6: HUMAN ANNOTATION PANEL
-# ═════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 with tab6:
-    st.header("Human Annotation Panel — Blind Rubric Scoring")
-    st.info(
-        "This panel implements the blind annotation protocol from the article methodology. "
-        "Load a raw (unscored) benchmark CSV below. Responses are presented one at a time without "
-        "prior knowledge of LLM scores. Score each response, then export the results."
+    st.header('Human Annotation Panel -- Blind Rubric Scoring')
+    st.caption(
+        'Implements the blind annotation protocol from the article methodology. '
+        'Upload any merged_run_N.csv. Each response is presented with full pipeline '
+        'context so you can score exactly what Claude saw during auto-scoring.'
     )
 
-    if "annotation_scores" not in st.session_state:
+    if 'annotation_scores' not in st.session_state:
         st.session_state.annotation_scores = {}
-    if "annotation_idx" not in st.session_state:
+    if 'annotation_idx' not in st.session_state:
         st.session_state.annotation_idx = 0
-    if "annotation_df" not in st.session_state:
+    if 'annotation_df' not in st.session_state:
         st.session_state.annotation_df = None
 
     upload = st.file_uploader(
-        "Upload raw benchmark CSV (must contain: QueryID, Category, QueryText, FinalAnswerText)",
-        type=["csv"],
+        'Upload benchmark CSV (merged_run_N.csv)',
+        type=['csv'],
+        help='Any merged_run_N.csv works as-is. Columns normalized automatically.',
     )
 
     if upload:
         try:
             ann_df = pd.read_csv(upload)
-            # Accept either 'Query' (actual CSV) or 'QueryText' (normalized name)
-            if "Query" in ann_df.columns and "QueryText" not in ann_df.columns:
-                ann_df = ann_df.rename(columns={"Query": "QueryText"})
-            required_cols = {"QueryID", "Category", "QueryText", "FinalAnswerText"}
-            missing = required_cols - set(ann_df.columns)
-            if missing:
-                st.error(f"Missing required columns: {missing}")
+            if 'Query' in ann_df.columns and 'QueryText' not in ann_df.columns:
+                ann_df = ann_df.rename(columns={'Query': 'QueryText'})
+            required_cols = {'QueryID', 'Category', 'QueryText', 'FinalAnswerText'}
+            missing_cols = required_cols - set(ann_df.columns)
+            if missing_cols:
+                st.error(f'Missing required columns: {missing_cols}')
             else:
                 st.session_state.annotation_df = ann_df
-                st.success(f"Loaded {len(ann_df)} responses.")
+                st.success(f'Loaded {len(ann_df)} responses.')
         except Exception as e:
-            st.error(f"Could not read CSV: {e}")
+            st.error(f'Could not read CSV: {e}')
 
     if st.session_state.annotation_df is not None:
         ann_df = st.session_state.annotation_df
@@ -1061,168 +1422,311 @@ with tab6:
         n_scored = len(st.session_state.annotation_scores)
         idx = st.session_state.annotation_idx
 
-        # Progress
-        progress_pct = n_scored / n_total if n_total > 0 else 0
-        st.progress(progress_pct, text=f"Scored {n_scored} of {n_total} responses")
+        st.progress(n_scored / n_total if n_total > 0 else 0,
+                    text=f'Scored {n_scored} of {n_total} responses')
 
-        # Navigation
         nav_col1, nav_col2, nav_col3, nav_col4 = st.columns([1, 1, 3, 1])
         with nav_col1:
-            if st.button("⬅ Previous") and idx > 0:
+            if st.button('Prev', key='ann_prev') and idx > 0:
                 st.session_state.annotation_idx -= 1
                 st.rerun()
         with nav_col2:
-            if st.button("Next ➡") and idx < n_total - 1:
+            if st.button('Next', key='ann_next') and idx < n_total - 1:
                 st.session_state.annotation_idx += 1
                 st.rerun()
         with nav_col3:
             jump_to = st.selectbox(
-                "Jump to response",
-                options=list(range(n_total)),
-                index=idx,
+                'Jump to', options=list(range(n_total)), index=idx,
                 format_func=lambda i: f"{ann_df.iloc[i]['QueryID']} ({i+1}/{n_total})",
+                key='ann_jump',
             )
             if jump_to != idx:
                 st.session_state.annotation_idx = jump_to
                 st.rerun()
         with nav_col4:
-            scored_flag = "✓ Scored" if ann_df.iloc[idx]["QueryID"] in st.session_state.annotation_scores else "○ Unscored"
-            st.markdown(f"**{scored_flag}**")
+            row_qid_nav = ann_df.iloc[idx]['QueryID']
+            st.markdown('**Scored**' if row_qid_nav in st.session_state.annotation_scores else '**Unscored**')
 
-        st.markdown("---")
-
-        # Response display
-        row = ann_df.iloc[idx]
-        qid = row["QueryID"]
+        st.markdown('---')
+        ann_row = ann_df.iloc[idx]
+        qid = ann_row['QueryID']
         prior = st.session_state.annotation_scores.get(qid, {})
 
-        st.markdown(f"**Response {idx+1}/{n_total} — {qid}** · *{row['Category']}*")
-        st.markdown(f"**Query:** {row['QueryText']}")
+        def _ann_get(col, default='--'):
+            v = ann_row.get(col, '')
+            s = str(v).strip()
+            return s if s not in ('', 'nan') else default
 
-        with st.expander("📄 Response Text", expanded=True):
-            st.markdown(row["FinalAnswerText"])
-
-        st.markdown("---")
-        st.subheader("Score this response")
-        st.caption(
-            "Score each dimension 0–1 in 0.25 steps. "
-            "**FA** = factual accuracy. **CA** = citation accuracy. "
-            "**HD** = historiographical depth. **EC** = epistemic calibration."
+        qmeta_ann = QUERY_REGISTRY_BY_ID.get(qid, {})
+        cat_color_ann = CAT_COLORS.get(ann_row.get('Category', ''), '#888')
+        named_ann = qmeta_ann.get('named', '') if qmeta_ann else ''
+        named_badge_ann = (
+            f"<span style='background:#b87333;color:#fff;padding:2px 8px;"
+            f"border-radius:10px;font-size:11px;margin-left:8px;'>* {named_ann}</span>"
+            if named_ann else ''
+        )
+        st.markdown(
+            f"<div style='border-left:4px solid {cat_color_ann};padding:8px 14px;"
+            f"background:rgba(0,0,0,0.04);border-radius:0 8px 8px 0;margin-bottom:10px;'>"
+            f"<b style='font-size:16px;'>{qid}{named_badge_ann}</b>"
+            f"<span style='font-size:12px;color:#888;margin-left:10px;'>"
+            f"{ann_row.get('Category','').replace('_',' ').title()}</span><br>"
+            f"<i style='font-size:14px;'>{ann_row.get('QueryText','')}</i>"
+            f"</div>",
+            unsafe_allow_html=True,
         )
 
-        score_cols = st.columns(4)
-        dim_descs = {
-            "FA": "Factual Accuracy\n(Is the factual content correct?)",
-            "CA": "Citation Accuracy\n(Are sources cited and attributable?)",
-            "HD": "Historiographical Depth\n(Does it engage historiographically?)",
-            "EC": "Epistemic Calibration\n(Does it acknowledge limits honestly?)",
+        st.subheader('Pipeline Context')
+        st.caption(
+            'Evidentiary hierarchy (same as automated rubric): '
+            '(1) FinalAnswerText is primary for FA and CA; '
+            '(2) SynthesisAssessmentRaw is primary for HD and EC; '
+            '(3) InitialAnswer is diagnostic only.'
+        )
+
+        with st.expander('1. Hay Layer -- InitialAnswer (diagnostic only)', expanded=True):
+            hay_got = _ann_get('HayTypeGot')
+            hay_exp = _ann_get('HayTypeExpected')
+            hay_ok  = _ann_get('HayTypeCorrect')
+            hay_col_c = '#2d6a4f' if hay_ok == 'True' else '#c1121f'
+            st.markdown(
+                f"<div style='font-size:12px;color:{hay_col_c};font-weight:600;margin-bottom:4px;'>"
+                f"Hay type: {hay_got} (expected {hay_exp}) -- "
+                f"{'Correct' if hay_ok=='True' else 'Incorrect'} | "
+                f"Keywords: {_ann_get('HayKeywordCount')}</div>"
+                f"<div style='font-size:11px;color:#666;margin-bottom:6px;'>"
+                f"If FinalAnswerText independently corrects a Hay error, do not penalize FA/HD.</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='background:#eef7ee;padding:9px;border-radius:6px;"
+                f"font-size:13px;border-left:3px solid #52b788;'>"
+                f"<b>InitialAnswer:</b> {_ann_get('InitialAnswer')}</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='background:#f8f4ef;padding:8px;border-radius:6px;"
+                f"font-size:12px;border-left:3px solid #cca855;margin-top:5px;'>"
+                f"<b>QueryAssessment:</b> {_ann_get('QueryAssessment')}</div>",
+                unsafe_allow_html=True,
+            )
+
+        with st.expander('2. Retrieval Context', expanded=False):
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            rc1.metric('R@5', _ann_get('RecallAt5'))
+            rc2.metric('P@5', _ann_get('PrecisionAt5'))
+            rc3.metric('KW slots', _ann_get('RetrievalKeywordCountTop5'))
+            rc4.metric('Sem slots', _ann_get('RetrievalSemanticCountTop5'))
+            st.code(_ann_get('RetrievalPathTop5'))
+            h2c, m2c = st.columns(2)
+            h2c.markdown(f"Ideal docs hit: `{_ann_get('IdealDocsHit')}`")
+            m2c.markdown(f"Ideal docs missed: `{_ann_get('IdealDocsMissed')}`")
+            if qmeta_ann and qmeta_ann.get('missing'):
+                st.warning(f"Corpus gap: {qmeta_ann['missing']}")
+
+        with st.expander('3. SynthesisAssessmentRaw -- primary for HD and EC scoring', expanded=True):
+            nic_got = _ann_get('NicolayTypeGot')
+            nic_exp = _ann_get('NicolayTypeExpected')
+            nic_ok  = _ann_get('NicolayTypeCorrect')
+            nic_col_c = '#2d6a4f' if nic_ok == 'True' else '#c1121f'
+            st.markdown(
+                f"<div style='font-size:12px;color:{nic_col_c};font-weight:600;margin-bottom:4px;'>"
+                f"Nicolay type: {nic_got} (expected {nic_exp}) -- "
+                f"{'Correct' if nic_ok=='True' else 'Incorrect'}</div>"
+                f"<div style='font-size:11px;color:#666;margin-bottom:6px;'>"
+                f"Score HD on historiographical engagement. Score EC on uncertainty acknowledgment.</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='background:#e8f0f8;padding:10px;border-radius:6px;"
+                f"font-size:13px;border-left:3px solid #4c78a8;white-space:pre-wrap;'>"
+                f"{_ann_get('NicolaySynthesisAssessmentRaw')}</div>",
+                unsafe_allow_html=True,
+            )
+
+        with st.expander('4. FinalAnswerText -- primary for FA and CA scoring', expanded=True):
+            st.markdown(
+                "<div style='font-size:11px;color:#666;margin-bottom:6px;'>"
+                "Score FA on factual correctness. Score CA on citation attribution. "
+                "Hard rule: QuotesFabricated >= 1 caps CA at 0.50.</div>",
+                unsafe_allow_html=True,
+            )
+            qv_cols_ann = st.columns(5)
+            for qvc, lbl, col in zip(
+                qv_cols_ann,
+                ['Verified','Approx','Displaced','Fabricated','Mislabeled'],
+                ['QuotesVerified','QuotesApprox','QuotesDisplaced','QuotesFabricated','QuotesMislabeled'],
+            ):
+                val = _ann_get(col, '0')
+                color = '#c1121f' if lbl in ('Fabricated','Displaced') and val not in ('0','--') else '#333'
+                qvc.markdown(
+                    f"<div style='text-align:center;'>"
+                    f"<div style='font-size:20px;font-weight:700;color:{color};'>{val}</div>"
+                    f"<div style='font-size:11px;color:#888;'>{lbl}</div></div>",
+                    unsafe_allow_html=True,
+                )
+            st.markdown(
+                f"<div style='background:#f8f4ef;padding:10px;border-radius:6px;"
+                f"font-size:14px;border-left:3px solid #b87333;margin-top:8px;'>"
+                f"{_ann_get('FinalAnswerText')}</div>",
+                unsafe_allow_html=True,
+            )
+            st.caption(f"Word count: {_ann_get('FinalAnswerWordCount')}")
+
+        with st.expander('5. LLM Auto-Scores (reveal after scoring to check agreement)', expanded=False):
+            st.warning('Blind protocol: score the response above before expanding this section.')
+            llm_sc = st.columns(5)
+            for sc, (dim, lbl) in zip(llm_sc, [
+                ('RubricFactualAccuracy','FA'),
+                ('RubricCitationAccuracy','CA'),
+                ('RubricHistoriographicalDepth','HD'),
+                ('RubricEpistemicCalibration','EC'),
+                ('RubricTotal','Total'),
+            ]):
+                sc.metric(lbl, _ann_get(dim))
+            for rat_col, lbl, bg in [
+                ('RationaleFactualAccuracy',        'FA Rationale',   '#eef7ee'),
+                ('RationaleCitationAccuracy',       'CA Rationale',   '#e8f0f8'),
+                ('RationaleHistoriographicalDepth', 'HD Rationale',   '#f8f4ef'),
+                ('RationaleEpistemicCalibration',   'EC Rationale',   '#fef9ec'),
+                ('RationaleHayDiagnostic',          'Hay Diagnostic', '#fff3cd'),
+            ]:
+                val = _ann_get(rat_col)
+                if val != '--':
+                    st.markdown(
+                        f"<div style='background:{bg};padding:7px;border-radius:5px;"
+                        f"font-size:12px;margin-bottom:5px;'>"
+                        f"<b>{lbl}:</b> {val}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+        st.markdown('---')
+        st.subheader('Your Scores')
+
+        dim_guidance = {
+            'FA': ('Factual Accuracy', 'Are all specific claims (names, dates, figures) correct?',
+                   '1.0 All correct | 0.75 Minor errors | 0.5 Significant errors | 0.25 Major distortions | 0.0 Fabrication'),
+            'CA': ('Citation Accuracy', 'Are sources cited and correctly attributed?',
+                   '1.0 All verified | 0.75 Minor issues | 0.5 Displaced/unsupported | 0.0 Fabricated | Hard rule: Fabricated>=1 caps at 0.50'),
+            'HD': ('Historiographical Depth', 'Does the synthesis engage historiographical complexity? Score from SynthesisAssessmentRaw.',
+                   '1.0 Sophisticated | 0.75 Solid framing | 0.5 Descriptive only | 0.25 Superficial | 0.0 No engagement'),
+            'EC': ('Epistemic Calibration', 'Does it acknowledge uncertainty and corpus limits? Score from SynthesisAssessmentRaw.',
+                   '1.0 Explicitly calibrated | 0.75 Generally appropriate | 0.5 Overconfident in places | 0.0 Systematically overconfident'),
         }
-        dim_defaults = {d: prior.get(d, 0.75) for d in ["FA", "CA", "HD", "EC"]}
 
         score_vals = {}
-        for col, dim in zip(score_cols, ["FA", "CA", "HD", "EC"]):
-            with col:
-                score_vals[dim] = st.select_slider(
-                    dim_descs[dim],
-                    options=[0.0, 0.25, 0.50, 0.75, 1.0],
-                    value=dim_defaults[dim],
-                    key=f"slider_{qid}_{dim}",
-                )
+        for dim in ['FA', 'CA', 'HD', 'EC']:
+            label, question, rubric = dim_guidance[dim]
+            st.markdown(f'**{label}** -- {question}')
+            st.caption(rubric)
+            score_vals[dim] = st.select_slider(
+                f'Score {label}',
+                options=[0.0, 0.25, 0.50, 0.75, 1.0],
+                value=prior.get(dim, 0.75),
+                key=f'ann_slider_{qid}_{dim}',
+                label_visibility='collapsed',
+            )
+
+        total_score = sum(score_vals[d] for d in ['FA', 'CA', 'HD', 'EC'])
+        st.markdown(f'**Running total: {total_score:.2f} / 4.00**')
 
         notes = st.text_area(
-            "Notes (optional)",
-            value=prior.get("notes", ""),
-            height=80,
-            key=f"notes_{qid}",
+            'Evaluator notes (flag anomalies, overrides, uncertainty)',
+            value=prior.get('notes', ''),
+            height=70,
+            key=f'ann_notes_{qid}',
         )
 
         save_col, clear_col = st.columns([2, 1])
         with save_col:
-            if st.button("💾 Save Score", type="primary"):
-                total_score = sum(score_vals[d] for d in ["FA", "CA", "HD", "EC"])
+            if st.button('Save Score', type='primary', key='ann_save'):
                 st.session_state.annotation_scores[qid] = {
-                    **score_vals,
-                    "Total": total_score,
-                    "notes": notes,
-                    "timestamp": datetime.now().isoformat(),
+                    **score_vals, 'Total': total_score,
+                    'notes': notes, 'timestamp': datetime.now().isoformat(),
                 }
-                st.success(f"Saved: {qid} → Total={total_score:.2f}")
-                # Auto-advance
+                st.success(f'Saved: {qid} -- Total {total_score:.2f}/4.00')
                 if idx < n_total - 1:
                     st.session_state.annotation_idx += 1
                     st.rerun()
-
         with clear_col:
-            if st.button("🗑 Clear Score") and qid in st.session_state.annotation_scores:
-                del st.session_state.annotation_scores[qid]
-                st.rerun()
+            if st.button('Clear Score', key='ann_clear'):
+                if qid in st.session_state.annotation_scores:
+                    del st.session_state.annotation_scores[qid]
+                    st.rerun()
 
-        # Export
-        st.markdown("---")
-        st.subheader("Export Scores")
+        st.markdown('---')
+        st.subheader('Export and Comparison')
+
         if st.session_state.annotation_scores:
             export_rows = []
             for scored_qid, scores in st.session_state.annotation_scores.items():
-                row_match = ann_df[ann_df["QueryID"] == scored_qid]
+                row_match = ann_df[ann_df['QueryID'] == scored_qid]
                 if not row_match.empty:
+                    llm_fa  = float(row_match.iloc[0].get('RubricFactualAccuracy', 0) or 0)
+                    llm_ca  = float(row_match.iloc[0].get('RubricCitationAccuracy', 0) or 0)
+                    llm_hd  = float(row_match.iloc[0].get('RubricHistoriographicalDepth', 0) or 0)
+                    llm_ec  = float(row_match.iloc[0].get('RubricEpistemicCalibration', 0) or 0)
+                    llm_tot = round(llm_fa + llm_ca + llm_hd + llm_ec, 2)
+                    h_tot   = scores['Total']
                     export_rows.append({
-                        "QueryID": scored_qid,
-                        "Category": row_match.iloc[0]["Category"],
-                        "HumanFA": scores["FA"],
-                        "HumanCA": scores["CA"],
-                        "HumanHD": scores["HD"],
-                        "HumanEC": scores["EC"],
-                        "HumanTotal": scores["Total"],
-                        "Notes": scores.get("notes", ""),
-                        "Timestamp": scores.get("timestamp", ""),
+                        'QueryID': scored_qid,
+                        'Category': row_match.iloc[0]['Category'],
+                        'HumanFA': scores['FA'], 'HumanCA': scores['CA'],
+                        'HumanHD': scores['HD'], 'HumanEC': scores['EC'],
+                        'HumanTotal': h_tot,
+                        'LLM_FA': llm_fa, 'LLM_CA': llm_ca,
+                        'LLM_HD': llm_hd, 'LLM_EC': llm_ec,
+                        'LLM_Total': llm_tot,
+                        'Delta': round(h_tot - llm_tot, 2),
+                        'Notes': scores.get('notes', ''),
+                        'Timestamp': scores.get('timestamp', ''),
                     })
+
             export_df = pd.DataFrame(export_rows)
-            csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+            csv_bytes = export_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label=f"⬇ Download Human Scores CSV ({len(export_rows)} responses)",
+                label=f'Download Human Scores CSV ({len(export_rows)} responses)',
                 data=csv_bytes,
                 file_name=f"human_annotation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
+                mime='text/csv',
             )
 
-            # Summary comparison (if LLM scores also loaded)
-            if using_live_data and "runs" in loaded:
-                st.subheader("Human vs. LLM Score Comparison")
-                llm_df = loaded["runs"]
-                rubric_col = "RubricTotal" if "RubricTotal" in llm_df.columns else None
-                if "QueryID" in llm_df.columns and rubric_col:
-                    llm_means = llm_df.groupby("QueryID")[rubric_col].mean().reset_index()
-                    llm_means.columns = ["QueryID", "LLM_Mean"]
-                    comp_df = export_df.merge(llm_means, on="QueryID", how="inner")
-                    if not comp_df.empty:
-                        comp_df["Delta"] = comp_df["HumanTotal"] - comp_df["LLM_Mean"]
-                        st.dataframe(
-                            comp_df[["QueryID", "HumanTotal", "LLM_Mean", "Delta"]].style.format({
-                                "HumanTotal": "{:.2f}", "LLM_Mean": "{:.2f}", "Delta": "{:+.2f}",
-                            }).apply(_apply_gradient, vmin=-1, vmax=1, low_rgb=_RdBu[0], high_rgb=_RdBu[1], subset=["Delta"]),
-                            use_container_width=True,
-                        )
-                        correction_rate = (comp_df["Delta"].abs() > 0.24).mean()
-                        mean_delta = comp_df["Delta"].mean()
-                        st.metric("Correction Rate (|delta| > 0.25)", f"{correction_rate:.1%}")
-                        st.metric("Mean Delta (Human − LLM)", f"{mean_delta:+.3f}")
+            if len(export_rows) > 1:
+                st.subheader('Human vs. LLM Comparison')
+                correction_rate = (export_df['Delta'].abs() > 0.24).mean()
+                mean_delta = export_df['Delta'].mean()
+                cr1, cr2 = st.columns(2)
+                cr1.metric('Correction Rate (|delta| > 0.25)', f'{correction_rate:.1%}')
+                cr2.metric('Mean Delta (Human - LLM)', f'{mean_delta:+.3f}')
+                dim_delta_cols = st.columns(4)
+                for dc, dim in zip(dim_delta_cols, ['FA','CA','HD','EC']):
+                    if f'Human{dim}' in export_df.columns and f'LLM_{dim}' in export_df.columns:
+                        d = (export_df[f'Human{dim}'] - export_df[f'LLM_{dim}']).mean()
+                        dc.metric(dim, f'{d:+.3f}')
+                st.dataframe(
+                    export_df[['QueryID','HumanTotal','LLM_Total','Delta','Notes']].style.format({
+                        'HumanTotal': '{:.2f}', 'LLM_Total': '{:.2f}', 'Delta': '{:+.2f}',
+                    }).apply(
+                        _apply_gradient, vmin=-1, vmax=1,
+                        low_rgb=_RdBu[0], high_rgb=_RdBu[1], subset=['Delta']
+                    ),
+                    use_container_width=True,
+                )
         else:
-            st.caption("No scores saved yet.")
+            st.caption('No scores saved yet.')
 
     else:
-        st.markdown("""
-        **To use this panel:**
-        1. Upload a CSV with columns: `QueryID`, `Category`, `QueryText`, `FinalAnswerText`
-        2. Score responses one at a time without prior knowledge of LLM scores
-        3. Export the scored CSV when complete
+        st.markdown(
+            '**To use this panel:**\n'
+            '1. Upload any merged_run_N.csv from the benchmark directory.\n'
+            '2. Each response shows full pipeline context: InitialAnswer, '
+            'SynthesisAssessmentRaw, FinalAnswerText, retrieval metrics, quote counts.\n'
+            '3. Score each dimension using the inline rubric guidance.\n'
+            '4. Expand LLM Auto-Scores only after scoring to check agreement.\n'
+            '5. Export the comparison CSV when complete.\n\n'
+            '**Blind annotation protocol:** The LLM scores section is collapsed by default.'
+        )
 
-        The exported file can be fed directly into the bootstrap pipeline for comparison with automated scores.
-
-        **Blind annotation protocol:** Strip model configuration labels before your session.
-        Score before reviewing aggregate benchmark results to prevent anchoring bias.
-        """)
-
-# -----------------------------------------------------------------------------
 # FOOTER
 # -----------------------------------------------------------------------------
 

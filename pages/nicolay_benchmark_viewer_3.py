@@ -39,6 +39,35 @@ from plotly.subplots import make_subplots
 import json
 import os
 import io
+
+# ---------------------------------------------------------------------------
+# Pure-python cell coloring — replaces pandas background_gradient()
+# which requires matplotlib (not available on Streamlit Cloud by default).
+# ---------------------------------------------------------------------------
+
+def _hex_gradient(val, vmin, vmax, low_rgb, high_rgb):
+    """Return an inline CSS background color string for a single scalar value."""
+    if val is None or (hasattr(val, '__class__') and val.__class__.__name__ == 'float' and val != val):
+        return ""
+    try:
+        t = max(0.0, min(1.0, (float(val) - vmin) / (vmax - vmin)))
+    except (TypeError, ZeroDivisionError):
+        return ""
+    r = int(low_rgb[0] + t * (high_rgb[0] - low_rgb[0]))
+    g = int(low_rgb[1] + t * (high_rgb[1] - low_rgb[1]))
+    b = int(low_rgb[2] + t * (high_rgb[2] - low_rgb[2]))
+    # pick text color for legibility
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    txt = "#000000" if lum > 140 else "#ffffff"
+    return f"background-color: rgba({r},{g},{b},0.85); color: {txt}"
+
+def _apply_gradient(series, vmin, vmax, low_rgb, high_rgb):
+    return [_hex_gradient(v, vmin, vmax, low_rgb, high_rgb) for v in series]
+
+# Preset palettes  (low_rgb, high_rgb)
+_RdYlGn  = ((215, 48,  39),  (26,  152, 80))   # red  → green
+_Oranges  = ((255, 245, 235), (127, 39,  4))    # light → dark orange
+_RdBu     = ((178, 24,  43),  (33,  102, 172))  # red  → blue
 from datetime import datetime
 
 # -----------------------------------------------------------------------------
@@ -603,7 +632,7 @@ with tab2:
         df_cat_display.style.format({
             "Total": "{:.3f}", "FA": "{:.3f}", "CA": "{:.3f}",
             "HD": "{:.3f}", "EC": "{:.3f}", "R@5": "{:.3f}",
-        }).background_gradient(subset=["Total"], cmap="RdYlGn", vmin=2.4, vmax=3.4),
+        }).apply(_apply_gradient, vmin=2.4, vmax=3.4, low_rgb=_RdYlGn[0], high_rgb=_RdYlGn[1], subset=["Total"]),
         use_container_width=True,
         height=230,
     )
@@ -717,8 +746,8 @@ with tab3:
         df_display[cols_show].style.format({
             "Total": "{:.2f}", "SD": "{:.3f}", "FA": "{:.2f}", "CA": "{:.2f}",
             "HD": "{:.2f}", "EC": "{:.2f}", "R@5": "{:.3f}",
-        }).background_gradient(subset=["Total"], cmap="RdYlGn", vmin=2.0, vmax=4.0)
-          .background_gradient(subset=["SD"], cmap="Oranges", vmin=0, vmax=0.55),
+        }).apply(_apply_gradient, vmin=2.0, vmax=4.0, low_rgb=_RdYlGn[0], high_rgb=_RdYlGn[1], subset=["Total"])
+          .apply(_apply_gradient, vmin=0, vmax=0.55, low_rgb=_Oranges[0], high_rgb=_Oranges[1], subset=["SD"]),
         use_container_width=True,
         height=680,
     )
@@ -976,7 +1005,7 @@ with tab5:
         df_ta = pd.DataFrame(type_acc)
         st.dataframe(
             df_ta.style.format({"Accuracy": "{:.1%}","n": "{:d}"})
-                       .background_gradient(subset=["Accuracy"], cmap="RdYlGn", vmin=0, vmax=1),
+                       .apply(_apply_gradient, vmin=0, vmax=1, low_rgb=_RdYlGn[0], high_rgb=_RdYlGn[1], subset=["Accuracy"]),
             use_container_width=True,
             height=220,
         )
@@ -1170,7 +1199,7 @@ with tab6:
                         st.dataframe(
                             comp_df[["QueryID", "HumanTotal", "LLM_Mean", "Delta"]].style.format({
                                 "HumanTotal": "{:.2f}", "LLM_Mean": "{:.2f}", "Delta": "{:+.2f}",
-                            }).background_gradient(subset=["Delta"], cmap="RdBu", vmin=-1, vmax=1),
+                            }).apply(_apply_gradient, vmin=-1, vmax=1, low_rgb=_RdBu[0], high_rgb=_RdBu[1], subset=["Delta"]),
                             use_container_width=True,
                         )
                         correction_rate = (comp_df["Delta"].abs() > 0.24).mean()

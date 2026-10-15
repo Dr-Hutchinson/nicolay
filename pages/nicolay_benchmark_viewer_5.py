@@ -1,27 +1,7 @@
 """
 nicolay_benchmark_viewer_5.py
-HonestAbe Benchmark Viewer — Nicolay RAG System
-For: "Nicolay: Exploring Historic Text Collections with Large Language Models
-     and Retrieval Augmented Generation"
-     Digital Humanities Quarterly (submitted 2026)
 
-Usage:
-    streamlit run nicolay_benchmark_viewer_5.py
-
-Data modes:
-  EMBEDDED (default): Canonical five-run results hardcoded. Runs immediately.
-  LIVE CSV (optional): Click "Load from GitHub" in sidebar to fetch all five
-    merged_run_N.csv files and bootstrap_summary_final.csv from:
-    https://github.com/Dr-Hutchinson/nicolay/tree/main/benchmark_data/
-
-Tab structure:
-  0 — Overview
-  1 — Question Browser
-  2 — Grand Summary
-  3 — Retrieval & Category Performance
-  4 — Type Classification
-  5 — Response Fidelity & Hallucinations
-  6 — Human Annotation
+Visualization coding assisted by LLMs.
 """
 
 import streamlit as st
